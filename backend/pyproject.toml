@@ -1,0 +1,20 @@
+[project]
+name = "avito-reviewer"
+version = "0.1.0"
+description = "Avito AI Reviewer backend — ingestion, review and AI-detection services"
+readme = "README.md"
+authors = [
+    { name = "kdduha", email = "just.andrew.kd@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "githubkit>=0.16.1",
+    "httpx>=0.28",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "unidiff>=1.0.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.21,<0.10.0"]
+build-backend = "uv_build"
