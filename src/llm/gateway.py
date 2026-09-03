@@ -1,0 +1,188 @@
+"""PrivacyGateway — единственная точка выхода к моделям.
+
+Ни один сервис не создаёт провайдера сам и не импортирует его. Всё, что
+уходит наружу, проходит здесь: объявление класса данных, обезличивание,
+проверка остаточного риска, выбор маршрута, вызов, регидратация, аудит.
+
+Это архитектурное правило, а не рекомендация: в CI стоит проверка, что
+`urllib`, `openai` и подобное не импортируются вне пакета `llm`. Именно она
+превращает «мы не сливаем персональные данные» в проверяемое утверждение.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+import uuid
+from dataclasses import dataclass, field
+from typing import Any
+
+from .audit import AuditLog, AuditRecord
+from .providers import FakeProvider, LLMError, LLMResponse, LLMUnavailable, Provider
+from .routing import DataClass, RoutePolicy, TaskKind, resolve_policy
+from .scrub import Scrubber, residual_risk
+
+
+@dataclass
+class GatewayResult:
+    text: str
+    request_id: str
+    model: str
+    route: RoutePolicy
+    tokens_in: int
+    tokens_out: int
+    redactions: int
+    downgraded: bool = False
+
+
+class PrivacyGateway:
+    def __init__(
+        self,
+        external: Provider | None = None,
+        local: Provider | None = None,
+        *,
+        audit: AuditLog | None = None,
+        force_local: bool = False,
+    ) -> None:
+        """
+        `force_local=True` отключает внешние вызовы целиком. Это режим для
+        демонстрации полностью локального контура и аварийный тумблер, если
+        служба безопасности запретит внешних провайдеров.
+        """
+        self.external = external
+        self.local = local or (external if external and getattr(external, "is_local", False) else None)
+        self.audit = audit or AuditLog()
+        self.force_local = force_local
+
+    # ------------------------------------------------------------------ #
+
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        task: TaskKind,
+        data_class: DataClass = DataClass.CONTAINS_PD,
+        temperature: float = 0.0,
+        max_tokens: int = 2000,
+        json_mode: bool = False,
+    ) -> GatewayResult:
+        request_id = uuid.uuid4().hex[:12]
+        route = resolve_policy(task, data_class)
+        downgraded = False
+
+        scrubber = Scrubber()
+        scrubbed: list[dict[str, str]] = []
+        redactions = 0
+        mapping: dict[str, str] = {}
+
+        for message in messages:
+            result = scrubber.scrub(message["content"])
+            redactions += result.redactions
+            mapping.update(result.mapping)
+            scrubbed.append({**message, "content": result.text})
+
+        # Валидатор остаточного риска: если после скраба что-то осталось,
+        # маршрут понижается принудительно. Fail-safe, а не fail-open.
+        if route is RoutePolicy.EXTERNAL_AFTER_SCRUB:
+            leftovers = residual_risk("\n".join(m["content"] for m in scrubbed))
+            if leftovers:
+                route = RoutePolicy.LOCAL_ONLY
+                downgraded = True
+
+        if self.force_local:
+            route = RoutePolicy.LOCAL_ONLY
+
+        provider = self._pick(route, task)
+        started = time.monotonic()
+        error: str | None = None
+
+        try:
+            response = provider.complete(
+                scrubbed, temperature=temperature,
+                max_tokens=max_tokens, json_mode=json_mode,
+            )
+        except (LLMError, LLMUnavailable) as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            self._record(request_id, provider, task, data_class, route, redactions,
+                         scrubbed, None, int((time.monotonic() - started) * 1000), error)
+            raise
+
+        self._record(request_id, provider, task, data_class, route, redactions,
+                     scrubbed, response, response.latency_ms, None)
+
+        # Регидратация: настоящие значения возвращаются только внутрь периметра.
+        text = response.text
+        for token, original in mapping.items():
+            text = text.replace(token, original)
+
+        return GatewayResult(
+            text=text,
+            request_id=request_id,
+            model=response.model,
+            route=route,
+            tokens_in=response.tokens_in,
+            tokens_out=response.tokens_out,
+            redactions=redactions,
+            downgraded=downgraded,
+        )
+
+    # ------------------------------------------------------------------ #
+
+    def _pick(self, route: RoutePolicy, task: TaskKind) -> Provider:
+        if route is RoutePolicy.LOCAL_ONLY:
+            if self.local is None:
+                raise LLMUnavailable(
+                    f"Задача {task.value} требует локальной модели, но локальный "
+                    f"провайдер не настроен (AVITOAI_LOCAL_BASE_URL)"
+                )
+            return self.local
+        if self.external is None:
+            raise LLMUnavailable("Внешний провайдер не настроен")
+        return self.external
+
+    def _record(
+        self, request_id: str, provider: Provider, task: TaskKind,
+        data_class: DataClass, route: RoutePolicy, redactions: int,
+        messages: list[dict[str, str]], response: LLMResponse | None,
+        latency_ms: int, error: str | None,
+    ) -> None:
+        # Сырой промпт не сохраняется — только хэш и счётчики.
+        prompt_hash = hashlib.sha256(
+            json.dumps(messages, ensure_ascii=False, sort_keys=True).encode()
+        ).hexdigest()
+
+        self.audit.add(
+            AuditRecord(
+                request_id=request_id,
+                provider=getattr(provider, "name", "unknown"),
+                model=getattr(provider, "model", "unknown"),
+                task=task.value,
+                data_class=data_class.value,
+                route=route.value,
+                redactions=redactions,
+                prompt_sha256=prompt_hash,
+                tokens_in=response.tokens_in if response else 0,
+                tokens_out=response.tokens_out if response else 0,
+                latency_ms=latency_ms,
+                error=error,
+            )
+        )
+
+
+def gateway_from_env(*, force_local: bool = False) -> PrivacyGateway:
+    from .providers import provider_from_env
+
+    provider = provider_from_env()
+    is_local = getattr(provider, "is_local", False)
+    return PrivacyGateway(
+        external=None if is_local else provider,
+        local=provider if is_local else None,
+        force_local=force_local,
+    )
+
+
+def fake_gateway(responses: list[str] | None = None) -> tuple[PrivacyGateway, FakeProvider]:
+    """Шлюз на фейковом провайдере: тесты и демо без ключа."""
+    provider = FakeProvider(responses=list(responses or []))
+    return PrivacyGateway(external=provider, local=provider), provider

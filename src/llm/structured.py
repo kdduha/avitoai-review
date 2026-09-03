@@ -1,0 +1,125 @@
+"""Структурированный ответ с восстановлением после сбоя разбора.
+
+Модель регулярно возвращает JSON, обёрнутый в ```json, с висящей запятой или
+с пояснением до и после. Ронять из-за этого обработку всего потока работ
+нельзя, поэтому здесь три уровня: аккуратное извлечение, один ремонтный
+запрос к модели с текстом ошибки, и только потом отказ.
+
+Валидация по pydantic-модели, а не по свободному словарю: контракт вывода
+должен быть один и тот же в коде, в тестах и в промпте.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import TypeVar
+
+from pydantic import BaseModel, ValidationError
+
+from .gateway import GatewayResult, PrivacyGateway
+from .routing import DataClass, TaskKind
+
+T = TypeVar("T", bound=BaseModel)
+
+FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
+
+
+class StructuredError(RuntimeError):
+    """Модель так и не вернула валидный ответ по схеме."""
+
+    def __init__(self, message: str, raw: str = "") -> None:
+        super().__init__(message)
+        self.raw = raw
+
+
+def extract_json(text: str) -> str:
+    """Достать JSON из ответа, что бы модель вокруг него ни написала."""
+    text = text.strip()
+
+    fenced = FENCE.search(text)
+    if fenced:
+        text = fenced.group(1).strip()
+
+    # Модель любит предварять объект фразой «Вот результат:».
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = text.find(opener)
+        end = text.rfind(closer)
+        if start != -1 and end > start:
+            return text[start : end + 1]
+
+    return text
+
+
+def parse_json(text: str) -> object:
+    cleaned = extract_json(text)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Висящая запятая — самая частая поломка, и она чинится без модели.
+        repaired = re.sub(r",\s*([}\]])", r"\1", cleaned)
+        return json.loads(repaired)
+
+
+def complete_json(
+    gateway: PrivacyGateway,
+    messages: list[dict[str, str]],
+    model_cls: type[T],
+    *,
+    task: TaskKind,
+    data_class: DataClass = DataClass.CONTAINS_PD,
+    temperature: float = 0.0,
+    max_tokens: int = 3000,
+    repair_attempts: int = 1,
+) -> tuple[T, GatewayResult]:
+    """Получить ответ, разобранный в `model_cls`."""
+    conversation = list(messages)
+    last_raw = ""
+    last_error = ""
+
+    for attempt in range(repair_attempts + 1):
+        result = gateway.complete(
+            conversation,
+            task=task,
+            data_class=data_class,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=True,
+        )
+        last_raw = result.text
+
+        try:
+            payload = parse_json(result.text)
+            return model_cls.model_validate(payload), result
+        except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+            last_error = _describe(exc)
+            if attempt >= repair_attempts:
+                break
+            # Ремонтный запрос: показываем модели её собственный вывод и ошибку.
+            conversation = conversation + [
+                {"role": "assistant", "content": result.text},
+                {
+                    "role": "user",
+                    "content": (
+                        "Ответ не прошёл разбор по схеме.\n"
+                        f"Ошибка: {last_error}\n\n"
+                        "Верни только валидный JSON по той же схеме, без пояснений "
+                        "и без markdown-обрамления."
+                    ),
+                },
+            ]
+
+    raise StructuredError(
+        f"Модель не вернула валидный ответ по схеме {model_cls.__name__}: {last_error}",
+        raw=last_raw,
+    )
+
+
+def _describe(exc: Exception) -> str:
+    if isinstance(exc, ValidationError):
+        problems = [
+            f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+            for e in exc.errors()[:5]
+        ]
+        return "; ".join(problems)
+    return str(exc)

@@ -15,12 +15,10 @@ htmlcov/
 .venv/
 venv/
 env/
-
 # Environment / secrets
 .env
 .env.*
 !.env.example
-
 # Node (future frontend package)
 node_modules/
 .pnp.*
@@ -29,10 +27,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 dist-ssr/
-
 # Editors / OS
 .idea/
 .vscode/
 *.swp
 .DS_Store
 Thumbs.db
+*.pyc
+homework_examples/

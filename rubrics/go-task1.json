@@ -1,0 +1,154 @@
+{
+  "assignment_id": "go-task1",
+  "title": "Создание boilerplate сервиса, поднятие веб-сервера",
+  "course": "Разработка микросервисов на Go",
+  "stage": "task1",
+  "source_note": "Скомпилировано из GO/task1.md. В условии баллов нет — шкала задана методистом, веса равные.",
+  "ai_policy": "declare_required",
+  "scale": { "total_max": 10, "pass_threshold": 6, "step": 0.5 },
+  "late_policy": { "grace_days": 1, "penalty_per_grace_day": 1, "after_grace": "zero" },
+
+  "format_gate": [
+    {
+      "check": "required_paths",
+      "level": "warning",
+      "params": { "paths": ["cmd/", "internal/"] },
+      "note": "«Разделите код на логические директории (cmd/, internal/, pkg/)»"
+    },
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "Shutting down service-courier",
+        "label": "Сообщение о завершении работы в логе",
+        "expected": "строка «Shutting down service-courier»",
+        "in": [".go"]
+      },
+      "note": "Условие задаёт текст сообщения буквально"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "\"port\"|--port|PORT",
+        "label": "Переопределение порта флагом командной строки",
+        "expected": "обработка флага --port",
+        "in": [".go"]
+      },
+      "note": "«go run cmd/main.go --port 3000»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "/ping",
+        "label": "Эндпоинт GET /ping",
+        "expected": "маршрут /ping",
+        "in": [".go"]
+      }
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "healthcheck",
+        "label": "Эндпоинт HEAD /healthcheck",
+        "expected": "маршрут /healthcheck",
+        "in": [".go"]
+      }
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "signal\\.Notify|SIGTERM|SIGINT",
+        "label": "Обработка сигналов завершения",
+        "expected": "signal.Notify с SIGINT/SIGTERM",
+        "in": [".go"]
+      }
+    },
+    {
+      "check": "required_paths",
+      "level": "warning",
+      "params": { "paths": [".env.example"] },
+      "note": "Параметры сервера читаются из .env — пример файла должен быть в репозитории"
+    },
+    {
+      "check": "code_absent",
+      "level": "warning",
+      "params": {
+        "pattern": "(^|/)\\.env$",
+        "label": "Реальный .env не закоммичен"
+      },
+      "note": "Закоммиченный .env — и нарушение гигиены, и потенциальная утечка секретов"
+    },
+    { "check": "token_budget", "level": "info", "params": { "max_tokens": 40000 } }
+  ],
+
+  "criteria": [
+    {
+      "id": "c1",
+      "title": "Структура проекта по golang-standards/project-layout",
+      "max_score": 2,
+      "min_score_for_pass": 1,
+      "auto_verifiable": true,
+      "checks": [
+        "код разделён на cmd/ и internal/",
+        "точка входа лежит в cmd/",
+        "внутренние пакеты не вынесены в корень"
+      ],
+      "anchors": {
+        "0": "плоская структура, весь код в одном файле",
+        "1": "разделение есть, но границы пакетов размыты",
+        "2": "структура соответствует рекомендации, границы пакетов осмысленны"
+      }
+    },
+    {
+      "id": "c2",
+      "title": "Веб-сервер и конфигурация из .env с переопределением флагами",
+      "max_score": 2,
+      "min_score_for_pass": 1,
+      "auto_verifiable": true,
+      "checks": [
+        "сервер поднимается через net/http",
+        "PORT читается из .env",
+        "флаг --port переопределяет значение окружения"
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Тестовые эндпоинты /ping и /healthcheck",
+      "max_score": 2,
+      "min_score_for_pass": 1,
+      "auto_verifiable": true,
+      "checks": [
+        "GET /ping возвращает 200 и {\"message\":\"pong\"}",
+        "HEAD /healthcheck возвращает 204 без тела"
+      ]
+    },
+    {
+      "id": "c4",
+      "title": "Корректное завершение по SIGINT/SIGTERM",
+      "max_score": 2,
+      "min_score_for_pass": 1,
+      "auto_verifiable": true,
+      "checks": [
+        "используются context и signal",
+        "сервер завершается через Shutdown, а не по os.Exit",
+        "в stdout пишется «Shutting down service-courier»"
+      ]
+    },
+    {
+      "id": "c5",
+      "title": "Читаемость и чистота кода",
+      "max_score": 2,
+      "description": "Условие отдельно просит обратить внимание на читаемость, поскольку сервис будет расти в следующих заданиях.",
+      "checks": [
+        "нет закомментированного и мёртвого кода",
+        "ошибки обрабатываются, а не глушатся",
+        "именование пакетов и функций осмысленно"
+      ],
+      "ai_sensitive": true
+    }
+  ]
+}
