@@ -54,7 +54,9 @@ class AuditLog:
 
     @property
     def total_cost_rub(self) -> float:
-        return round(sum(r.cost_rub for r in self.records), 2)
+        # Округление до копеек съедало бы стоимость коротких вызовов, а из
+        # них и складывается счёт за поток работ.
+        return round(sum(r.cost_rub for r in self.records), 4)
 
     @property
     def total_tokens(self) -> tuple[int, int]:
