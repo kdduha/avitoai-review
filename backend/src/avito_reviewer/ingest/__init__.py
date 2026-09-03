@@ -17,7 +17,7 @@ from avito_reviewer.ingest.models import (
     SubmissionBundle,
     SubmissionSource,
 )
-from avito_reviewer.ingest.service import IngestService, create_ingest_service
+from avito_reviewer.ingest.service import IngestService
 
 __all__ = [
     "Artifact",
@@ -37,5 +37,4 @@ __all__ = [
     "SubmissionBundle",
     "SubmissionSource",
     "UnknownSourceError",
-    "create_ingest_service",
 ]

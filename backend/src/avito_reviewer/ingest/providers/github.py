@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -38,6 +39,7 @@ from avito_reviewer.ingest.models import (
 )
 from avito_reviewer.ingest.providers.base import SubmissionProvider
 
+_log = logging.getLogger(__name__)
 _T = TypeVar("_T")
 _PER_PAGE = 100
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -138,6 +140,15 @@ class GitHubProvider(SubmissionProvider):
         except GitHubException as exc:
             raise ProviderFetchError(str(exc)) from exc
 
+        _log.debug(
+            "github: %s/%s#%d — %d changed files, %d excerpts, %d commits",
+            owner,
+            repo,
+            number,
+            len(changed),
+            len(excerpts),
+            len(commits),
+        )
         return self._to_bundle(owner, repo, pr, changed, commits, tree, excerpts, context)
 
     def _parse_link(self, link: str) -> tuple[str, str, int]:
@@ -295,12 +306,21 @@ class GitHubProvider(SubmissionProvider):
     ) -> RepoContext:
         files = [item.path for item in tree.tree if item.type == "blob"]
         cap = self._config.max_context_files
+        truncated = len(files) > cap
+        if truncated:
+            _log.warning(
+                "github: repo map truncated for %s/%s — %d of %d files kept",
+                owner,
+                repo,
+                cap,
+                len(files),
+            )
         return RepoContext(
             root=f"{owner}/{repo}",
             default_branch=pr.base.ref,
             total_files=len(files),
             files=sorted(files)[:cap],
-            truncated=len(files) > cap,
+            truncated=truncated,
         )
 
     def _revision(self, commit: Commit) -> Revision:
