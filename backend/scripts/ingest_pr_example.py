@@ -1,11 +1,3 @@
-"""Run ingest on a real GitHub PR and print the resulting SubmissionBundle.
-
-    uv run python scripts/ingest_pr_example.py [PR_URL]
-
-Works without a token (anonymous GitHub API, 60 req/h); set INGEST_GITHUB__TOKEN
-or GITHUB_TOKEN to raise the limit.
-"""
-
 from __future__ import annotations
 
 import asyncio

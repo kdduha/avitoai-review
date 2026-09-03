@@ -233,42 +233,47 @@ Stepik) = новый класс `SubmissionProvider` в `ingest/providers/` + е
 
 ### 5.1 Канонический объект
 
+`SubmissionBundle` сделан так, чтобы его целиком отдавать LLM: он описывает
+**изменение** и минимум контекста вокруг, а тела файлов живут за `content_ref` и
+подтягиваются по требованию. Модель провайдеро-независима: git PR/MR и Google Doc
+кладутся в одни и те же поля.
+
 ```python
 class SubmissionBundle(BaseModel):
     submission_id: UUID
     source: SubmissionSource               # github_pr | gitlab_mr | google_doc
+    origin_url: str                        # ссылка на PR / MR / документ для человека
+    retrieved_at: datetime
+
     student_ref: StudentRef                # внутренний id, не ФИО
-    assignment_id: UUID | None
     submitted_at: datetime
     deadline_at: datetime | None
+    assignment_id: UUID | None
 
-    base_ref: str | None                   # base sha / head sha для git-источников
-    head_ref: str | None
+    base_ref: str | None                   # начало изменения (git: base sha)
+    head_ref: str | None                   # конец изменения (git: head sha)
 
-    files: list[FileArtifact]              # содержимое файлов на head + метаданные диффа
-    tree: list[TreeEntry]                  # полный скелет проекта на head (все пути)
-    diff: str | None                       # unified diff base..head целиком
-    segments: list[TextSegment]            # нормализованный текст с offset'ами
-    history: list[HistoryEvent]            # коммиты / ревизии документа
-    raw_ref: str | None                    # ссылка на сырьё
+    artifacts: list[Artifact]              # ТОЛЬКО файлы, затронутые изменением
+    revisions: list[Revision]              # коммиты / ревизии документа — для форензики
+    repo: RepoContext | None              # компактная карта окружающего кода
 ```
 
-**Дифф в контексте всего проекта.** Ревью-агенту мало хунков — ему нужно видеть
-изменение на фоне файла и файл на фоне проекта. Поэтому провайдер тянет три слоя:
+**Экономия токенов — три правила:**
 
-1. `tree` — рекурсивный git-tree на head: все пути и размеры, даже неизменённых файлов
-   (карта проекта; нужна и для кумулятивных заданий, где `task1..task3` в одном репо);
-2. по каждому изменённому файлу — целиком содержимое на head **плюс** его `patch`;
-3. при `context_scope="full"` — содержимое и неизменённых файлов в пределах бюджета
-   (`max_files`, `max_file_bytes`) и денилиста (`mlruns/`, `node_modules/`, бинарники).
+1. **Никаких дублей.** Убраны `segments` (копия текста файла) и общий `diff` целиком.
+2. **Дифф вместо тел.** У `Artifact` есть `diff` (хунки только этого файла) и
+   `changed_ranges`; `excerpt` (полный текст) кладётся, **только если файл меньше
+   `excerpt_max_bytes`**, иначе `None` — большие файлы едут diff-only, полный текст по
+   `content_ref` (тул `get_file` в §6.3).
+3. **Карта, а не дерево.** `RepoContext.files` — плоский список путей на head без
+   метаданных, с ограничением `max_context_files` и флагом `truncated`. Это отвечает на
+   вопрос «что ещё есть в проекте» (в т.ч. кумулятивные `task1..task3`) в разы дешевле
+   прежнего дерева объектов с размерами.
 
-`FileArtifact` несёт `change_status`, `in_diff`, `patch`, `previous_path` и
-`changed_ranges` (номера добавленных/изменённых строк, разобранные из диффа через
-`unidiff`) — агент читает хунк против всего файла, а `tree` даёт ему раскладку проекта.
-
-`TextSegment` с **абсолютными offset'ами** — ключ к подсветке спанов ГенИИ и
-кликабельным цитатам: детектор и ревью-агент возвращают `(segment_id, start, end)`,
-фронт рисует подсветку в вьюере.
+`Artifact.role` (`solution` / `evidence` / `tooling` / `noise`) — грубая пометка от
+ingest, чтобы агент тратил токены на `solution` и пропускал `noise`. `changed_ranges`
+(1-based, разобраны из `patch` через `unidiff`) — якорь для кликабельных цитат: агент
+возвращает `(path, start, end)`, код валидирует против полного текста.
 
 ### 5.2 GitHub-провайдер (итерация 1)
 
@@ -276,9 +281,11 @@ class SubmissionBundle(BaseModel):
   свой HTTP-клиент не пишем.
 - Токен из `INGEST_GITHUB__TOKEN` (в проде — GitHub App с правами `contents:read`,
   `pull_requests:write`, `metadata:read`); без токена работает анонимно с лимитами.
-- Тянем: PR-метаданные, список изменённых файлов с `patch`, unified diff целиком,
-  git-tree на head, содержимое blob'ов, **историю коммитов** со статистикой
-  (`additions`/`deletions` на коммит — для git-форензики).
+- Тянем: PR-метаданные, список изменённых файлов с `patch`, git-tree на head (карта
+  проекта), **историю коммитов** со статистикой (`additions`/`deletions` на коммит —
+  для форензики). Blob'ы качаем только для `excerpt` — по изменённым текстовым файлам
+  в пределах `excerpt_max_bytes`; отдельного запроса за общим диффом нет (`patch`
+  каждого файла и есть его дифф).
 - Webhook (`pull_request.opened|synchronize`, `issue_comment`) — точка входа в проде;
   на хакатоне fallback — poller раз в 30 секунд. Демо не зависит от ngrok.
 

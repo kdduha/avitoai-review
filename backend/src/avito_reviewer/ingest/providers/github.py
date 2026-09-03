@@ -23,19 +23,18 @@ from githubkit_schemas.latest.models import (
 )
 
 from avito_reviewer.config import GitHubConfig
-from avito_reviewer.ingest.diff import added_line_ranges, changed_ranges_by_path
+from avito_reviewer.ingest.diff import added_line_ranges
 from avito_reviewer.ingest.errors import InvalidLinkError, ProviderFetchError
 from avito_reviewer.ingest.models import (
+    Artifact,
+    ArtifactRole,
     ChangeStatus,
-    FileArtifact,
-    HistoryEvent,
     IngestContext,
-    LineRange,
+    RepoContext,
+    Revision,
     StudentRef,
     SubmissionBundle,
     SubmissionSource,
-    TextSegment,
-    TreeEntry,
 )
 from avito_reviewer.ingest.providers.base import SubmissionProvider
 
@@ -50,9 +49,8 @@ _STATUS: dict[str, ChangeStatus] = {
     "removed": ChangeStatus.REMOVED,
     "modified": ChangeStatus.MODIFIED,
     "renamed": ChangeStatus.RENAMED,
-    "copied": ChangeStatus.MODIFIED,
+    "copied": ChangeStatus.ADDED,
     "changed": ChangeStatus.MODIFIED,
-    "unchanged": ChangeStatus.UNCHANGED,
 }
 _LANG: dict[str, str] = {
     ".py": "python",
@@ -85,9 +83,7 @@ _LANG: dict[str, str] = {
 @dataclass(slots=True)
 class _Blob:
     text: str | None
-    size: int
     is_binary: bool
-    truncated: bool
 
 
 def _stat_lines(stats: object) -> tuple[int, int]:
@@ -104,18 +100,12 @@ def _guess_lang(path: str) -> str | None:
 
 
 def _decode_blob(blob: Blob) -> _Blob:
-    size = blob.size or 0
     if blob.encoding != "base64":
-        return _Blob(text=None, size=size, is_binary=False, truncated=True)
+        return _Blob(text=None, is_binary=False)
     raw = base64.b64decode(blob.content)
     if b"\x00" in raw:
-        return _Blob(text=None, size=size or len(raw), is_binary=True, truncated=False)
-    return _Blob(
-        text=raw.decode("utf-8", "replace"),
-        size=size or len(raw),
-        is_binary=False,
-        truncated=False,
-    )
+        return _Blob(text=None, is_binary=True)
+    return _Blob(text=raw.decode("utf-8", "replace"), is_binary=False)
 
 
 class GitHubProvider(SubmissionProvider):
@@ -135,7 +125,7 @@ class GitHubProvider(SubmissionProvider):
         try:
             pr = (await self._gh.rest.pulls.async_get(owner, repo, number)).parsed_data
             changed = await self._collect(
-                lambda page: self._files_page(owner, repo, number, page), self._config.max_files
+                lambda page: self._files_page(owner, repo, number, page), self._config.max_artifacts
             )
             commits = await self._collect(
                 lambda page: self._commits_page(owner, repo, number, page), self._config.max_commits
@@ -143,13 +133,12 @@ class GitHubProvider(SubmissionProvider):
             tree = (
                 await self._gh.rest.git.async_get_tree(owner, repo, pr.head.sha, recursive="true")
             ).parsed_data
-            diff_text = await self._fetch_diff(owner, repo, number)
             commits = await self._with_stats(owner, repo, commits)
-            blobs = await self._load_blobs(owner, repo, self._select_paths(changed, tree))
+            excerpts = await self._load_excerpts(owner, repo, changed, tree)
         except GitHubException as exc:
             raise ProviderFetchError(str(exc)) from exc
 
-        return self._to_bundle(pr, diff_text, changed, commits, tree, blobs, context)
+        return self._to_bundle(owner, repo, pr, changed, commits, tree, excerpts, context)
 
     def _parse_link(self, link: str) -> tuple[str, str, int]:
         match = _LINK_RE.match(link.strip())
@@ -182,14 +171,6 @@ class GitHubProvider(SubmissionProvider):
         )
         return resp.parsed_data
 
-    async def _fetch_diff(self, owner: str, repo: str, number: int) -> str:
-        resp = await self._gh.arequest(
-            "GET",
-            f"/repos/{owner}/{repo}/pulls/{number}",
-            headers={"Accept": "application/vnd.github.diff"},
-        )
-        return resp.text
-
     async def _with_stats(self, owner: str, repo: str, commits: list[Commit]) -> list[Commit]:
         if not commits:
             return commits
@@ -202,166 +183,141 @@ class GitHubProvider(SubmissionProvider):
         tasks = [asyncio.create_task(one(commit.sha)) for commit in commits]
         return [await task for task in tasks]
 
-    async def _load_blobs(
-        self, owner: str, repo: str, items: list[tuple[str, str]]
-    ) -> dict[str, _Blob]:
-        semaphore = asyncio.Semaphore(self._config.concurrency)
-
-        async def one(path: str, sha: str) -> tuple[str, _Blob]:
-            async with semaphore:
-                blob = (await self._gh.rest.git.async_get_blob(owner, repo, sha)).parsed_data
-            return path, _decode_blob(blob)
-
-        tasks = [asyncio.create_task(one(path, sha)) for path, sha in items]
-        return dict([await task for task in tasks])
-
-    def _excluded(self, path: str) -> bool:
-        return any(fnmatch(path, pattern) for pattern in self._config.exclude_globs)
-
-    def _select_paths(self, changed: list[DiffEntry], tree: GitTree) -> list[tuple[str, str]]:
-        sha_by_path = {item.path: item.sha for item in tree.tree if item.type == "blob"}
-        size_by_path = {
+    def _tree_sizes(self, tree: GitTree) -> dict[str, int]:
+        return {
             item.path: (item.size if isinstance(item.size, int) else 0)
             for item in tree.tree
             if item.type == "blob"
         }
 
-        picked = [
-            c.filename
-            for c in changed
-            if c.status != "removed" and c.filename in sha_by_path
+    def _tree_shas(self, tree: GitTree) -> dict[str, str]:
+        return {item.path: item.sha for item in tree.tree if item.type == "blob"}
+
+    def _excluded(self, path: str) -> bool:
+        return any(fnmatch(path, pattern) for pattern in self._config.exclude_globs)
+
+    async def _load_excerpts(
+        self, owner: str, repo: str, changed: list[DiffEntry], tree: GitTree
+    ) -> dict[str, _Blob]:
+        sizes = self._tree_sizes(tree)
+        shas = self._tree_shas(tree)
+        wanted = [
+            entry.filename
+            for entry in changed
+            if entry.status != "removed"
+            and entry.patch is not None
+            and not self._excluded(entry.filename)
+            and 0 < sizes.get(entry.filename, 0) <= self._config.excerpt_max_bytes
+            and entry.filename in shas
         ]
+        semaphore = asyncio.Semaphore(self._config.concurrency)
 
-        if self._config.context_scope == "full":
-            for path in sha_by_path:
-                if len(picked) >= self._config.max_files:
-                    break
-                if path in picked or self._excluded(path):
-                    continue
-                if size_by_path.get(path, 0) > self._config.max_file_bytes:
-                    continue
-                picked.append(path)
+        async def one(path: str) -> tuple[str, _Blob]:
+            async with semaphore:
+                blob = (
+                    await self._gh.rest.git.async_get_blob(owner, repo, shas[path])
+                ).parsed_data
+            return path, _decode_blob(blob)
 
-        picked = picked[: self._config.max_files]
-        return [(path, sha_by_path[path]) for path in picked]
+        tasks = [asyncio.create_task(one(path)) for path in wanted]
+        return dict([await task for task in tasks])
 
     def _to_bundle(
         self,
+        owner: str,
+        repo: str,
         pr: PullRequest,
-        diff_text: str,
         changed: list[DiffEntry],
         commits: list[Commit],
         tree: GitTree,
-        blobs: dict[str, _Blob],
+        excerpts: dict[str, _Blob],
         context: IngestContext,
     ) -> SubmissionBundle:
         login = pr.user.login if pr.user else "unknown"
-        ranges = changed_ranges_by_path(diff_text)
-        meta_by_path = {entry.filename: entry for entry in changed}
-        files = self._build_files(blobs, meta_by_path, ranges)
-
+        sizes = self._tree_sizes(tree)
+        head = pr.head.sha
+        artifacts = [
+            self._artifact(entry, owner, repo, head, sizes, excerpts.get(entry.filename))
+            for entry in changed
+        ]
         return SubmissionBundle(
             source=self.source,
+            origin_url=pr.html_url,
+            retrieved_at=datetime.now(tz=UTC),
             student_ref=StudentRef(
                 internal_id=context.student_internal_id or self._hash(login),
                 external_handles={"github": login},
             ),
-            assignment_id=context.assignment_id,
             submitted_at=pr.created_at,
             deadline_at=context.deadline_at,
+            assignment_id=context.assignment_id,
             base_ref=pr.base.sha,
-            head_ref=pr.head.sha,
-            files=files,
-            tree=[
-                TreeEntry(
-                    path=item.path,
-                    kind="dir" if item.type == "tree" else "file",
-                    size_bytes=item.size if isinstance(item.size, int) else None,
-                )
-                for item in tree.tree
-            ],
-            diff=diff_text,
-            segments=[
-                TextSegment(
-                    segment_id=file.path,
-                    artifact_path=file.path,
-                    start=0,
-                    end=len(file.content),
-                    text=file.content,
-                )
-                for file in files
-                if not file.is_binary and file.content
-            ],
-            history=self._build_history(commits),
-            raw_ref=pr.html_url,
+            head_ref=head,
+            artifacts=artifacts,
+            revisions=[self._revision(commit) for commit in commits],
+            repo=self._repo_context(owner, repo, pr, tree),
         )
-
-    def _build_files(
-        self,
-        blobs: dict[str, _Blob],
-        meta_by_path: dict[str, DiffEntry],
-        ranges: dict[str, list[LineRange]],
-    ) -> list[FileArtifact]:
-        files = [
-            self._artifact(path, blob, meta_by_path.get(path), ranges)
-            for path, blob in blobs.items()
-        ]
-        files.extend(
-            self._artifact(path, None, meta, ranges)
-            for path, meta in meta_by_path.items()
-            if path not in blobs
-        )
-        return files
 
     def _artifact(
         self,
-        path: str,
+        entry: DiffEntry,
+        owner: str,
+        repo: str,
+        head: str,
+        sizes: dict[str, int],
         blob: _Blob | None,
-        meta: DiffEntry | None,
-        ranges: dict[str, list[LineRange]],
-    ) -> FileArtifact:
-        patch = meta.patch if meta is not None and isinstance(meta.patch, str) else None
-        previous = (
-            meta.previous_filename
-            if meta is not None and isinstance(meta.previous_filename, str)
-            else None
-        )
-        return FileArtifact(
+    ) -> Artifact:
+        path = entry.filename
+        excerpt = blob.text if blob else None
+        return Artifact(
             path=path,
-            lang=_guess_lang(path),
-            content=blob.text or "" if blob else "",
-            size_bytes=blob.size if blob else 0,
-            is_binary=blob.is_binary if blob else False,
-            truncated=blob.truncated if blob else False,
-            change_status=(
-                _STATUS.get(meta.status, ChangeStatus.MODIFIED)
-                if meta is not None
-                else ChangeStatus.UNCHANGED
+            previous_path=(
+                entry.previous_filename if isinstance(entry.previous_filename, str) else None
             ),
-            in_diff=meta is not None,
-            patch=patch,
-            previous_path=previous,
-            changed_ranges=ranges.get(path) or (added_line_ranges(patch) if patch else []),
+            status=_STATUS.get(entry.status, ChangeStatus.MODIFIED),
+            role=ArtifactRole.NOISE if self._excluded(path) else ArtifactRole.SOLUTION,
+            lang=_guess_lang(path),
+            is_binary=bool(blob and blob.is_binary),
+            size_bytes=sizes.get(path, 0),
+            line_count=excerpt.count("\n") + 1 if excerpt else None,
+            changed_ranges=added_line_ranges(entry.patch) if entry.patch else [],
+            diff=entry.patch if isinstance(entry.patch, str) else None,
+            excerpt=excerpt,
+            content_ref=(
+                f"github:{owner}/{repo}@{head}:{path}"
+                if entry.status != "removed"
+                else None
+            ),
         )
 
-    def _build_history(self, commits: list[Commit]) -> list[HistoryEvent]:
-        return [self._history_event(commit) for commit in commits]
+    def _repo_context(
+        self, owner: str, repo: str, pr: PullRequest, tree: GitTree
+    ) -> RepoContext:
+        files = [item.path for item in tree.tree if item.type == "blob"]
+        cap = self._config.max_context_files
+        return RepoContext(
+            root=f"{owner}/{repo}",
+            default_branch=pr.base.ref,
+            total_files=len(files),
+            files=sorted(files)[:cap],
+            truncated=len(files) > cap,
+        )
 
-    def _history_event(self, commit: Commit) -> HistoryEvent:
+    def _revision(self, commit: Commit) -> Revision:
         git_author = commit.commit.author
         api_author = commit.author
         login = api_author.login if isinstance(api_author, SimpleUser) else None
         name = git_author.name if git_author and isinstance(git_author.name, str) else None
         when = git_author.date if git_author and isinstance(git_author.date, datetime) else _EPOCH
         added, removed = _stat_lines(commit.stats)
-        message = commit.commit.message.splitlines()
-        return HistoryEvent(
-            ref=commit.sha,
+        subject = commit.commit.message.splitlines()
+        return Revision(
+            id=commit.sha,
+            authored_at=when,
             author_hash=self._hash(login or name or "unknown"),
-            timestamp=when,
+            summary=subject[0] if subject else None,
             added_lines=added,
             removed_lines=removed,
-            message=message[0] if message else None,
         )
 
     def _hash(self, value: str) -> str:

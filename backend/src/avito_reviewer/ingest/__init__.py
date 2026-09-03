@@ -6,24 +6,24 @@ from avito_reviewer.ingest.errors import (
     UnknownSourceError,
 )
 from avito_reviewer.ingest.models import (
+    Artifact,
+    ArtifactRole,
     ChangeStatus,
-    FileArtifact,
-    HistoryEvent,
     IngestContext,
     LineRange,
+    RepoContext,
+    Revision,
     StudentRef,
     SubmissionBundle,
     SubmissionSource,
-    TextSegment,
-    TreeEntry,
 )
 from avito_reviewer.ingest.service import IngestService, create_ingest_service
 
 __all__ = [
+    "Artifact",
+    "ArtifactRole",
     "ChangeStatus",
-    "FileArtifact",
     "GitHubConfig",
-    "HistoryEvent",
     "IngestConfig",
     "IngestContext",
     "IngestError",
@@ -31,11 +31,11 @@ __all__ = [
     "InvalidLinkError",
     "LineRange",
     "ProviderFetchError",
+    "RepoContext",
+    "Revision",
     "StudentRef",
     "SubmissionBundle",
     "SubmissionSource",
-    "TextSegment",
-    "TreeEntry",
     "UnknownSourceError",
     "create_ingest_service",
 ]

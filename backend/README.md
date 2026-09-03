@@ -30,5 +30,10 @@ bundle = await service.ingest(
 await service.aclose()
 ```
 
-Основные env-переменные: `INGEST_GITHUB__TOKEN`, `INGEST_GITHUB__CONTEXT_SCOPE`
-(`changed` | `full`), `INGEST_GITHUB__MAX_FILES` / `MAX_FILE_BYTES` / `MAX_COMMITS`.
+`SubmissionBundle` рассчитан на отправку агенту целиком: описывает изменение
+(`artifacts[].diff` + `changed_ranges`), полный текст файла (`excerpt`) кладётся
+только если он меньше `excerpt_max_bytes`, иначе берётся по `content_ref`; окружение —
+плоский список путей `repo.files`. См. докстринги в `ingest/models.py`.
+
+Основные env-переменные: `INGEST_GITHUB__TOKEN`, `INGEST_GITHUB__EXCERPT_MAX_BYTES`
+(дефолт 16000), `INGEST_GITHUB__MAX_ARTIFACTS` / `MAX_CONTEXT_FILES` / `MAX_COMMITS`.
