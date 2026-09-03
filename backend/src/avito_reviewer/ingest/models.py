@@ -11,8 +11,6 @@ class SubmissionSource(StrEnum):
     """The input provider a submission was fetched from. One value per provider."""
 
     GITHUB_PR = "github_pr"
-    GITLAB_MR = "gitlab_mr"
-    GOOGLE_DOC = "google_doc"
 
 
 class ChangeStatus(StrEnum):
@@ -51,12 +49,12 @@ class LineRange(BaseModel):
 
 
 class Revision(BaseModel):
-    """A commit (git) or a document revision (docs). Feeds AI-detection forensics."""
+    """One entry of the submission's revision history (a commit). Feeds AI-detection forensics."""
 
-    id: str                       # commit sha / revision id
+    id: str                       # commit sha
     authored_at: datetime
     author_hash: str              # pseudonymised; == StudentRef.internal_id when self-authored
-    summary: str | None = None    # commit subject line; None for document revisions
+    summary: str | None = None    # commit subject line
     added_lines: int = 0
     removed_lines: int = 0
 
@@ -65,8 +63,8 @@ class Artifact(BaseModel):
     """One reviewable unit of the submission: a source file, a notebook, a document.
 
     Deliberately token-cheap: ``diff`` carries the change, ``excerpt`` carries the
-    whole text only when it is small, and ``content_ref`` is how an agent pulls the
-    rest on demand.
+    whole text only when it is small, and larger bodies are left out and fetched
+    later through ``content_ref`` (see the field note).
     """
 
     path: str                         # provider-relative path, or document title
@@ -82,17 +80,34 @@ class Artifact(BaseModel):
     changed_ranges: list[LineRange] = Field(default_factory=list)  # added / modified head lines
     diff: str | None = None           # unified-diff hunks for THIS artifact only
     excerpt: str | None = None        # full head text, inlined only within the excerpt budget
-    content_ref: str | None = None    # opaque handle to fetch the full head text on demand
+
+    # Opaque handle to the full head text of this artifact -- NOT a URL, not meant to
+    # be parsed by whoever reads the bundle. The review layer runs the LLM as an
+    # agent with tools (architecture s6.3); when the model asks for a body it does
+    # not hold, its `get_file(path)` tool passes this handle to a resolver that knows
+    # the provider scheme and returns the bytes. GitHub emits
+    # "github:<owner>/<repo>@<head_sha>:<path>". None when there is nothing to fetch
+    # (a removed file). The resolver / tool is not built yet -- this is the contract
+    # it will implement.
+    content_ref: str | None = None
 
 
 class RepoContext(BaseModel):
-    """Compact map of the surrounding codebase. ``None`` for non-repository sources."""
+    """Compact map of the surrounding codebase. ``None`` for non-repository sources.
+
+    This is only an inventory of what exists, not the code itself. Any path here (or,
+    when ``truncated``, any path at all) is fetched the same way as an artifact body:
+    the review layer's ``get_file(path)`` tool resolves it against ``root`` and the
+    bundle's ``head_ref``.
+    """
 
     root: str | None = None           # repository id, e.g. "owner/repo"
     default_branch: str | None = None
     total_files: int = 0              # file count at head, before capping
     files: list[str] = Field(default_factory=list)  # head file paths, no metadata; may be capped
-    truncated: bool = False           # ``files`` holds fewer entries than ``total_files``
+    # True => ``files`` is only the first ``max_context_files`` paths (sorted) and the
+    # repo has more; a path absent from ``files`` may still exist and be fetchable.
+    truncated: bool = False
 
 
 class IngestContext(BaseModel):
@@ -108,16 +123,18 @@ class SubmissionBundle(BaseModel):
 
     Every stage after ingest (Format Gate, Assignment, Review Agent, AI-Detection)
     reads only this object. It carries the change under review plus just enough
-    context to reason about it; full artifact bodies stay behind ``content_ref``.
+    context to reason about it. Full file bodies are intentionally NOT here: the
+    review layer exposes a ``get_file`` tool to the agent that resolves an
+    ``Artifact.content_ref`` (or any repo path via ``head_ref``) on demand.
     """
 
     submission_id: UUID = Field(default_factory=uuid4)
     source: SubmissionSource
-    origin_url: str                   # human-facing link to the PR / MR / document
+    origin_url: str                   # human-facing link to the submission (the PR page)
     retrieved_at: datetime            # when ingest fetched the submission
 
     student_ref: StudentRef
-    submitted_at: datetime            # when the student submitted (PR opened, doc shared, ...)
+    submitted_at: datetime            # when the student submitted (the PR was opened)
     deadline_at: datetime | None = None
     assignment_id: UUID | None = None
 

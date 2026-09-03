@@ -289,7 +289,7 @@ ingest, чтобы агент тратил токены на `solution` и пр�
 - Webhook (`pull_request.opened|synchronize`, `issue_comment`) — точка входа в проде;
   на хакатоне fallback — poller раз в 30 секунд. Демо не зависит от ngrok.
 
-### 5.3 Google Docs провайдер (заглушка)
+### 5.3 Google Docs провайдер (планируется, в коде нет)
 
 - Service account + Drive API, документ расшарен на её адрес (или студент сдаёт «доступ по ссылке на чтение» — допущение из разбора).
 - Экспорт: `files.export` → `text/html` (сохраняем структуру заголовков и списков) + `text/plain` для offset'ов.
@@ -784,6 +784,9 @@ received → normalized → scrubbed → analyzing → draft_ready
 ## 11. API (основное)
 
 ```
+GET    /health                             liveness-проба
+GET    /init                               статус бутстрапа (поднятые провайдеры ingest)
+
 POST   /webhooks/github                     приём PR-событий
 POST   /submissions/import                  ручной импорт (ссылка на Docs / repo)
 

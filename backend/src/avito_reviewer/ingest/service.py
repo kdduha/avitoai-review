@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-
 from avito_reviewer.config import IngestConfig
 from avito_reviewer.ingest.errors import UnknownSourceError
 from avito_reviewer.ingest.models import IngestContext, SubmissionBundle, SubmissionSource
@@ -9,10 +7,22 @@ from avito_reviewer.ingest.providers import GitHubProvider, SubmissionProvider
 
 
 class IngestService:
-    """Fetch a submission with the provider named by its :class:`SubmissionSource`."""
+    """Fetch a submission with the provider named by its :class:`SubmissionSource`.
 
-    def __init__(self, providers: Iterable[SubmissionProvider]) -> None:
-        self._providers = {provider.source: provider for provider in providers}
+    Build it directly from a config; the caller owns config loading and lifecycle
+    (call :meth:`aclose` on shutdown).
+    """
+
+    def __init__(self, config: IngestConfig) -> None:
+        self._providers: dict[SubmissionSource, SubmissionProvider] = {
+            SubmissionSource.GITHUB_PR: GitHubProvider(
+                config.github, author_salt=config.author_salt
+            ),
+        }
+
+    @property
+    def sources(self) -> list[SubmissionSource]:
+        return list(self._providers)
 
     async def ingest(
         self,
@@ -29,14 +39,3 @@ class IngestService:
     async def aclose(self) -> None:
         for provider in self._providers.values():
             await provider.aclose()
-
-    async def __aenter__(self) -> IngestService:
-        return self
-
-    async def __aexit__(self, *_exc: object) -> None:
-        await self.aclose()
-
-
-def create_ingest_service(config: IngestConfig | None = None) -> IngestService:
-    config = config or IngestConfig()
-    return IngestService([GitHubProvider(config.github, author_salt=config.author_salt)])
