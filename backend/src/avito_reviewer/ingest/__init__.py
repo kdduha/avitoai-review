@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING, Any
+
 from avito_reviewer.config import GitHubConfig, IngestConfig
 from avito_reviewer.ingest.errors import (
     IngestError,
@@ -17,7 +19,9 @@ from avito_reviewer.ingest.models import (
     SubmissionBundle,
     SubmissionSource,
 )
-from avito_reviewer.ingest.service import IngestService
+
+if TYPE_CHECKING:
+    from avito_reviewer.ingest.service import IngestService
 
 __all__ = [
     "Artifact",
@@ -38,3 +42,16 @@ __all__ = [
     "SubmissionSource",
     "UnknownSourceError",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Keep the provider stack (and its HTTP client) out of import paths that only need models.
+
+    ``IngestService`` pulls in ``githubkit``; the review and detection layers import
+    this package for :class:`SubmissionBundle` alone and should not pay for it.
+    """
+    if name == "IngestService":
+        from avito_reviewer.ingest.service import IngestService
+
+        return IngestService
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

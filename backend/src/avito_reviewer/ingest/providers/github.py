@@ -24,6 +24,7 @@ from githubkit_schemas.latest.models import (
 )
 
 from avito_reviewer.config import GitHubConfig
+from avito_reviewer.ingest.content import github_ref, parse_github_locator
 from avito_reviewer.ingest.diff import added_line_ranges
 from avito_reviewer.ingest.errors import InvalidLinkError, ProviderFetchError
 from avito_reviewer.ingest.models import (
@@ -110,8 +111,32 @@ def _decode_blob(blob: Blob) -> _Blob:
     return _Blob(text=raw.decode("utf-8", "replace"), is_binary=False)
 
 
+def _describe(exc: GitHubException, owner: str, repo: str, number: int) -> str:
+    """Человеческое объяснение отказа GitHub.
+
+    Голый repr исключения клиента уходит прямо в ответ API, а самая частая
+    причина отказа — отсутствующий или недостаточный токен. Ревьюер должен
+    прочитать, что чинить, а не имя внутренней модели githubkit.
+    """
+    target = f"{owner}/{repo}#{number}"
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status == 404:
+        return f"{target}: PR не найден или репозиторий недоступен этому токену"
+    if status in (401, 403):
+        return (
+            f"{target}: GitHub отказал ({status}) — проверьте INGEST_GITHUB__TOKEN "
+            f"и его права"
+        )
+    if status == 429:
+        return f"{target}: исчерпан лимит запросов GitHub, попробуйте позже"
+    if status is not None:
+        return f"{target}: GitHub ответил {status}"
+    return f"{target}: {exc}"
+
+
 class GitHubProvider(SubmissionProvider):
     source: ClassVar[SubmissionSource] = SubmissionSource.GITHUB_PR
+    content_scheme: ClassVar[str] = "github"
 
     def __init__(self, config: GitHubConfig, *, author_salt: str = "") -> None:
         self._config = config
@@ -121,6 +146,37 @@ class GitHubProvider(SubmissionProvider):
 
     async def aclose(self) -> None:
         await self._gh.__aexit__()
+
+    async def fetch_content(self, locator: str) -> str | None:
+        """Read one blob at a fixed ref. Returns ``None`` for anything not readable as text.
+
+        A body that cannot be read is not an error here: the review layer falls back to
+        the artifact's diff and marks the file as shown in part. Upstream failures are
+        logged rather than raised for the same reason -- one unreachable file must not
+        cost the whole submission.
+        """
+        target = parse_github_locator(locator)
+        if target is None:
+            _log.warning("github: malformed content locator %r", locator)
+            return None
+        try:
+            content = (
+                await self._gh.rest.repos.async_get_content(
+                    target.owner, target.repo, target.path, ref=target.ref
+                )
+            ).parsed_data
+        except GitHubException as exc:
+            _log.warning("github: cannot read %s: %s", locator, exc)
+            return None
+
+        if getattr(content, "type", None) != "file" or getattr(content, "encoding", "") != "base64":
+            return None
+        raw = base64.b64decode(getattr(content, "content", "") or "")
+        return None if b"\x00" in raw else raw.decode("utf-8", "replace")
+
+    def content_ref_for(self, root: str, ref: str, path: str) -> str | None:
+        owner, _, repo = root.partition("/")
+        return github_ref(owner, repo, ref, path) if owner and repo else None
 
     async def fetch(self, link: str, *, context: IngestContext) -> SubmissionBundle:
         owner, repo, number = self._parse_link(link)
@@ -138,7 +194,7 @@ class GitHubProvider(SubmissionProvider):
             commits = await self._with_stats(owner, repo, commits)
             excerpts = await self._load_excerpts(owner, repo, changed, tree)
         except GitHubException as exc:
-            raise ProviderFetchError(str(exc)) from exc
+            raise ProviderFetchError(_describe(exc, owner, repo, number)) from exc
 
         _log.debug(
             "github: %s/%s#%d — %d changed files, %d excerpts, %d commits",
@@ -295,9 +351,7 @@ class GitHubProvider(SubmissionProvider):
             diff=entry.patch if isinstance(entry.patch, str) else None,
             excerpt=excerpt,
             content_ref=(
-                f"github:{owner}/{repo}@{head}:{path}"
-                if entry.status != "removed"
-                else None
+                github_ref(owner, repo, head, path) if entry.status != "removed" else None
             ),
         )
 
