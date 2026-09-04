@@ -131,12 +131,16 @@ def test_committed_secret_file_is_caught():
 # отчёт
 # --------------------------------------------------------------------------- #
 
-def test_unknown_check_is_skipped_not_fatal():
-    """Рубрику пишет методист, и она обгонит код: незнакомая проверка не должна ронять прогон."""
+def test_unknown_check_does_not_break_the_run():
+    """Рубрику пишет методист, и она обгонит код: незнакомая проверка не роняет прогон.
+
+    Но и не пропадает — иначе «гейт пройден» скажет о том, чего не смотрели.
+    """
     report = run_on(rubric_with({"check": "font_size", "level": "blocking", "params": {}}))
 
-    assert report.outcomes == []
-    assert report.status is GateStatus.PASSED
+    assert [o.check for o in report.outcomes] == ["font_size"]
+    assert report.outcomes[0].inconclusive is True
+    assert report.status is GateStatus.WARNING
 
 
 def test_info_level_never_raises_the_status():
@@ -156,3 +160,25 @@ def test_facts_carry_the_verdict_and_the_place():
 
 def test_empty_gate_is_a_pass():
     assert run_on(go_rubric()).status is GateStatus.PASSED
+
+
+def test_unimplemented_check_goes_to_the_reviewer_instead_of_vanishing():
+    """Часть требований условия исполняется только другим каналом сдачи.
+
+    Шрифт и история ревизий живут в Google Docs, а не в git. Молча пропустить
+    такую проверку значит выдать «гейт пройден» за работу, которую никто не
+    проверял, — а если она блокирующая, то и пропустить её мимо ревьюера.
+    """
+    rubric = rubric_with(
+        {"check": "revision_history_visible", "level": "blocking",
+         "params": {"label": "Видна история изменений"}}
+    )
+    report = run_on(rubric)
+    outcome = report.outcomes[0]
+
+    assert outcome.inconclusive is True
+    assert outcome.passed is False
+    # Не блокирует: непроверенное — не то же самое, что проваленное.
+    assert report.blocked is False
+    assert report.status is GateStatus.WARNING
+    assert outcome in report.unresolved

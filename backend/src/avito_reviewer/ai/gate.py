@@ -148,8 +148,19 @@ def _run_check(
 ) -> CheckOutcome | None:
     handler = _HANDLERS.get(check.check)
     if handler is None:
-        log.warning("gate: проверка %r не реализована — пропущена", check.check)
-        return None
+        # Молча пропасть проверка не имеет права: рубрика несёт требования
+        # условия, и часть из них исполняется только другим каналом сдачи —
+        # шрифт и история ревизий живут в Google Docs, а не в git. Пропавшая
+        # блокирующая проверка означала бы работу, прошедшую гейт без проверки.
+        log.warning("gate: проверка %r не реализована — уходит человеку", check.check)
+        return CheckOutcome(
+            check=check.check,
+            level=check.level,
+            label=_label(check, check.check),
+            passed=False,
+            inconclusive=True,
+            detail="проверка не реализована для этого источника сдачи — проверьте вручную",
+        )
     return handler(check, texts, paths)
 
 

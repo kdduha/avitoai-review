@@ -72,6 +72,13 @@ class ArtifactTextOut(BaseModel):
     origin: str = Field(description="excerpt | fetched | diff — откуда взялся текст")
     first_line: int
     last_line: int
+    line_numbers: list[int] = Field(
+        description=(
+            "Номер каждой строки `text` в полной версии файла. У фрагмента из "
+            "диффа они идут с пропусками, поэтому нумеровать вьювером от "
+            "`first_line` нельзя — цитата уедет на чужую строку."
+        )
+    )
     changed_lines: str = Field(description="строки этой сдачи, например «1–48, 120»")
     text: str
 
@@ -85,6 +92,7 @@ class ArtifactTextOut(BaseModel):
             origin=text.origin,
             first_line=text.line_numbers[0] if text.line_numbers else 0,
             last_line=text.line_numbers[-1] if text.line_numbers else 0,
+            line_numbers=text.line_numbers,
             changed_lines=text.changed_summary(),
             text=text.text,
         )
