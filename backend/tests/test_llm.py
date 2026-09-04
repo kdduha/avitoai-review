@@ -384,6 +384,32 @@ def test_truncated_answer_buys_more_room_instead_of_a_pointless_repair():
     assert len(provider.calls[1]) == len(provider.calls[0])
 
 
+def test_empty_answer_also_buys_more_room():
+    """У рассуждающей модели пустой ответ — это тоже нехватка места.
+
+    Бюджет уходит в `reasoning`, до содержимого очередь не доходит, а
+    `finish_reason` при этом штатный. Ремонтный запрос здесь так же бесполезен.
+    """
+    provider = FakeProvider(responses=["", '{"score": 4, "comment": "ок"}'])
+    gateway = PrivacyGateway(external=provider, local=provider)
+
+    budgets: list[int] = []
+    original = provider.complete
+
+    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+        budgets.append(max_tokens)
+        return original(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode)
+
+    provider.complete = spy  # type: ignore[method-assign]
+    answer, _ = complete_json(
+        gateway, [{"role": "user", "content": "оцени"}], Answer,
+        task=TaskKind.REVIEW, max_tokens=4000,
+    )
+
+    assert answer.score == 4
+    assert budgets == [4000, 8000]
+
+
 def test_hopeless_output_raises_with_the_raw_text():
     gateway, _ = fake_gateway(["мусор", "снова мусор"])
     with pytest.raises(StructuredError) as exc:
