@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
 import { startRun } from '@/lib/runs'
@@ -31,15 +31,18 @@ const inputClass =
 
 export function CheckPage() {
   const navigate = useNavigate()
+  const client = useQueryClient()
 
   const [link, setLink] = useState('')
   const [rubricId, setRubricId] = useState('')
   const [deadline, setDeadline] = useState('')
   const [student, setStudent] = useState('')
+  const [studentName, setStudentName] = useState('')
   const [withDetection, setWithDetection] = useState(true)
 
   const status = useQuery({ queryKey: ['init'], queryFn: backend.init, retry: false })
   const rubrics = useQuery({ queryKey: ['rubrics'], queryFn: backend.rubrics, retry: false })
+  const cost = useQuery({ queryKey: ['cost'], queryFn: backend.cost, retry: false })
 
   const run = useMutation({
     mutationFn: () =>
@@ -48,9 +51,14 @@ export function CheckPage() {
         rubricId: rubricId || rubrics.data?.[0]?.assignment_id || '',
         deadlineAt: deadline ? new Date(deadline).toISOString() : undefined,
         studentInternalId: student.trim() || undefined,
+        studentName: studentName.trim() || undefined,
         withDetection,
       }),
-    onSuccess: ({ workspace }) => navigate(`/review/${workspace.id}`),
+    onSuccess: ({ workspace }) => {
+      // Прогон только что потратил токены — карточка экономики обязана это увидеть.
+      client.invalidateQueries({ queryKey: ['cost'] })
+      navigate(`/review/${workspace.id}`)
+    },
   })
 
   const offline = status.isError
@@ -138,6 +146,23 @@ export function CheckPage() {
           </Field>
         </div>
 
+        <Field
+          label="ФИО студента"
+          hint="в модель не уходит: шлюз вычищает имя вместе с падежами и инициалами"
+        >
+          <input
+            value={studentName}
+            onChange={(event) => setStudentName(event.target.value)}
+            placeholder="Егор Пантелеев"
+            className={inputClass}
+          />
+        </Field>
+        <p className="-mt-2 max-w-[62ch] text-[12px] leading-[1.5] text-faint">
+          В сдаче имени нет намеренно, поэтому без этого поля оно остаётся на общих детекторах ПДн.
+          Назвав его здесь, вы даёте шлюзу вычистить имя прицельно — в том числе там, где студент
+          подписался в README или в комментарии.
+        </p>
+
         <label className="flex cursor-pointer items-start gap-2.5">
           <input
             type="checkbox"
@@ -184,6 +209,40 @@ export function CheckPage() {
           </p>
         ) : null}
       </div>
+
+      {cost.data ? (
+        <section className="mt-4 rounded-card border border-line bg-surface px-5 py-4">
+          <h2 className="text-[13.5px] font-semibold text-ink">Экономика прогона</h2>
+          <p className="mt-0.5 text-[12px] text-faint">с момента запуска сервиса</p>
+
+          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2.5 sm:grid-cols-4">
+            <div>
+              <dt className="text-[12px] text-muted">Обращений к моделям</dt>
+              <dd className="num mt-0.5 text-[17px] font-semibold text-ink">{cost.data.calls}</dd>
+            </div>
+            <div>
+              <dt className="text-[12px] text-muted">Ушло наружу</dt>
+              <dd className="num mt-0.5 text-[17px] font-semibold text-ink">{cost.data.external_calls}</dd>
+            </div>
+            <div>
+              <dt className="text-[12px] text-muted">Обезличиваний</dt>
+              <dd className="num mt-0.5 text-[17px] font-semibold text-ink">{cost.data.redactions}</dd>
+            </div>
+            <div>
+              <dt className="text-[12px] text-muted">Потрачено</dt>
+              <dd className="num mt-0.5 text-[17px] font-semibold text-ink">
+                {cost.data.cost_rub.toFixed(2)} ₽
+              </dd>
+            </div>
+          </dl>
+
+          <p className="mt-3 max-w-[68ch] border-t border-line-soft pt-2.5 text-[12px] leading-[1.5] text-faint">
+            «Ушло наружу» — вызовы во внешнюю модель; всё остальное отработало локально.
+            «Обезличиваний» — сколько фрагментов ПДн шлюз вырезал перед отправкой.
+            {cost.data.errors ? ` Ошибок провайдера: ${cost.data.errors}.` : ''}
+          </p>
+        </section>
+      ) : null}
     </div>
   )
 }
