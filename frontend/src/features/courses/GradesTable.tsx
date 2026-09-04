@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Sparkle } from 'lucide-react'
-import { DEMO_RUN_ID } from '@/mocks/demoRun'
-import { PASS_THRESHOLD } from '@/mocks/catalog'
+import { DEMO_RUN_ID } from '@/lib/runs'
 import type { Assignment, Curator, Grade, Student } from '@/lib/types'
 import { cn } from '@/lib/cn'
 import { Avatar } from '@/components/ui/Avatar'
@@ -24,7 +23,7 @@ const STATUS_HINT: Record<Grade['status'], string> = {
 
 type SortKey = 'name' | 'total'
 
-function GradeCell({ grade }: { grade: Grade | undefined }) {
+function GradeCell({ grade, passThreshold }: { grade: Grade | undefined; passThreshold: number }) {
   if (!grade || grade.score === null) {
     return (
       <td className="px-2 py-2 text-center">
@@ -47,7 +46,7 @@ function GradeCell({ grade }: { grade: Grade | undefined }) {
         <span
           className={cn(
             'num text-[13px]',
-            grade.score < PASS_THRESHOLD ? 'text-critical-ink' : 'text-ink',
+            grade.score < passThreshold ? 'text-critical-ink' : 'text-ink',
             pending ? 'font-normal text-muted' : 'font-medium',
           )}
         >
@@ -86,6 +85,10 @@ export function GradesTable({ students, assignments, grades, curators }: Props) 
     }
     return map
   }, [students, byStudent])
+
+  const averageThreshold = assignments.length
+    ? assignments.reduce((sum, item) => sum + item.passThreshold, 0) / assignments.length
+    : 0
 
   const rows = useMemo(() => {
     const filtered = students.filter(
@@ -171,11 +174,12 @@ export function GradesTable({ students, assignments, grades, curators }: Props) 
                   {assignments.map((assignment) => (
                     <GradeCell
                       key={assignment.id}
+                      passThreshold={assignment.passThreshold}
                       grade={(byStudent.get(student.id) ?? []).find((g) => g.assignmentId === assignment.id)}
                     />
                   ))}
                   <td className="px-3 py-2 text-center">
-                    <span className={cn('num text-[13.5px] font-semibold', total !== null && total < PASS_THRESHOLD ? 'text-critical-ink' : 'text-ink')}>
+                    <span className={cn('num text-[13.5px] font-semibold', total !== null && total < averageThreshold ? 'text-critical-ink' : 'text-ink')}>
                       {total ?? '—'}
                     </span>
                   </td>

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
 import { startRun } from '@/lib/runs'
-import { DEMO_RUN_ID } from '@/mocks/demoRun'
+import { DEMO_RUN_ID } from '@/lib/runs'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 

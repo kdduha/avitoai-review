@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type { Role } from '@/lib/types'
-import { CURATORS } from '@/mocks/catalog'
+import { api } from '@/lib/api'
 
 interface Session {
   role: Role
@@ -17,6 +18,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<Role>(
     () => (localStorage.getItem(STORAGE_KEY) as Role | null) ?? 'curator',
   )
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: api.me })
 
   const value = useMemo<Session>(
     () => ({
@@ -25,10 +27,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(STORAGE_KEY, next)
         setRoleState(next)
       },
-      name: role === 'head' ? 'Ирина Ходасевич' : CURATORS[0].name,
-      curatorId: CURATORS[0].id,
+      name: role === 'head' ? 'Ирина Ходасевич' : (me?.name ?? '—'),
+      curatorId: me?.id ?? '',
     }),
-    [role],
+    [role, me],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

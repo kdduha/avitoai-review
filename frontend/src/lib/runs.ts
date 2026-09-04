@@ -9,6 +9,8 @@
 import { ApiError, backend, type DetectResponse, type Rubric } from './backend'
 import { buildWorkspace, withScore, type Workspace } from './workspace'
 import { DEMO_DETECT, DEMO_REVIEW, DEMO_RUN_ID } from '@/mocks/demoRun'
+
+export { DEMO_RUN_ID }
 import { DEMO_RUBRIC } from '@/mocks/rubric'
 
 const runs = new Map<string, Workspace>()

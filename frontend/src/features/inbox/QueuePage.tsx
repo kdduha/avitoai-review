@@ -2,8 +2,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Play } from 'lucide-react'
 import { api } from '@/lib/api'
-import { ASSIGNMENTS } from '@/mocks/catalog'
-import { DEMO_RUN_ID } from '@/mocks/demoRun'
+import { DEMO_RUN_ID } from '@/lib/runs'
 import { plural } from '@/lib/format'
 import { useSession } from '@/app/session'
 import { Avatar } from '@/components/ui/Avatar'
@@ -16,6 +15,7 @@ export function QueuePage() {
 
   const { data: students = [] } = useQuery({ queryKey: ['students', 'go-12'], queryFn: () => api.students('go-12') })
   const { data: grades = [] } = useQuery({ queryKey: ['grades', 'go-12'], queryFn: () => api.grades('go-12') })
+  const { data: assignments = [] } = useQuery({ queryKey: ['assignments'], queryFn: () => api.assignments() })
 
   const mine = new Set(students.filter((student) => student.curatorId === curatorId).map((s) => s.id))
   const queue = grades
@@ -49,7 +49,7 @@ export function QueuePage() {
       <div className="space-y-2">
         {queue.map((grade) => {
           const student = students.find((item) => item.id === grade.studentId)
-          const assignment = ASSIGNMENTS.find((item) => item.id === grade.assignmentId)
+          const assignment = assignments.find((item) => item.id === grade.assignmentId)
           return (
             <Link
               key={`${grade.studentId}-${grade.assignmentId}`}

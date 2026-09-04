@@ -35,6 +35,8 @@ export interface Assignment {
   code: string
   title: string
   maxScore: number
+  /** Порог зачёта берётся из шкалы рубрики и у разных заданий разный. */
+  passThreshold: number
   deadlineAt: string
 }
 

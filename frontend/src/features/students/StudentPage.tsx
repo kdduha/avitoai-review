@@ -4,9 +4,7 @@ import { ArrowLeft, Sparkle } from 'lucide-react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { ASSIGNMENTS, COURSES, CURATORS, STREAMS } from '@/mocks/catalog'
-import { DEMO_RUN_ID } from '@/mocks/demoRun'
-import { PASS_THRESHOLD } from '@/mocks/catalog'
+import { DEMO_RUN_ID } from '@/lib/runs'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { AXIS, ChartTooltip, GRID, Panel, SERIES } from '@/features/courses/chart'
@@ -27,12 +25,20 @@ export function StudentPage() {
     queryKey: ['student-grades', studentId],
     queryFn: () => api.gradesForStudent(studentId),
   })
+  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
+  const { data: streams = [] } = useQuery({ queryKey: ['streams'], queryFn: () => api.streams() })
+  const { data: curators = [] } = useQuery({ queryKey: ['curators'], queryFn: api.curators })
+  const { data: assignments = [] } = useQuery({
+    queryKey: ['assignments', student?.courseId],
+    queryFn: () => api.assignments(student?.courseId),
+    enabled: Boolean(student),
+  })
 
   if (!student) return null
 
-  const course = COURSES.find((c) => c.id === student.courseId)
-  const stream = STREAMS.find((s) => s.id === student.streamId)
-  const curator = CURATORS.find((c) => c.id === student.curatorId)
+  const course = courses.find((item) => item.id === student.courseId)
+  const stream = streams.find((item) => item.id === student.streamId)
+  const curator = curators.find((item) => item.id === student.curatorId)
 
   const scored = grades.filter((g) => g.score !== null)
   const average = scored.length
@@ -40,8 +46,10 @@ export function StudentPage() {
     : null
   const flags = grades.filter((g) => g.aiFlag !== null)
 
+  const maxScore = assignments[0]?.maxScore ?? 10
+
   const trend = grades.map((grade) => ({
-    code: ASSIGNMENTS.find((a) => a.id === grade.assignmentId)?.code ?? grade.assignmentId,
+    code: assignments.find((item) => item.id === grade.assignmentId)?.code ?? grade.assignmentId,
     score: grade.score,
   }))
 
@@ -81,7 +89,7 @@ export function StudentPage() {
           <h2 className="border-b border-line px-4 py-3 text-[13.5px] font-semibold text-ink">Работы</h2>
           <div>
             {grades.map((grade) => {
-              const assignment = ASSIGNMENTS.find((a) => a.id === grade.assignmentId)
+              const assignment = assignments.find((item) => item.id === grade.assignmentId)
               const body = (
                 <>
                   <div className="min-w-0 flex-1">
@@ -105,7 +113,7 @@ export function StudentPage() {
                       'num shrink-0 text-[15px] font-semibold',
                       grade.score === null
                         ? 'text-faint'
-                        : grade.score < PASS_THRESHOLD
+                        : grade.score < (assignments.find((item) => item.id === grade.assignmentId)?.passThreshold ?? 0)
                           ? 'text-critical-ink'
                           : 'text-ink',
                     )}
@@ -141,7 +149,7 @@ export function StudentPage() {
               <LineChart data={trend} margin={{ left: -18, right: 12, top: 8, bottom: 4 }}>
                 <CartesianGrid {...GRID} />
                 <XAxis dataKey="code" {...AXIS} />
-                <YAxis domain={[0, 10]} {...AXIS} />
+                <YAxis domain={[0, maxScore]} {...AXIS} />
                 <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#dcdcd6' }} />
                 <Line
                   type="linear"
@@ -162,7 +170,7 @@ export function StudentPage() {
                 {flags.map((grade) => (
                   <li key={grade.assignmentId} className="flex items-center justify-between gap-3 text-[13px]">
                     <span className="text-ink-soft">
-                      {ASSIGNMENTS.find((a) => a.id === grade.assignmentId)?.code}
+                      {assignments.find((item) => item.id === grade.assignmentId)?.code}
                     </span>
                     <span className="num text-warn-ink">{grade.aiFlag?.toFixed(2)}</span>
                   </li>

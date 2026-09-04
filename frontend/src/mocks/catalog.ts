@@ -42,13 +42,13 @@ export const STREAMS: Stream[] = [
 ]
 
 export const ASSIGNMENTS: Assignment[] = [
-  { id: 'go-task1', courseId: 'go', code: 'ДЗ 1', title: 'Boilerplate и веб-сервер', maxScore: 10, deadlineAt: '2026-08-26T21:00:00+03:00' },
-  { id: 'go-task2', courseId: 'go', code: 'ДЗ 2', title: 'Микросервисы: слои и gRPC', maxScore: 10, deadlineAt: '2026-09-02T21:00:00+03:00' },
-  { id: 'go-task3', courseId: 'go', code: 'ДЗ 3', title: 'Наблюдаемость и деплой', maxScore: 10, deadlineAt: '2026-09-16T21:00:00+03:00' },
-  { id: 'llm-task1', courseId: 'llm', code: 'ДЗ 1', title: 'Базовый RAG-контур', maxScore: 10, deadlineAt: '2026-09-08T21:00:00+03:00' },
-  { id: 'llm-task2', courseId: 'llm', code: 'ДЗ 2', title: 'Оценка качества ответов', maxScore: 10, deadlineAt: '2026-09-22T21:00:00+03:00' },
-  { id: 'ml-task1', courseId: 'ml', code: 'ДЗ 1', title: 'Дизайн эксперимента', maxScore: 10, deadlineAt: '2026-08-29T21:00:00+03:00' },
-  { id: 'ml-task2', courseId: 'ml', code: 'ДЗ 2', title: 'Пайплайн и метрики', maxScore: 10, deadlineAt: '2026-09-12T21:00:00+03:00' },
+  { id: 'go-task1', courseId: 'go', code: 'ДЗ 1', title: 'Boilerplate и веб-сервер', maxScore: 10, passThreshold: 6, deadlineAt: '2026-08-26T21:00:00+03:00' },
+  { id: 'go-task2', courseId: 'go', code: 'ДЗ 2', title: 'Микросервисы: слои и gRPC', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-02T21:00:00+03:00' },
+  { id: 'go-task3', courseId: 'go', code: 'ДЗ 3', title: 'Наблюдаемость и деплой', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-16T21:00:00+03:00' },
+  { id: 'llm-task1', courseId: 'llm', code: 'ДЗ 1', title: 'Базовый RAG-контур', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-08T21:00:00+03:00' },
+  { id: 'llm-task2', courseId: 'llm', code: 'ДЗ 2', title: 'Оценка качества ответов', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-22T21:00:00+03:00' },
+  { id: 'ml-task1', courseId: 'ml', code: 'ДЗ 1', title: 'Дизайн эксперимента', maxScore: 10, passThreshold: 6, deadlineAt: '2026-08-29T21:00:00+03:00' },
+  { id: 'ml-task2', courseId: 'ml', code: 'ДЗ 2', title: 'Пайплайн и метрики', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-12T21:00:00+03:00' },
 ]
 
 export const CURATORS: Curator[] = [

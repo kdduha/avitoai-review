@@ -3,7 +3,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { COURSES } from '@/mocks/catalog'
 import { Tabs } from '@/components/ui/Tabs'
 import { MockNotice } from '@/components/ui/MockNotice'
 import { CourseDashboard } from './CourseDashboard'
@@ -20,7 +19,7 @@ export function CoursePage() {
   const { courseId = '' } = useParams()
   const [params, setParams] = useSearchParams()
 
-  const course = COURSES.find((c) => c.id === courseId)
+  const { data: course } = useQuery({ queryKey: ['course', courseId], queryFn: () => api.course(courseId) })
   const { data: streams = [] } = useQuery({ queryKey: ['streams', courseId], queryFn: () => api.streams(courseId) })
 
   const streamId = params.get('stream') ?? streams[0]?.id ?? ''

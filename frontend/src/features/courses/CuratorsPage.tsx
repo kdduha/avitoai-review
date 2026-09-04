@@ -4,7 +4,6 @@ import { Check } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { formatDuration, percent, plural } from '@/lib/format'
-import { COURSES, STREAMS } from '@/mocks/catalog'
 import { useSession } from '@/app/session'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -18,6 +17,8 @@ export function CuratorsPage() {
   const [selected, setSelected] = useState<string[]>([])
 
   const { data: curators = [] } = useQuery({ queryKey: ['curators'], queryFn: api.curators })
+  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
+  const { data: allStreams = [] } = useQuery({ queryKey: ['streams'], queryFn: () => api.streams() })
 
   const save = useMutation({
     mutationFn: ({ id, streamIds }: { id: string; streamIds: string[] }) =>
@@ -41,7 +42,7 @@ export function CuratorsPage() {
       <div className="mt-5 space-y-2">
         {curators.map((curator) => {
           const load = curator.committedMinutes / curator.capacityMinutes
-          const streams = STREAMS.filter((s) => curator.streamIds.includes(s.id))
+          const streams = allStreams.filter((item) => curator.streamIds.includes(item.id))
 
           return (
             <div key={curator.id} className="card flex flex-wrap items-center gap-4 px-4 py-3.5">
@@ -60,7 +61,7 @@ export function CuratorsPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {streams.map((stream) => (
                       <span key={stream.id} className="rounded-md bg-sunken px-2 py-0.5 text-[12px] text-ink-soft">
-                        {COURSES.find((c) => c.id === stream.courseId)?.short}, {stream.short.toLowerCase()}
+                        {courses.find((c) => c.id === stream.courseId)?.short}, {stream.short.toLowerCase()}
                       </span>
                     ))}
                   </div>
@@ -119,11 +120,11 @@ export function CuratorsPage() {
         }
       >
         <div className="space-y-3">
-          {COURSES.map((course) => (
+          {courses.map((course) => (
             <div key={course.id}>
               <div className="pb-1 text-[12px] text-faint">{course.title}</div>
               <div className="space-y-1">
-                {STREAMS.filter((s) => s.courseId === course.id).map((stream) => {
+                {allStreams.filter((item) => item.courseId === course.id).map((stream) => {
                   const checked = selected.includes(stream.id)
                   return (
                     <button
