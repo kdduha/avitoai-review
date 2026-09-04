@@ -1,0 +1,162 @@
+{
+  "submission_id": "22d468d3-7754-4b56-80ad-26e6326a4fe7",
+  "source": "github_pr",
+  "origin_url": "https://github.com/ai-talent-hub-avito/service-courier/pull/42",
+  "retrieved_at": "2026-02-08T21:44:00Z",
+  "student_ref": {
+    "internal_id": "3f9a1c7e2b40d658",
+    "external_handles": {
+      "github": "student-42"
+    }
+  },
+  "submitted_at": "2026-02-08T21:40:00Z",
+  "deadline_at": "2026-02-09T23:59:00Z",
+  "assignment_id": null,
+  "base_ref": "1a0b2c3d4e5f60718293a4b5c6d7e8f901234567",
+  "head_ref": "9f2c1ae4b7d05e8c3a16f4b902d7e5c8a1b3f6d2",
+  "artifacts": [
+    {
+      "path": "cmd/main.go",
+      "previous_path": null,
+      "status": "added",
+      "role": "solution",
+      "lang": "go",
+      "is_binary": false,
+      "size_bytes": 1272,
+      "line_count": 61,
+      "changed_ranges": [
+        {
+          "start": 1,
+          "end": 60
+        }
+      ],
+      "diff": "@@ -0,0 +1,60 @@\n+package main\n+\n+import (\n+\t\"context\"\n+\t\"flag\"\n+\t\"log\"\n+\t\"net/http\"\n+\t\"os\"\n+\t\"os/signal\"\n+\t\"syscall\"\n+\t\"time\"\n+\n+\t\"github.com/go-chi/chi/v5\"\n+)\n+\n+func main() {\n+\tport := flag.String(\"port\", envOr(\"PORT\", \"8080\"), \"http port\")\n+\tflag.Parse()\n+\n+\tr := chi.NewRouter()\n+\tr.Get(\"/ping\", handlePing)\n+\tr.Head(\"/healthcheck\", handleHealthcheck)\n+\n+\tsrv := &http.Server{Addr: \":\" + *port, Handler: r}\n+\n+\tgo func() {\n+\t\tif err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {\n+\t\t\tlog.Fatalf(\"listen: %v\", err)\n+\t\t}\n+\t}()\n+\tlog.Printf(\"service-courier listening on :%s\", *port)\n+\n+\tstop := make(chan os.Signal, 1)\n+\tsignal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)\n+\t<-stop\n+\n+\tctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)\n+\tdefer cancel()\n+\tif err := srv.Shutdown(ctx); err != nil {\n+\t\tlog.Printf(\"shutdown: %v\", err)\n+\t}\n+\tlog.Println(\"Shutting down service-courier\")\n+}\n+\n+func handlePing(w http.ResponseWriter, r *http.Request) {\n+\tw.Header().Set(\"Content-Type\", \"application/json\")\n+\tw.WriteHeader(http.StatusOK)\n+\tw.Write([]byte(`{\"message\":\"pong\"}`))\n+}\n+\n+func handleHealthcheck(w http.ResponseWriter, r *http.Request) {\n+\tw.WriteHeader(http.StatusNoContent)\n+}\n+\n+func envOr(key, fallback string) string {\n+\tif v := os.Getenv(key); v != \"\" {\n+\t\treturn v\n+\t}\n+\treturn fallback\n+}\n",
+      "excerpt": "package main\n\nimport (\n\t\"context\"\n\t\"flag\"\n\t\"log\"\n\t\"net/http\"\n\t\"os\"\n\t\"os/signal\"\n\t\"syscall\"\n\t\"time\"\n\n\t\"github.com/go-chi/chi/v5\"\n)\n\nfunc main() {\n\tport := flag.String(\"port\", envOr(\"PORT\", \"8080\"), \"http port\")\n\tflag.Parse()\n\n\tr := chi.NewRouter()\n\tr.Get(\"/ping\", handlePing)\n\tr.Head(\"/healthcheck\", handleHealthcheck)\n\n\tsrv := &http.Server{Addr: \":\" + *port, Handler: r}\n\n\tgo func() {\n\t\tif err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {\n\t\t\tlog.Fatalf(\"listen: %v\", err)\n\t\t}\n\t}()\n\tlog.Printf(\"service-courier listening on :%s\", *port)\n\n\tstop := make(chan os.Signal, 1)\n\tsignal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)\n\t<-stop\n\n\tctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)\n\tdefer cancel()\n\tif err := srv.Shutdown(ctx); err != nil {\n\t\tlog.Printf(\"shutdown: %v\", err)\n\t}\n\tlog.Println(\"Shutting down service-courier\")\n}\n\nfunc handlePing(w http.ResponseWriter, r *http.Request) {\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tw.WriteHeader(http.StatusOK)\n\tw.Write([]byte(`{\"message\":\"pong\"}`))\n}\n\nfunc handleHealthcheck(w http.ResponseWriter, r *http.Request) {\n\tw.WriteHeader(http.StatusNoContent)\n}\n\nfunc envOr(key, fallback string) string {\n\tif v := os.Getenv(key); v != \"\" {\n\t\treturn v\n\t}\n\treturn fallback\n}\n",
+      "content_ref": "github:ai-talent-hub-avito/service-courier@9f2c1ae4b7d05e8c3a16f4b902d7e5c8a1b3f6d2:cmd/main.go"
+    },
+    {
+      "path": "README.md",
+      "previous_path": null,
+      "status": "added",
+      "role": "solution",
+      "lang": "markdown",
+      "is_binary": false,
+      "size_bytes": 701,
+      "line_count": 21,
+      "changed_ranges": [
+        {
+          "start": 1,
+          "end": 20
+        }
+      ],
+      "diff": "@@ -0,0 +1,20 @@\n+# service-courier\n+\n+Boilerplate сервиса курьерской доставки, задание 1.\n+\n+## Запуск\n+\n+```bash\n+go run cmd/main.go --port 3000\n+```\n+\n+Порт берётся из флага `--port`, иначе из переменной окружения `PORT`,\n+иначе 8080.\n+\n+## Эндпоинты\n+\n+- `GET /ping` — отвечает 200 и телом `{\"message\":\"pong\"}`\n+- `HEAD /healthcheck` — отвечает 204 без тела\n+\n+По SIGINT и SIGTERM сервер завершается корректно: перестаёт принимать новые\n+соединения, дожидается текущих и пишет в лог `Shutting down service-courier`.\n",
+      "excerpt": "# service-courier\n\nBoilerplate сервиса курьерской доставки, задание 1.\n\n## Запуск\n\n```bash\ngo run cmd/main.go --port 3000\n```\n\nПорт берётся из флага `--port`, иначе из переменной окружения `PORT`,\nиначе 8080.\n\n## Эндпоинты\n\n- `GET /ping` — отвечает 200 и телом `{\"message\":\"pong\"}`\n- `HEAD /healthcheck` — отвечает 204 без тела\n\nПо SIGINT и SIGTERM сервер завершается корректно: перестаёт принимать новые\nсоединения, дожидается текущих и пишет в лог `Shutting down service-courier`.\n",
+      "content_ref": "github:ai-talent-hub-avito/service-courier@9f2c1ae4b7d05e8c3a16f4b902d7e5c8a1b3f6d2:README.md"
+    },
+    {
+      "path": "internal/store/postgres.go",
+      "previous_path": null,
+      "status": "modified",
+      "role": "solution",
+      "lang": "go",
+      "is_binary": false,
+      "size_bytes": 48120,
+      "line_count": null,
+      "changed_ranges": [
+        {
+          "start": 121,
+          "end": 121
+        },
+        {
+          "start": 208,
+          "end": 215
+        }
+      ],
+      "diff": "@@ -118,6 +118,6 @@ func (s *Store) ListOrders(ctx context.Context) ([]Order, error) {\n \trows, err := s.db.QueryContext(ctx, listOrdersQuery)\n \tif err != nil {\n-\t\treturn nil, err\n+\t\treturn nil, fmt.Errorf(\"list orders: %w\", err)\n \t}\n \tdefer rows.Close()\n \n@@ -204,2 +204,9 @@ func (s *Store) Close() error {\n \treturn s.db.Close()\n }\n+\n+func (s *Store) Ping(ctx context.Context) error {\n+\tif s.db == nil {\n+\t\treturn errors.New(\"store: not initialised\")\n+\t}\n+\treturn s.db.PingContext(ctx)\n+}\n",
+      "excerpt": null,
+      "content_ref": "github:ai-talent-hub-avito/service-courier@9f2c1ae4b7d05e8c3a16f4b902d7e5c8a1b3f6d2:internal/store/postgres.go"
+    },
+    {
+      "path": "Dockerfile",
+      "previous_path": null,
+      "status": "added",
+      "role": "tooling",
+      "lang": "dockerfile",
+      "is_binary": false,
+      "size_bytes": 98,
+      "line_count": 7,
+      "changed_ranges": [
+        {
+          "start": 1,
+          "end": 6
+        }
+      ],
+      "diff": "@@ -0,0 +1,6 @@\n+FROM golang:1.22-alpine\n+WORKDIR /src\n+COPY . .\n+RUN go build -o /app ./cmd\n+EXPOSE 8080\n+CMD [\"/app\"]\n",
+      "excerpt": "FROM golang:1.22-alpine\nWORKDIR /src\nCOPY . .\nRUN go build -o /app ./cmd\nEXPOSE 8080\nCMD [\"/app\"]\n",
+      "content_ref": "github:ai-talent-hub-avito/service-courier@9f2c1ae4b7d05e8c3a16f4b902d7e5c8a1b3f6d2:Dockerfile"
+    },
+    {
+      "path": "go.sum",
+      "previous_path": null,
+      "status": "modified",
+      "role": "noise",
+      "lang": null,
+      "is_binary": false,
+      "size_bytes": 14200,
+      "line_count": null,
+      "changed_ranges": [],
+      "diff": "@@ -1,2 +1,4 @@\n+github.com/go-chi/chi/v5 v5.0.12\n",
+      "excerpt": null,
+      "content_ref": "github:ai-talent-hub-avito/service-courier@9f2c1ae4b7d05e8c3a16f4b902d7e5c8a1b3f6d2:go.sum"
+    }
+  ],
+  "revisions": [
+    {
+      "id": "c1a2b3c",
+      "authored_at": "2026-02-07T19:40:00Z",
+      "author_hash": "3f9a1c7e2b40d658",
+      "summary": "init module",
+      "added_lines": 14,
+      "removed_lines": 0
+    },
+    {
+      "id": "d4e5f60",
+      "authored_at": "2026-02-07T20:30:00Z",
+      "author_hash": "3f9a1c7e2b40d658",
+      "summary": "chi router, ping",
+      "added_lines": 38,
+      "removed_lines": 2
+    },
+    {
+      "id": "a7b8c9d",
+      "authored_at": "2026-02-08T20:48:00Z",
+      "author_hash": "3f9a1c7e2b40d658",
+      "summary": "store: list orders + ping",
+      "added_lines": 612,
+      "removed_lines": 4
+    },
+    {
+      "id": "e1f2a3b",
+      "authored_at": "2026-02-08T20:52:00Z",
+      "author_hash": "3f9a1c7e2b40d658",
+      "summary": "readme",
+      "added_lines": 26,
+      "removed_lines": 0
+    }
+  ],
+  "repo": {
+    "root": "ai-talent-hub-avito/service-courier",
+    "default_branch": "main",
+    "total_files": 17,
+    "files": [
+      "Dockerfile",
+      "README.md",
+      "cmd/main.go",
+      "go.mod",
+      "go.sum",
+      "internal/handler/order.go",
+      "internal/store/postgres.go"
+    ],
+    "truncated": false
+  }
+}

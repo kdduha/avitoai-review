@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -44,3 +46,68 @@ class IngestConfig(BaseSettings):
 
     author_salt: str = ""
     github: GitHubConfig = Field(default_factory=GitHubConfig)
+
+
+class LLMConfig(BaseModel):
+    """Where model calls go. One OpenAI-compatible client serves both routes.
+
+    Switching the whole contour to local models is a single environment variable
+    (``AI_LLM__PROVIDER=local``), which is what makes the private-perimeter claim
+    demonstrable rather than aspirational.
+    """
+
+    provider: Literal["fake", "local", "openrouter"] = "fake"
+
+    model: str = "openai/gpt-4o-mini"
+    base_url: str = "https://openrouter.ai/api/v1"
+    api_key: SecretStr | None = None
+
+    local_model: str = "qwen2.5-7b-instruct"
+    local_base_url: str = "http://localhost:11434/v1"
+
+    # Kill switch for external providers: every task is served locally or fails.
+    force_local: bool = False
+    timeout: int = 120
+    max_retries: int = 2
+
+
+class ContentConfig(BaseModel):
+    """Budget for pulling artifact bodies the bundle did not inline.
+
+    Ingest inlines a file only within its excerpt budget; everything larger arrives
+    diff-only. These caps decide how much of that is worth fetching before a run.
+    """
+
+    max_files: int = 24
+    max_file_bytes: int = 400_000
+
+
+class ReviewOptions(BaseModel):
+    batch_size: int = 3
+    temperature: float = 0.0
+    max_tokens: int = 3000
+    skip_auto_verifiable: bool = False
+
+
+class DetectionOptions(BaseModel):
+    weight_forensics: float = 0.35
+    weight_perplexity: float = 0.25
+    weight_stylometry: float = 0.15
+    weight_judge: float = 0.25
+    use_judge: bool = True
+
+
+class AIConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_prefix="AI_",
+        env_nested_delimiter="__",
+        env_file=".env",
+        extra="ignore",
+    )
+
+    llm: LLMConfig = Field(default_factory=LLMConfig)
+    content: ContentConfig = Field(default_factory=ContentConfig)
+    review: ReviewOptions = Field(default_factory=ReviewOptions)
+    detection: DetectionOptions = Field(default_factory=DetectionOptions)
+
+    rubrics_dir: str = "rubrics"
