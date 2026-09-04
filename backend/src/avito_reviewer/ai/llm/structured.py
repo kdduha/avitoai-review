@@ -42,7 +42,11 @@ def extract_json(text: str) -> str:
     """Достать JSON из ответа, что бы модель вокруг него ни написала."""
     text = text.strip()
 
-    fenced = FENCE.search(text)
+    # Только ограда вокруг всего ответа. Искать ``` где угодно нельзя: работа
+    # по системному дизайну состоит из блоков ```mermaid, модель их цитирует,
+    # и тройные кавычки оказываются внутри значения JSON. Поиск по всему тексту
+    # вырезал бы содержимое диаграммы вместо ответа.
+    fenced = FENCE.fullmatch(text)
     if fenced:
         text = fenced.group(1).strip()
 
@@ -57,6 +61,12 @@ def extract_json(text: str) -> str:
 
 
 def parse_json(text: str) -> object:
+    # Сначала как есть: валидный ответ нельзя портить попытками его починить.
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        pass
+
     cleaned = extract_json(text)
     try:
         return json.loads(cleaned)

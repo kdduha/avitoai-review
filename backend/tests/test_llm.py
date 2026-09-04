@@ -417,6 +417,22 @@ def test_hopeless_output_raises_with_the_raw_text():
     assert exc.value.raw == "снова мусор"
 
 
+def test_a_quoted_code_fence_does_not_destroy_a_valid_answer():
+    """Работа по системному дизайну состоит из блоков ```mermaid.
+
+    Модель цитирует диаграмму, тройные кавычки оказываются внутри значения
+    JSON, и поиск ограды по всему тексту вырезал бы содержимое диаграммы
+    вместо ответа. Валидный ответ портить попытками его починить нельзя.
+    """
+    answer = '{"score": 3, "comment": "```mermaid\\ngraph LR\\n  A --> B\\n```"}'
+    gateway, _ = fake_gateway([answer])
+    parsed, _ = complete_json(
+        gateway, [{"role": "user", "content": "оцени"}], Answer, task=TaskKind.REVIEW
+    )
+    assert parsed.score == 3
+    assert "mermaid" in parsed.comment
+
+
 def test_extract_json_prefers_the_outermost_object():
     assert extract_json('шум {"a": {"b": 1}} хвост') == '{"a": {"b": 1}}'
 
