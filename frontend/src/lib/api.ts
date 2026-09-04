@@ -15,6 +15,7 @@ import {
   STUDENTS,
   gradesForStream,
   statsForStream,
+  totalsForStream,
 } from '@/mocks/catalog'
 import type {
   Assignment,
@@ -24,6 +25,7 @@ import type {
   Stream,
   StreamStats,
   Student,
+  StudentTotals,
 } from './types'
 
 const LATENCY = 180
@@ -58,6 +60,9 @@ export const api = {
     delay(STUDENTS.find((student) => student.id === studentId)),
 
   grades: (streamId: string): Promise<Grade[]> => delay(gradesForStream(streamId)),
+
+  /** Итоговые строки ведомости: сумма за ДЗ, экзамен, итог и оценка. */
+  totals: (streamId: string): Promise<StudentTotals[]> => delay(totalsForStream(streamId)),
 
   gradesForStudent: (studentId: string): Promise<Grade[]> =>
     delay(GRADES.filter((grade) => grade.studentId === studentId)),

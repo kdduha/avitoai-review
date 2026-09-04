@@ -39,7 +39,28 @@ export interface Assignment {
   passThreshold: number
   /** Шаг шкалы: баллы бывают дробными, и округлять надо по правилу задания. */
   step: number
+  /** Канал сдачи: pull request, документ, таблица, ноутбук, доска. */
+  channel: string
+  /** Прогноз трудоёмкости разбора одной работы, минуты. */
+  reviewMinutes: number
+  /** В условии есть требование заявлять использование ИИ. */
+  declareAi: boolean
   deadlineAt: string
+}
+
+/** Итоговая строка ведомости — так она устроена у организаторов. */
+export interface StudentTotals {
+  studentId: string
+  /** Сумма за домашние работы. */
+  homework: number
+  attendance: number
+  engagement: number
+  exam: number
+  /** итог = сумма × 0.5 + экзамен × 0.4 + вовлечённость / 10 */
+  total: number
+  /** Итог, отображённый на десятибалльную оценку. */
+  mark: number
+  submitted: number
 }
 
 export interface Stream {
@@ -79,6 +100,8 @@ export interface StreamStats {
   awaitingReview: number
   overdue: number
   medianReviewMinutes: number
+  /** «Проверка начинается после дедлайна и занимает не более N дней». */
+  reviewWindowDays: number | null
   autoAcceptRate: number
   avgScore: number
   aiFlagged: number

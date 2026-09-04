@@ -140,7 +140,7 @@ export function CheckPage() {
             <input
               value={student}
               onChange={(event) => setStudent(event.target.value)}
-              placeholder="S-1043"
+              placeholder="171345"
               className={inputClass}
             />
           </Field>

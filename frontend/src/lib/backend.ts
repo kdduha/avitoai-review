@@ -23,6 +23,8 @@ export type FormatCheck = S['FormatCheck']
 export type LatePolicy = S['LatePolicy']
 export type RubricSummary = S['RubricSummary']
 export type CostSummary = S['CostSummary']
+export type RubricDraft = S['RubricDraft']
+export type CompileRubricRequest = S['CompileRubricRequest']
 export type InitResponse = S['InitResponse']
 export type ReviewResponse = S['ReviewResponse']
 export type DetectResponse = S['DetectResponse']
@@ -79,6 +81,11 @@ export const backend = {
   rubrics: () => request<RubricSummary[]>('/rubrics'),
   rubric: (assignmentId: string) => request<Rubric>(`/rubrics/${encodeURIComponent(assignmentId)}`),
   cost: () => request<CostSummary>('/cost'),
+
+  /** Условие задания → черновик рубрики. Утверждает методист, поэтому ответ
+   *  несёт не только критерии, но и оговорки с открытыми вопросами. */
+  compileRubric: (body: CompileRubricRequest) =>
+    request<RubricDraft>('/rubrics/compile', { method: 'POST', body: JSON.stringify(body) }),
 
   review: (body: ReviewRequest) =>
     request<ReviewResponse>('/review', { method: 'POST', body: JSON.stringify(body) }),

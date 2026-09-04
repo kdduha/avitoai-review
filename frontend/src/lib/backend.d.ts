@@ -109,6 +109,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rubrics/compile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn an assignment condition into a rubric draft
+         * @description Разобрать условие задания и предложить рубрику.
+         *
+         *     Результат — черновик, а не рубрика: он не сохраняется в каталог и не
+         *     участвует в проверках, пока методист его не подтвердит. Это единственное
+         *     место конвейера, где ошибка модели тиражируется на весь поток, поэтому
+         *     человек в цикле обязателен по устройству, а не по настройке.
+         *
+         *     Каждый критерий несёт цитату из условия, сверенную с текстом программно;
+         *     `grounded_share` показывает, какая доля критериев подтверждена дословно.
+         *     Всё, чего в условии нет — шкала, порог, штрафы, — не выдумывается, а
+         *     выносится в `open_questions`.
+         *
+         *     ``502`` — модель не ответила или вернула неразбираемое.
+         */
+        post: operations["compile_rubric_rubrics_compile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/review": {
         parameters: {
             query?: never;
@@ -302,6 +334,43 @@ export interface components {
             locations?: string[];
         };
         /**
+         * CompileRubricRequest
+         * @description Условие задания, из которого нужно собрать черновик рубрики.
+         */
+        CompileRubricRequest: {
+            /** Assignment Id */
+            assignment_id: string;
+            /**
+             * Condition Text
+             * @description текст условия целиком
+             */
+            condition_text: string;
+            /**
+             * Course
+             * @default
+             */
+            course: string;
+            /**
+             * Hint
+             * @description пожелание методиста: шкала, акценты, что учесть
+             * @default
+             */
+            hint: string;
+        };
+        /**
+         * CompileRubricResponse
+         * @description Черновик рубрики. Не установлен и не сохранён — это предложение методисту.
+         *
+         *     `grounded_share` — доля критериев, подтверждённых дословной цитатой из
+         *     условия. Всё, что ниже единицы, требует прочтения человеком в первую
+         *     очередь: там модель пересказала, а не процитировала.
+         */
+        CompileRubricResponse: {
+            draft: components["schemas"]["RubricDraft"];
+            /** Grounded Share */
+            grounded_share: number;
+        };
+        /**
          * CostSummary
          * @description Сводка обращений к моделям с момента старта — для карточки экономики прогона.
          */
@@ -362,6 +431,26 @@ export interface components {
              * @default false
              */
             ai_sensitive: boolean;
+        };
+        /**
+         * CriterionSource
+         * @description Откуда в рубрике взялся критерий.
+         */
+        CriterionSource: {
+            /** Criterion Id */
+            criterion_id: string;
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /** @default missing */
+            status: components["schemas"]["SourceStatus"];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
         };
         /**
          * CriterionVerdict
@@ -891,6 +980,34 @@ export interface components {
             /** Criteria */
             criteria?: components["schemas"]["Criterion"][];
         };
+        /**
+         * RubricDraft
+         * @description Предложение компилятора. Рубрикой становится после подтверждения методистом.
+         */
+        RubricDraft: {
+            rubric: components["schemas"]["Rubric"];
+            /** Sources */
+            sources?: components["schemas"]["CriterionSource"][];
+            /** Warnings */
+            warnings?: string[];
+            /** Open Questions */
+            open_questions?: string[];
+            /**
+             * Tokens In
+             * @default 0
+             */
+            tokens_in: number;
+            /**
+             * Tokens Out
+             * @default 0
+             */
+            tokens_out: number;
+            /**
+             * Cost Rub
+             * @default 0
+             */
+            cost_rub: number;
+        };
         /** RubricSummary */
         RubricSummary: {
             /** Assignment Id */
@@ -958,6 +1075,11 @@ export interface components {
          * @enum {string}
          */
         SignalStatus: "ok" | "unavailable" | "failed";
+        /**
+         * SourceStatus
+         * @enum {string}
+         */
+        SourceStatus: "quoted" | "paraphrased" | "missing";
         /**
          * Span
          * @description Подозрительный фрагмент.
@@ -1197,6 +1319,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Rubric"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compile_rubric_rubrics_compile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompileRubricRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompileRubricResponse"];
                 };
             };
             /** @description Validation Error */

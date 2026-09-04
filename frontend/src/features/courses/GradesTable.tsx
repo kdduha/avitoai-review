@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Sparkle } from 'lucide-react'
 import { DEMO_RUN_ID } from '@/lib/runs'
-import type { Assignment, Curator, Grade, Student } from '@/lib/types'
+import type { Assignment, Curator, Grade, Student, StudentTotals } from '@/lib/types'
 import { cn } from '@/lib/cn'
 import { Avatar } from '@/components/ui/Avatar'
 
@@ -11,6 +11,7 @@ interface Props {
   assignments: Assignment[]
   grades: Grade[]
   curators: Curator[]
+  totals: StudentTotals[]
 }
 
 const STATUS_HINT: Record<Grade['status'], string> = {
@@ -62,7 +63,7 @@ function GradeCell({ grade, passThreshold }: { grade: Grade | undefined; passThr
   )
 }
 
-export function GradesTable({ students, assignments, grades, curators }: Props) {
+export function GradesTable({ students, assignments, grades, curators, totals }: Props) {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<SortKey>('name')
 
@@ -72,23 +73,10 @@ export function GradesTable({ students, assignments, grades, curators }: Props) 
     return map
   }, [grades])
 
-  const totals = useMemo(() => {
-    const map = new Map<string, number | null>()
-    for (const student of students) {
-      const scored = (byStudent.get(student.id) ?? []).filter((g) => g.score !== null)
-      map.set(
-        student.id,
-        scored.length
-          ? Math.round((scored.reduce((sum, g) => sum + (g.score ?? 0), 0) / scored.length) * 10) / 10
-          : null,
-      )
-    }
-    return map
-  }, [students, byStudent])
-
-  const averageThreshold = assignments.length
-    ? assignments.reduce((sum, item) => sum + item.passThreshold, 0) / assignments.length
-    : 0
+  const byStudentTotals = useMemo(
+    () => new Map(totals.map((row) => [row.studentId, row])),
+    [totals],
+  )
 
   const rows = useMemo(() => {
     const filtered = students.filter(
@@ -100,9 +88,9 @@ export function GradesTable({ students, assignments, grades, curators }: Props) 
     return [...filtered].sort((a, b) =>
       sort === 'name'
         ? a.name.localeCompare(b.name)
-        : (totals.get(b.id) ?? -1) - (totals.get(a.id) ?? -1),
+        : (byStudentTotals.get(b.id)?.total ?? -1) - (byStudentTotals.get(a.id)?.total ?? -1),
     )
-  }, [students, query, sort, totals])
+  }, [students, query, sort, byStudentTotals])
 
   return (
     <div>
@@ -150,17 +138,19 @@ export function GradesTable({ students, assignments, grades, curators }: Props) 
               <th className="px-3 py-2.5 text-center">
                 <button
                   onClick={() => setSort('total')}
+                  title="сумма за ДЗ × 0,5 + экзамен × 0,4 + вовлечённость / 10"
                   className={cn('text-[12.5px] transition-colors', sort === 'total' ? 'font-semibold text-ink' : 'font-medium text-muted hover:text-ink')}
                 >
-                  Средний
+                  Итог
                 </button>
               </th>
+              <th className="px-3 py-2.5 text-center text-[12.5px] font-medium text-muted">Оценка</th>
               <th className="px-4 py-2.5 text-[12.5px] font-medium text-muted">Куратор</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((student) => {
-              const total = totals.get(student.id) ?? null
+              const row = byStudentTotals.get(student.id)
               const curator = curators.find((c) => c.id === student.curatorId)
               return (
                 <tr key={student.id} className="border-b border-line-soft last:border-b-0 hover:bg-[#f8f9f6]">
@@ -178,9 +168,17 @@ export function GradesTable({ students, assignments, grades, curators }: Props) 
                       grade={(byStudent.get(student.id) ?? []).find((g) => g.assignmentId === assignment.id)}
                     />
                   ))}
+                  <td className="num px-3 py-2 text-center text-[13.5px] text-ink-soft">
+                    {row ? row.total : '—'}
+                  </td>
                   <td className="px-3 py-2 text-center">
-                    <span className={cn('num text-[13.5px] font-semibold', total !== null && total < averageThreshold ? 'text-critical-ink' : 'text-ink')}>
-                      {total ?? '—'}
+                    <span
+                      className={cn(
+                        'num text-[13.5px] font-semibold',
+                        !row ? 'text-faint' : row.mark >= 8 ? 'text-good-ink' : row.mark >= 6 ? 'text-ink' : 'text-critical-ink',
+                      )}
+                    >
+                      {row ? row.mark : '—'}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-[12.5px] text-muted">{curator?.name ?? '—'}</td>

@@ -13,9 +13,20 @@ import { MockNotice } from '@/components/ui/MockNotice'
 export function QueuePage() {
   const { curatorId } = useSession()
 
-  const { data: students = [] } = useQuery({ queryKey: ['students', 'go-12'], queryFn: () => api.students('go-12') })
-  const { data: grades = [] } = useQuery({ queryKey: ['grades', 'go-12'], queryFn: () => api.grades('go-12') })
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: api.me })
   const { data: assignments = [] } = useQuery({ queryKey: ['assignments'], queryFn: () => api.assignments() })
+
+  const streamIds = me?.streamIds ?? []
+  const { data: students = [] } = useQuery({
+    queryKey: ['students', streamIds],
+    queryFn: async () => (await Promise.all(streamIds.map((id) => api.students(id)))).flat(),
+    enabled: streamIds.length > 0,
+  })
+  const { data: grades = [] } = useQuery({
+    queryKey: ['grades', streamIds],
+    queryFn: async () => (await Promise.all(streamIds.map((id) => api.grades(id)))).flat(),
+    enabled: streamIds.length > 0,
+  })
 
   const mine = new Set(students.filter((student) => student.curatorId === curatorId).map((s) => s.id))
   const queue = grades

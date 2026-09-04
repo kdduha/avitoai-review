@@ -48,6 +48,11 @@ export function CoursePage() {
     enabled: Boolean(streamId),
   })
   const { data: curators = [] } = useQuery({ queryKey: ['curators'], queryFn: api.curators })
+  const { data: totals = [] } = useQuery({
+    queryKey: ['totals', streamId],
+    queryFn: () => api.totals(streamId),
+    enabled: Boolean(streamId),
+  })
   const { data: stats } = useQuery({
     queryKey: ['stats', streamId],
     queryFn: () => api.stats(streamId),
@@ -108,7 +113,13 @@ export function CoursePage() {
         ) : (
           <>
             {tab === 'grades' ? (
-              <GradesTable students={students} assignments={assignments} grades={grades} curators={curators} />
+              <GradesTable
+                students={students}
+                assignments={assignments}
+                grades={grades}
+                curators={curators}
+                totals={totals}
+              />
             ) : null}
             {tab === 'dashboard' && stats ? <CourseDashboard stats={stats} /> : null}
             {tab === 'curators' && stream ? <CuratorsTab stream={stream} courseTitle={course.title} /> : null}

@@ -7,127 +7,122 @@ import type {
   Stream,
   StreamStats,
   Student,
+  StudentTotals,
 } from '@/lib/types'
+import { PROGRAMS, type Program, type ProgramTask } from './programs'
 import { nameDealer, rng } from './seed'
 
-export const COURSES: Course[] = [
-  {
-    id: 'go',
-    short: 'Микросервисы на Go',
-    title: 'Разработка микросервисов на Go',
-    subtitle: 'Три этапа: boilerplate, gRPC-слои, наблюдаемость',
-    streamIds: ['go-12', 'go-11'],
-  },
-  {
-    id: 'llm',
-    short: 'LLM-инженерия',
-    title: 'LLM-инженерия',
-    subtitle: 'RAG, агенты, оценка качества',
-    streamIds: ['llm-4'],
-  },
-  {
-    id: 'ml',
-    short: 'ML в продукте',
-    title: 'ML в продукте',
-    subtitle: 'От гипотезы до эксперимента в проде',
-    streamIds: ['ml-7'],
-  },
-]
+/** Учебный год демо-данных. Дедлайны в условиях заданы днём и месяцем без
+ *  года — привязываем их к году потока. */
+const YEAR = 2026
 
-export const STREAMS: Stream[] = [
-  { id: 'go-12', short: 'Поток 12', courseId: 'go', title: 'Поток 12, осень 2026', startsAt: '2026-08-25', endsAt: '2026-11-30' },
-  { id: 'go-11', short: 'Поток 11', courseId: 'go', title: 'Поток 11, весна 2026', startsAt: '2026-02-10', endsAt: '2026-05-22' },
-  { id: 'llm-4', short: 'Поток 4', courseId: 'llm', title: 'Поток 4, осень 2026', startsAt: '2026-09-01', endsAt: '2026-12-15' },
-  { id: 'ml-7', short: 'Поток 7', courseId: 'ml', title: 'Поток 7, осень 2026', startsAt: '2026-08-18', endsAt: '2026-12-01' },
-]
+export const COURSES: Course[] = PROGRAMS.map((program) => ({
+  id: program.id,
+  short: program.short,
+  title: program.title,
+  subtitle: program.subtitle,
+  streamIds: [`${program.id}-a`, `${program.id}-b`],
+}))
 
-export const ASSIGNMENTS: Assignment[] = [
-  { id: 'go-task1', courseId: 'go', code: 'ДЗ 1', title: 'Boilerplate и веб-сервер', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-08-26T21:00:00+03:00' },
-  { id: 'go-task2', courseId: 'go', code: 'ДЗ 2', title: 'Микросервисы: слои и gRPC', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-02T21:00:00+03:00' },
-  { id: 'go-task3', courseId: 'go', code: 'ДЗ 3', title: 'Наблюдаемость и деплой', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-16T21:00:00+03:00' },
-  { id: 'llm-task1', courseId: 'llm', code: 'ДЗ 1', title: 'Базовый RAG-контур', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-08T21:00:00+03:00' },
-  { id: 'llm-task2', courseId: 'llm', code: 'ДЗ 2', title: 'Оценка качества ответов', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-22T21:00:00+03:00' },
-  { id: 'ml-task1', courseId: 'ml', code: 'ДЗ 1', title: 'Дизайн эксперимента', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-08-29T21:00:00+03:00' },
-  { id: 'ml-task2', courseId: 'ml', code: 'ДЗ 2', title: 'Пайплайн и метрики', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-12T21:00:00+03:00' },
-]
+export const STREAMS: Stream[] = PROGRAMS.flatMap((program) => [
+  {
+    id: `${program.id}-a`,
+    courseId: program.id,
+    short: 'Поток 2',
+    title: 'Поток 2, осень 2026',
+    startsAt: `${YEAR}-09-01`,
+    endsAt: `${YEAR}-12-15`,
+  },
+  {
+    id: `${program.id}-b`,
+    courseId: program.id,
+    short: 'Поток 1',
+    title: 'Поток 1, весна 2026',
+    startsAt: `${YEAR}-02-10`,
+    endsAt: `${YEAR}-05-25`,
+  },
+])
 
-export const CURATORS: Curator[] = [
-  {
-    id: 'c-kruglov', name: 'Антон Круглов', initials: 'АК', email: 'a.kruglov@avito.ru',
-    skills: ['go', 'gRPC', 'наблюдаемость'], capacityMinutes: 600, committedMinutes: 415,
-    medianMinutesPerWork: 17, onboarding: false, courseIds: ['go'], streamIds: ['go-12', 'go-11'],
-  },
-  {
-    id: 'c-eremina', name: 'Мария Ерёмина', initials: 'МЕ', email: 'm.eremina@avito.ru',
-    skills: ['go', 'тестирование', 'CI'], capacityMinutes: 480, committedMinutes: 300,
-    medianMinutesPerWork: 21, onboarding: false, courseIds: ['go'], streamIds: ['go-12'],
-  },
-  {
-    id: 'c-bahtin', name: 'Данил Бахтин', initials: 'ДБ', email: 'd.bahtin@avito.ru',
-    skills: ['go', 'docker', 'postgres'], capacityMinutes: 360, committedMinutes: 335,
-    medianMinutesPerWork: 26, onboarding: true, courseIds: ['go'], streamIds: ['go-12'],
-  },
-  {
-    id: 'c-shtein', name: 'Алиса Штейн', initials: 'АШ', email: 'a.shtein@avito.ru',
-    skills: ['LLM', 'RAG', 'оценка качества'], capacityMinutes: 540, committedMinutes: 190,
-    medianMinutesPerWork: 42, onboarding: false, courseIds: ['llm'], streamIds: ['llm-4'],
-  },
-  {
-    id: 'c-tarasenko', name: 'Ева Тарасенко', initials: 'ЕТ', email: 'e.tarasenko@avito.ru',
-    skills: ['ML', 'эксперименты', 'python'], capacityMinutes: 480, committedMinutes: 265,
-    medianMinutesPerWork: 38, onboarding: false, courseIds: ['ml'], streamIds: ['ml-7'],
-  },
-  {
-    id: 'c-zaslavsky', name: 'Роман Заславский', initials: 'РЗ', email: 'r.zaslavsky@avito.ru',
-    skills: ['go', 'LLM', 'архитектура'], capacityMinutes: 300, committedMinutes: 60,
-    medianMinutesPerWork: 19, onboarding: false, courseIds: [], streamIds: [],
-  },
-  {
-    id: 'c-prohorova', name: 'Дарья Прохорова', initials: 'ДП', email: 'd.prohorova@avito.ru',
-    skills: ['ML', 'статистика'], capacityMinutes: 420, committedMinutes: 0,
-    medianMinutesPerWork: 33, onboarding: true, courseIds: [], streamIds: [],
-  },
-]
-
-const STREAM_SIZE: Record<string, number> = {
-  'go-12': 26,
-  'go-11': 22,
-  'llm-4': 18,
-  'ml-7': 20,
+/** Срока в условии может не быть вовсе — тогда его назначает методист, и мы
+ *  раскладываем задания по потоку равномерно. */
+function deadlineFor(task: ProgramTask, index: number): string {
+  if (task.deadline) return `${YEAR}-${task.deadline}T23:59:00+03:00`
+  const start = new Date(`${YEAR}-09-01T00:00:00+03:00`)
+  start.setDate(start.getDate() + 14 * (index + 1))
+  return `${start.toISOString().slice(0, 10)}T21:00:00+03:00`
 }
 
-/** Номера студентов разведены по потокам, чтобы S-1043 из демо-ревью всегда
- *  оказывался в go-12 и ведомость сходилась с карточкой работы. */
-const STREAM_NUMBER_BASE: Record<string, number> = {
-  'go-12': 1030,
-  'go-11': 1100,
-  'llm-4': 2000,
-  'ml-7': 3000,
+export const ASSIGNMENTS: Assignment[] = PROGRAMS.flatMap((program) =>
+  program.tasks.map((task, index) => ({
+    id: `${program.id}-${index + 1}`,
+    courseId: program.id,
+    code: task.code,
+    title: task.title,
+    maxScore: task.maxScore,
+    passThreshold: task.passThreshold,
+    step: task.step,
+    channel: task.channel,
+    reviewMinutes: task.reviewMinutes,
+    declareAi: task.declareAi,
+    deadlineAt: deadlineFor(task, index),
+  })),
+)
+
+const CURATOR_SEED: Omit<Curator, 'courseIds' | 'streamIds' | 'committedMinutes'>[] = [
+  { id: 'c-kruglov', name: 'Антон Круглов', initials: 'АК', email: 'a.kruglov@avito.ru', skills: ['go', 'бэкенд', 'архитектура'], capacityMinutes: 600, medianMinutesPerWork: 17, onboarding: false },
+  { id: 'c-eremina', name: 'Мария Ерёмина', initials: 'МЕ', email: 'm.eremina@avito.ru', skills: ['go', 'тестирование', 'CI'], capacityMinutes: 480, medianMinutesPerWork: 21, onboarding: false },
+  { id: 'c-bahtin', name: 'Данил Бахтин', initials: 'ДБ', email: 'd.bahtin@avito.ru', skills: ['системный дизайн', 'docker', 'postgres'], capacityMinutes: 360, medianMinutesPerWork: 26, onboarding: true },
+  { id: 'c-shtein', name: 'Алиса Штейн', initials: 'АШ', email: 'a.shtein@avito.ru', skills: ['LLM', 'MLflow', 'оценка качества'], capacityMinutes: 540, medianMinutesPerWork: 42, onboarding: false },
+  { id: 'c-tarasenko', name: 'Ева Тарасенко', initials: 'ЕТ', email: 'e.tarasenko@avito.ru', skills: ['ML', 'эксперименты', 'python'], capacityMinutes: 480, medianMinutesPerWork: 38, onboarding: false },
+  { id: 'c-zaslavsky', name: 'Роман Заславский', initials: 'РЗ', email: 'r.zaslavsky@avito.ru', skills: ['продукт', 'метрики', 'юнит-экономика'], capacityMinutes: 420, medianMinutesPerWork: 33, onboarding: false },
+  { id: 'c-prohorova', name: 'Дарья Прохорова', initials: 'ДП', email: 'd.prohorova@avito.ru', skills: ['аналитика', 'статистика', 'А/Б'], capacityMinutes: 420, medianMinutesPerWork: 29, onboarding: true },
+  { id: 'c-nogovitsyn', name: 'Савелий Ноговицын', initials: 'СН', email: 's.nogovitsyn@avito.ru', skills: ['QA', 'тест-дизайн'], capacityMinutes: 300, medianMinutesPerWork: 24, onboarding: false },
+  { id: 'c-mustafina', name: 'Регина Мустафина', initials: 'РМ', email: 'r.mustafina@avito.ru', skills: ['антифрод', 'риски', 'продукт'], capacityMinutes: 360, medianMinutesPerWork: 27, onboarding: false },
+  { id: 'c-grinev', name: 'Лев Гринёв', initials: 'ЛГ', email: 'l.grinev@avito.ru', skills: ['GPU', 'инфраструктура'], capacityMinutes: 300, medianMinutesPerWork: 36, onboarding: false },
+]
+
+/** Кто какие программы ведёт. Часть кураторов намеренно оставлена без
+ *  назначений — руководителю есть кого распределять. */
+const ASSIGNED: Record<string, string[]> = {
+  'c-kruglov': ['go', 'backend'],
+  'c-eremina': ['go', 'backend'],
+  'c-bahtin': ['system-design', 'go'],
+  'c-shtein': ['llm', 'mlsd'],
+  'c-tarasenko': ['mlsd', 'gpu'],
+  'c-zaslavsky': ['product', 'business-models'],
+  'c-prohorova': ['analytics', 'product'],
+  'c-nogovitsyn': ['qa', 'analytics'],
+  'c-mustafina': ['fraud', 'business-models'],
+  'c-grinev': [],
 }
 
-/** Студент S-1043 из демо-ревью существует в потоке go-12 под своим номером. */
-export const DEMO_STUDENT_ID = 'S-1043'
-export const DEMO_SUBMISSION_ID = 'sub-go12-1043-task2'
+export const CURATORS: Curator[] = CURATOR_SEED.map((curator) => {
+  const courseIds = ASSIGNED[curator.id] ?? []
+  const streamIds = courseIds.flatMap((courseId) => [`${courseId}-a`, `${courseId}-b`])
+  return { ...curator, courseIds, streamIds, committedMinutes: 0 }
+})
 
 function buildStudents(): Student[] {
   const out: Student[] = []
   for (const stream of STREAMS) {
-    let counter = STREAM_NUMBER_BASE[stream.id]
-    const next = rng(stream.id.length * 7919 + stream.id.charCodeAt(0) * 104729)
+    const program = PROGRAMS.find((item) => item.id === stream.courseId)!
+    const seed = [...stream.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
+    const next = rng(seed * 7919)
     const nextName = nameDealer(next)
-    const curators = CURATORS.filter((c) => c.streamIds.includes(stream.id))
-    for (let i = 0; i < STREAM_SIZE[stream.id]; i += 1) {
-      counter += 1
-      const alias = `S-${counter}`
-      const name = nextName()
+    const curators = CURATORS.filter((item) => item.streamIds.includes(stream.id))
+
+    /* Идентификаторы обезличены так же, как в настоящей ведомости
+       организаторов: шестизначное число вместо имени и почты. */
+    for (let i = 0; i < program.cohort; i += 1) {
+      const alias = String(100000 + Math.floor(next() * 899999))
       out.push({
         id: alias,
         alias,
-        name,
+        name: nextName(),
         courseId: stream.courseId,
         streamId: stream.id,
         curatorId: curators.length ? curators[i % curators.length].id : null,
-        githubHandle: `student-${counter}`,
+        githubHandle: `student-${alias}`,
       })
     }
   }
@@ -136,44 +131,51 @@ function buildStudents(): Student[] {
 
 export const STUDENTS: Student[] = buildStudents()
 
-/** Шкала своя у каждого задания: у go-task1 это 10 баллов с порогом 6, у
- *  лабы по системному дизайну — 6 с порогом 4. Поэтому «уровень студента»
- *  хранится долей от максимума, а в баллы переводится уже под задание. */
 function toStep(value: number, step: number): number {
   return Math.round(value / step) * step
 }
 
+/** Правила из условий: досдача в течение grace-окна стоит балл за день,
+ *  позже работа оценивается в ноль. Штраф считается от набранного. */
 function gradeFor(
   next: () => number,
   talent: number,
   assignment: Assignment,
-): { score: number; status: GradeStatus } {
+  program: Program,
+): { score: number; status: GradeStatus; daysLate: number } {
   const roll = next()
-  if (roll < 0.06) return { score: 0, status: 'missing' }
+  if (roll < 0.05) return { score: 0, status: 'missing', daysLate: 0 }
 
   const noise = (next() - 0.5) * 0.26
   const fraction = Math.max(0.25, Math.min(1, talent + noise))
-  const score = toStep(fraction * assignment.maxScore, assignment.step)
+  const earned = toStep(fraction * assignment.maxScore, assignment.step)
 
-  if (roll < 0.16) return { score, status: 'draft_ready' }
-  if (roll < 0.24) return { score, status: 'in_review' }
-  if (roll < 0.32) return { score, status: 'late' }
-  return { score, status: 'approved' }
+  if (roll < 0.15) return { score: earned, status: 'draft_ready', daysLate: 0 }
+  if (roll < 0.22) return { score: earned, status: 'in_review', daysLate: 0 }
+
+  if (roll < 0.32) {
+    const daysLate = 1 + Math.floor(next() * (program.graceDays + 1))
+    if (daysLate > program.graceDays) return { score: 0, status: 'late', daysLate }
+    const penalty = program.penaltyPerDay * daysLate
+    return { score: Math.max(0, earned - penalty), status: 'late', daysLate }
+  }
+
+  return { score: earned, status: 'approved', daysLate: 0 }
 }
 
 function buildGrades(): Grade[] {
   const out: Grade[] = []
   for (const student of STUDENTS) {
-    const next = rng(student.alias.charCodeAt(2) * 31 + Number(student.alias.slice(2)) * 7)
-    const talent = 0.58 + next() * 0.34
-    for (const assignment of ASSIGNMENTS.filter((a) => a.courseId === student.courseId)) {
-      const drift = (ASSIGNMENTS.indexOf(assignment) % 3) * 0.02
-      const { score, status } = gradeFor(next, talent + drift, assignment)
-      const flagged = next() < 0.14
+    const program = PROGRAMS.find((item) => item.id === student.courseId)!
+    const next = rng(Number(student.alias) % 100000)
+    const talent = 0.55 + next() * 0.4
+
+    for (const assignment of ASSIGNMENTS.filter((item) => item.courseId === student.courseId)) {
+      const { score, status, daysLate } = gradeFor(next, talent, assignment, program)
       out.push({
         studentId: student.id,
         assignmentId: assignment.id,
-        submissionId: status === 'missing' ? null : `sub-${student.streamId}-${student.alias.slice(2)}-${assignment.id}`,
+        submissionId: status === 'missing' ? null : `sub-${student.streamId}-${student.alias}-${assignment.id}`,
         score: status === 'missing' ? null : score,
         aiScore:
           status === 'missing'
@@ -183,99 +185,129 @@ function buildGrades(): Grade[] {
                 assignment.step,
               ),
         status,
-        aiFlag: flagged ? Math.round((0.5 + next() * 0.45) * 100) / 100 : null,
-        daysLate: status === 'late' ? 1 + Math.floor(next() * 3) : 0,
+        aiFlag: next() < 0.12 ? Math.round((0.5 + next() * 0.45) * 100) / 100 : null,
+        daysLate,
       })
     }
   }
   return out
 }
 
-const ALL_GRADES = buildGrades()
-
-/** Демо-работа должна совпадать с тем, что показывает Review Workspace. */
-const demoGrade = ALL_GRADES.find(
-  (g) => g.studentId === DEMO_STUDENT_ID && g.assignmentId === 'go-task2',
-)
-if (demoGrade) {
-  demoGrade.submissionId = DEMO_SUBMISSION_ID
-  demoGrade.score = 8
-  demoGrade.aiScore = 8
-  demoGrade.status = 'draft_ready'
-  demoGrade.aiFlag = 0.68
-  demoGrade.daysLate = 0
-}
-
-export const GRADES: Grade[] = ALL_GRADES
+export const GRADES: Grade[] = buildGrades()
 
 export function gradesForStream(streamId: string): Grade[] {
-  const ids = new Set(STUDENTS.filter((s) => s.streamId === streamId).map((s) => s.id))
-  return GRADES.filter((g) => ids.has(g.studentId))
+  const ids = new Set(STUDENTS.filter((student) => student.streamId === streamId).map((s) => s.id))
+  return GRADES.filter((grade) => ids.has(grade.studentId))
+}
+
+/** Итоговая строка ведомости считается по формуле организаторов:
+ *  итог = сумма за ДЗ × 0.5 + экзамен × 0.4 + вовлечённость / 10,
+ *  дальше итог отображается на десятибалльную оценку. */
+export function totalsForStream(streamId: string): StudentTotals[] {
+  const stream = STREAMS.find((item) => item.id === streamId)
+  if (!stream) return []
+
+  const students = STUDENTS.filter((student) => student.streamId === streamId)
+  const grades = gradesForStream(streamId)
+  const homeworkMax = ASSIGNMENTS.filter((item) => item.courseId === stream.courseId).reduce(
+    (sum, item) => sum + item.maxScore,
+    0,
+  )
+  const maxTotal = homeworkMax * 0.5 + 30 * 0.4 + 2
+
+  return students.map((student) => {
+    const next = rng(Number(student.alias) * 31)
+    const own = grades.filter((grade) => grade.studentId === student.id)
+    const homework = own.reduce((sum, grade) => sum + (grade.score ?? 0), 0)
+    const attendance = 1 + Math.floor(next() * 12)
+    const engagement = [0, 10, 20][Math.floor(next() * 3)]
+    const exam = Math.round((18 + next() * 12) * 10) / 10
+    const total = Math.round((homework * 0.5 + exam * 0.4 + engagement / 10) * 10) / 10
+
+    const share = maxTotal ? total / maxTotal : 0
+    const mark =
+      share >= 0.9 ? 10 : share >= 0.83 ? 9 : share >= 0.76 ? 8 : share >= 0.68 ? 7 : share >= 0.6 ? 6 : share >= 0.5 ? 5 : 4
+
+    return {
+      studentId: student.id,
+      homework: Math.round(homework * 10) / 10,
+      attendance,
+      engagement,
+      exam,
+      total,
+      mark,
+      submitted: own.filter((grade) => grade.status !== 'missing').length,
+    }
+  })
 }
 
 export function statsForStream(streamId: string): StreamStats | null {
   const stream = STREAMS.find((item) => item.id === streamId)
   if (!stream) return null
-  const students = STUDENTS.filter((s) => s.streamId === streamId)
-  const assignments = ASSIGNMENTS.filter((a) => a.courseId === stream.courseId)
+
+  const program = PROGRAMS.find((item) => item.id === stream.courseId)!
+  const students = STUDENTS.filter((item) => item.streamId === streamId)
+  const assignments = ASSIGNMENTS.filter((item) => item.courseId === stream.courseId)
   const grades = gradesForStream(streamId)
-  const graded = grades.filter((g) => g.score !== null)
+  const graded = grades.filter((grade) => grade.score !== null)
 
   const expected = students.length * assignments.length
   const submitted = graded.length
-  const approved = grades.filter((g) => g.status === 'approved').length
-  const awaitingReview = grades.filter((g) => g.status === 'draft_ready' || g.status === 'in_review').length
-  const overdue = grades.filter((g) => g.status === 'late').length
+  const approved = grades.filter((grade) => grade.status === 'approved').length
+  const awaitingReview = grades.filter(
+    (grade) => grade.status === 'draft_ready' || grade.status === 'in_review',
+  ).length
+  const overdue = grades.filter((grade) => grade.status === 'late').length
 
   const avgScore = graded.length
-    ? Math.round((graded.reduce((sum, g) => sum + (g.score ?? 0), 0) / graded.length) * 10) / 10
+    ? Math.round((graded.reduce((sum, grade) => sum + (grade.score ?? 0), 0) / graded.length) * 10) / 10
     : 0
 
-  /* Задания потока бывают на разных шкалах (6 баллов у лабы, 10 у ДЗ), поэтому
-     распределение строится по доле от максимума — иначе столбцы сравнивали бы
-     несравнимое. */
+  /* Шкалы у заданий разные — от 6 баллов до 20, поэтому распределение
+     строится по доле от максимума. */
   const maxOf = new Map(assignments.map((item) => [item.id, item.maxScore]))
   const buckets = ['до 40%', '40–55%', '55–70%', '70–85%', '85–100%']
   const scoreHistogram = buckets.map((bucket) => ({ bucket, count: 0 }))
-  for (const g of graded) {
-    const max = maxOf.get(g.assignmentId) ?? 0
+  for (const grade of graded) {
+    const max = maxOf.get(grade.assignmentId) ?? 0
     if (!max) continue
-    const share = (g.score ?? 0) / max
+    const share = (grade.score ?? 0) / max
     const index = share < 0.4 ? 0 : share < 0.55 ? 1 : share < 0.7 ? 2 : share < 0.85 ? 3 : 4
     scoreHistogram[index].count += 1
   }
 
-  const next = rng(streamId.length * 6151 + submitted)
-  const criteria = stream.courseId === 'go'
-    ? ['Структура проекта', 'Веб-сервер и .env', 'Тестовые эндпоинты', 'Завершение по сигналу', 'Чистота кода']
-    : ['Постановка', 'Реализация', 'Метрики', 'Анализ', 'Оформление']
-
-  /* Средний балл по критерию — тоже доля от максимума: критерии у разных
-     заданий весят по-разному, от 0.5 до 2 баллов. */
-  const criterionAverages = criteria.map((criterion) => ({
-    criterion,
+  const next = rng(students.length * 6151 + submitted)
+  const criterionAverages = assignments.slice(0, 6).map((assignment) => ({
+    criterion: `${assignment.code}`,
     avg: Math.round((55 + next() * 35) * 10) / 10,
     max: 100,
   }))
 
-  const streamCurators = CURATORS.filter((c) => c.streamIds.includes(streamId))
-  const reviewLoad = streamCurators.map((c, index) => {
-    const assigned = Math.round(submitted / Math.max(1, streamCurators.length)) - index * 2
+  const streamCurators = CURATORS.filter((item) => item.streamIds.includes(streamId))
+  const minutesPerWork = assignments.length
+    ? assignments.reduce((sum, item) => sum + item.reviewMinutes, 0) / assignments.length
+    : 20
+
+  const reviewLoad = streamCurators.map((curator, index) => {
+    const assigned = Math.max(1, Math.round(submitted / Math.max(1, streamCurators.length)) - index * 2)
     return {
-      curatorId: c.id,
-      name: c.name,
-      assigned: Math.max(1, assigned),
-      minutes: Math.max(30, assigned * c.medianMinutesPerWork),
-      capacity: c.capacityMinutes,
+      curatorId: curator.id,
+      name: curator.name,
+      assigned,
+      minutes: Math.round(assigned * minutesPerWork),
+      capacity: curator.capacityMinutes,
     }
   })
 
+  /* Проверка идёт волной: она начинается после дедлайна и укладывается в
+     семь дней, поэтому по неделям виден всплеск, а не ровный поток. */
   const weekly = ['нед. 1', 'нед. 2', 'нед. 3', 'нед. 4', 'нед. 5'].map((week, index) => {
-    const base = Math.round(students.length * (0.5 + next() * 0.45))
-    return { week, submitted: base, approved: Math.max(0, base - 2 - index) }
+    const wave = [0.2, 0.9, 0.5, 0.3, 0.8][index]
+    const sent = Math.round(students.length * wave)
+    return { week, submitted: sent, approved: Math.max(0, Math.round(sent * 0.72) - index) }
   })
 
-  const aiFlagged = grades.filter((g) => g.aiFlag !== null).length
+  const aiFlagged = grades.filter((grade) => grade.aiFlag !== null).length
 
   return {
     submitted,
@@ -283,11 +315,12 @@ export function statsForStream(streamId: string): StreamStats | null {
     approved,
     awaitingReview,
     overdue,
-    medianReviewMinutes: Math.round(12 + next() * 9),
+    medianReviewMinutes: Math.round(minutesPerWork),
     autoAcceptRate: Math.round((0.38 + next() * 0.24) * 100) / 100,
     avgScore,
     aiFlagged,
     aiConfirmed: Math.round(aiFlagged * 0.42),
+    reviewWindowDays: program.reviewWindowDays,
     scoreHistogram,
     funnel: [
       { stage: 'Сдано', count: submitted },
@@ -299,4 +332,12 @@ export function statsForStream(streamId: string): StreamStats | null {
     reviewLoad,
     weekly,
   }
+}
+
+/* Загрузка кураторов складывается из того, что им реально назначено. */
+for (const curator of CURATORS) {
+  curator.committedMinutes = curator.streamIds.reduce((sum, streamId) => {
+    const load = statsForStream(streamId)?.reviewLoad.find((row) => row.curatorId === curator.id)
+    return sum + (load?.minutes ?? 0)
+  }, 0)
 }
