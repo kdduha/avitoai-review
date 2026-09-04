@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import Literal
+import json
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, Field, SecretStr, field_validator, field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _DEFAULT_EXCLUDES: tuple[str, ...] = (
     ".git/*",
@@ -67,7 +69,7 @@ class LLMConfig(BaseModel):
     local_model: str = "qwen2.5-7b-instruct"
     local_base_url: str = "http://localhost:11434/v1"
 
-    task_models: dict[str, str] = Field(default_factory=dict)
+    task_models: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
     """Модель на задачу: `{"compile": "gpt-5.6-luna-pro"}`.
 
     Матрица роутинга из архитектуры §8.3. Массовые задачи идут на дешёвой
@@ -75,6 +77,28 @@ class LLMConfig(BaseModel):
     сильной. Rubric Compiler считается один раз на задание, и цена там роли
     не играет, зато нестабильность стоит дорого.
     """
+
+    @field_validator("task_models", mode="before")
+    @classmethod
+    def _parse_matrix(cls, value: object) -> object:
+        """Разобрать матрицу самостоятельно, чтобы пустое значение не роняло старт.
+
+        `docker compose` подставляет `${AI_LLM__TASK_MODELS:-}` пустой строкой,
+        когда переменной нет. Штатный разбор pydantic-settings пробует прочесть
+        её как JSON ещё до валидаторов и падает так, что в сообщении не видно
+        ни поля, ни причины, — а приложение при этом не поднимается вовсе.
+        """
+        if not isinstance(value, str):
+            return value
+        if not value.strip():
+            return {}
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"AI_LLM__TASK_MODELS должен быть JSON-объектом "
+                f'вида {{"compile": "модель"}}: {exc}'
+            ) from exc
 
     # Kill switch for external providers: every task is served locally or fails.
     force_local: bool = False

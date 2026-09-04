@@ -25,7 +25,7 @@ from avito_reviewer.ai.llm import (
     residual_risk,
 )
 from avito_reviewer.ai.llm.structured import extract_json
-from avito_reviewer.config import LLMConfig
+from avito_reviewer.config import AIConfig, LLMConfig
 
 
 # --------------------------------------------------------------------------- #
@@ -133,6 +133,23 @@ def test_audit_records_the_model_that_actually_answered():
     gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.COMPILE)
 
     assert gateway.audit.records[0].model == "сильная"
+
+
+@pytest.mark.parametrize("raw,expected", [("", {}), ("   ", {}), ('{"compile": "m"}', {"compile": "m"})])
+def test_routing_matrix_survives_an_empty_environment_variable(monkeypatch, raw, expected):
+    """`docker compose` подставляет пустую строку, когда переменной нет.
+
+    Штатный разбор pydantic-settings пробует прочесть её как JSON до
+    валидаторов и роняет старт приложения целиком.
+    """
+    monkeypatch.setenv("AI_LLM__TASK_MODELS", raw)
+    assert AIConfig().llm.task_models == expected
+
+
+def test_broken_routing_matrix_says_what_is_wrong(monkeypatch):
+    monkeypatch.setenv("AI_LLM__TASK_MODELS", "не json")
+    with pytest.raises(ValueError, match="TASK_MODELS"):
+        AIConfig()
 
 
 def test_routing_is_empty_by_default():

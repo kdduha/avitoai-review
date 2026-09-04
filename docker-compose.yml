@@ -13,4 +13,7 @@ services:
       AI_LLM__MODEL: ${AI_LLM__MODEL:-deepseek-v4-flash}
       AI_LLM__LOCAL_BASE_URL: ${AI_LLM__LOCAL_BASE_URL:-http://host.docker.internal:11434/v1}
       AI_LLM__FORCE_LOCAL: ${AI_LLM__FORCE_LOCAL:-false}
+      # Матрица роутинга: задаче — своя модель. JSON-строкой, например
+      # {"compile": "gpt-5.6-luna-pro"}. Пусто — все задачи на AI_LLM__MODEL.
+      AI_LLM__TASK_MODELS: ${AI_LLM__TASK_MODELS:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
