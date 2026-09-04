@@ -122,3 +122,42 @@ def test_failure_without_a_response_keeps_the_original_text():
     from avito_reviewer.ingest.providers.github import _describe
 
     assert "исходное сообщение клиента" in _describe(_Failed(None), "acme", "courier", 7)
+
+
+# --------------------------------------------------------------------------- #
+# политика повторов
+# --------------------------------------------------------------------------- #
+
+def _github_response(status: int):
+    import httpx
+    from githubkit.response import Response
+
+    return Response(httpx.Response(status, request=httpx.Request("GET", "https://api.github.com/x")), object)
+
+
+def _retry_decision():
+    from avito_reviewer.config import GitHubConfig
+    from avito_reviewer.ingest.providers.github import GitHubProvider
+
+    return GitHubProvider(GitHubConfig())._gh.config.auto_retry
+
+
+def test_rate_limit_fails_fast_instead_of_sleeping_it_off():
+    """Штатная политика githubkit ждёт `retry_after` — до часа на анонимном ключе.
+
+    Запрос ревьюера повис бы вместо внятной ошибки. Ждать лимит — дело
+    вызывающего кода, а не блокирующего HTTP-вызова.
+    """
+    from datetime import timedelta
+
+    from githubkit.exception import RateLimitExceeded
+
+    limited = RateLimitExceeded(_github_response(403), timedelta(seconds=3600))
+    assert _retry_decision()(limited, 0).do_retry is False
+
+
+def test_server_errors_are_still_retried():
+    """Пятисотка обычно разовая, и повтор дешевле, чем потерянная сдача."""
+    from githubkit.exception import RequestFailed
+
+    assert _retry_decision()(RequestFailed(_github_response(500)), 0).do_retry is True
