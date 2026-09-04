@@ -92,7 +92,7 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
           </ResponsiveContainer>
         </Panel>
 
-        <Panel title="Распределение баллов" hint="все утверждённые и черновые оценки потока">
+        <Panel title="Распределение баллов" hint="доля от максимума задания — шкалы у заданий разные">
           <ResponsiveContainer width="100%" height={190}>
             <BarChart data={stats.scoreHistogram} margin={{ left: -18, right: 8, top: 8, bottom: 4 }}>
               <CartesianGrid {...GRID} />
@@ -143,7 +143,7 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
           </ResponsiveContainer>
         </Panel>
 
-        <Panel title="Средний балл по критериям" hint="где поток проседает целиком — сигнал методисту">
+        <Panel title="Средний балл по критериям" hint="доля от максимума критерия: где поток проседает целиком">
           <ResponsiveContainer width="100%" height={190}>
             <BarChart
               data={stats.criterionAverages}
@@ -151,7 +151,7 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
               margin={{ left: 0, right: 28, top: 4, bottom: 4 }}
             >
               <CartesianGrid {...GRID} horizontal={false} vertical />
-              <XAxis type="number" domain={[0, 10]} {...AXIS} />
+              <XAxis type="number" domain={[0, 100]} unit="%" {...AXIS} />
               <YAxis type="category" dataKey="criterion" width={148} {...AXIS} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f1f2f0' }} />
               <Bar

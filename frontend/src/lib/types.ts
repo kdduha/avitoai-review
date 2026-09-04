@@ -37,6 +37,8 @@ export interface Assignment {
   maxScore: number
   /** Порог зачёта берётся из шкалы рубрики и у разных заданий разный. */
   passThreshold: number
+  /** Шаг шкалы: баллы бывают дробными, и округлять надо по правилу задания. */
+  step: number
   deadlineAt: string
 }
 

@@ -42,13 +42,13 @@ export const STREAMS: Stream[] = [
 ]
 
 export const ASSIGNMENTS: Assignment[] = [
-  { id: 'go-task1', courseId: 'go', code: 'ДЗ 1', title: 'Boilerplate и веб-сервер', maxScore: 10, passThreshold: 6, deadlineAt: '2026-08-26T21:00:00+03:00' },
-  { id: 'go-task2', courseId: 'go', code: 'ДЗ 2', title: 'Микросервисы: слои и gRPC', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-02T21:00:00+03:00' },
-  { id: 'go-task3', courseId: 'go', code: 'ДЗ 3', title: 'Наблюдаемость и деплой', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-16T21:00:00+03:00' },
-  { id: 'llm-task1', courseId: 'llm', code: 'ДЗ 1', title: 'Базовый RAG-контур', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-08T21:00:00+03:00' },
-  { id: 'llm-task2', courseId: 'llm', code: 'ДЗ 2', title: 'Оценка качества ответов', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-22T21:00:00+03:00' },
-  { id: 'ml-task1', courseId: 'ml', code: 'ДЗ 1', title: 'Дизайн эксперимента', maxScore: 10, passThreshold: 6, deadlineAt: '2026-08-29T21:00:00+03:00' },
-  { id: 'ml-task2', courseId: 'ml', code: 'ДЗ 2', title: 'Пайплайн и метрики', maxScore: 10, passThreshold: 6, deadlineAt: '2026-09-12T21:00:00+03:00' },
+  { id: 'go-task1', courseId: 'go', code: 'ДЗ 1', title: 'Boilerplate и веб-сервер', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-08-26T21:00:00+03:00' },
+  { id: 'go-task2', courseId: 'go', code: 'ДЗ 2', title: 'Микросервисы: слои и gRPC', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-02T21:00:00+03:00' },
+  { id: 'go-task3', courseId: 'go', code: 'ДЗ 3', title: 'Наблюдаемость и деплой', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-16T21:00:00+03:00' },
+  { id: 'llm-task1', courseId: 'llm', code: 'ДЗ 1', title: 'Базовый RAG-контур', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-08T21:00:00+03:00' },
+  { id: 'llm-task2', courseId: 'llm', code: 'ДЗ 2', title: 'Оценка качества ответов', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-22T21:00:00+03:00' },
+  { id: 'ml-task1', courseId: 'ml', code: 'ДЗ 1', title: 'Дизайн эксперимента', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-08-29T21:00:00+03:00' },
+  { id: 'ml-task2', courseId: 'ml', code: 'ДЗ 2', title: 'Пайплайн и метрики', maxScore: 10, passThreshold: 6, step: 0.5, deadlineAt: '2026-09-12T21:00:00+03:00' },
 ]
 
 export const CURATORS: Curator[] = [
@@ -136,20 +136,25 @@ function buildStudents(): Student[] {
 
 export const STUDENTS: Student[] = buildStudents()
 
-/** Шкала совпадает с рубрикой курса: 10 баллов, шаг 0.5, порог зачёта 6. */
-export const MAX_SCORE = 10
-export const PASS_THRESHOLD = 6
-const STEP = 0.5
-
-function toStep(value: number): number {
-  return Math.round(value / STEP) * STEP
+/** Шкала своя у каждого задания: у go-task1 это 10 баллов с порогом 6, у
+ *  лабы по системному дизайну — 6 с порогом 4. Поэтому «уровень студента»
+ *  хранится долей от максимума, а в баллы переводится уже под задание. */
+function toStep(value: number, step: number): number {
+  return Math.round(value / step) * step
 }
 
-function gradeFor(next: () => number, base: number): { score: number; status: GradeStatus } {
+function gradeFor(
+  next: () => number,
+  talent: number,
+  assignment: Assignment,
+): { score: number; status: GradeStatus } {
   const roll = next()
   if (roll < 0.06) return { score: 0, status: 'missing' }
-  const noise = (next() - 0.5) * 2.6
-  const score = toStep(Math.max(2.5, Math.min(MAX_SCORE, base + noise)))
+
+  const noise = (next() - 0.5) * 0.26
+  const fraction = Math.max(0.25, Math.min(1, talent + noise))
+  const score = toStep(fraction * assignment.maxScore, assignment.step)
+
   if (roll < 0.16) return { score, status: 'draft_ready' }
   if (roll < 0.24) return { score, status: 'in_review' }
   if (roll < 0.32) return { score, status: 'late' }
@@ -160,17 +165,23 @@ function buildGrades(): Grade[] {
   const out: Grade[] = []
   for (const student of STUDENTS) {
     const next = rng(student.alias.charCodeAt(2) * 31 + Number(student.alias.slice(2)) * 7)
-    const talent = 5.8 + next() * 3.4
+    const talent = 0.58 + next() * 0.34
     for (const assignment of ASSIGNMENTS.filter((a) => a.courseId === student.courseId)) {
-      const drift = (ASSIGNMENTS.indexOf(assignment) % 3) * 0.2
-      const { score, status } = gradeFor(next, talent + drift)
+      const drift = (ASSIGNMENTS.indexOf(assignment) % 3) * 0.02
+      const { score, status } = gradeFor(next, talent + drift, assignment)
       const flagged = next() < 0.14
       out.push({
         studentId: student.id,
         assignmentId: assignment.id,
         submissionId: status === 'missing' ? null : `sub-${student.streamId}-${student.alias.slice(2)}-${assignment.id}`,
         score: status === 'missing' ? null : score,
-        aiScore: status === 'missing' ? null : toStep(Math.max(2, Math.min(MAX_SCORE, score + (next() - 0.5) * 1.5))),
+        aiScore:
+          status === 'missing'
+            ? null
+            : toStep(
+                Math.max(0, Math.min(assignment.maxScore, score + (next() - 0.5) * assignment.maxScore * 0.15)),
+                assignment.step,
+              ),
         status,
         aiFlag: flagged ? Math.round((0.5 + next() * 0.45) * 100) / 100 : null,
         daysLate: status === 'late' ? 1 + Math.floor(next() * 3) : 0,
@@ -220,11 +231,17 @@ export function statsForStream(streamId: string): StreamStats | null {
     ? Math.round((graded.reduce((sum, g) => sum + (g.score ?? 0), 0) / graded.length) * 10) / 10
     : 0
 
-  const buckets = ['до 4', '4–5,5', '5,5–7', '7–8,5', '8,5–10']
+  /* Задания потока бывают на разных шкалах (6 баллов у лабы, 10 у ДЗ), поэтому
+     распределение строится по доле от максимума — иначе столбцы сравнивали бы
+     несравнимое. */
+  const maxOf = new Map(assignments.map((item) => [item.id, item.maxScore]))
+  const buckets = ['до 40%', '40–55%', '55–70%', '70–85%', '85–100%']
   const scoreHistogram = buckets.map((bucket) => ({ bucket, count: 0 }))
   for (const g of graded) {
-    const value = g.score ?? 0
-    const index = value < 4 ? 0 : value < 5.5 ? 1 : value < 7 ? 2 : value < 8.5 ? 3 : 4
+    const max = maxOf.get(g.assignmentId) ?? 0
+    if (!max) continue
+    const share = (g.score ?? 0) / max
+    const index = share < 0.4 ? 0 : share < 0.55 ? 1 : share < 0.7 ? 2 : share < 0.85 ? 3 : 4
     scoreHistogram[index].count += 1
   }
 
@@ -233,10 +250,12 @@ export function statsForStream(streamId: string): StreamStats | null {
     ? ['Структура проекта', 'Веб-сервер и .env', 'Тестовые эндпоинты', 'Завершение по сигналу', 'Чистота кода']
     : ['Постановка', 'Реализация', 'Метрики', 'Анализ', 'Оформление']
 
+  /* Средний балл по критерию — тоже доля от максимума: критерии у разных
+     заданий весят по-разному, от 0.5 до 2 баллов. */
   const criterionAverages = criteria.map((criterion) => ({
     criterion,
-    avg: Math.round((5.5 + next() * 3.5) * 10) / 10,
-    max: MAX_SCORE,
+    avg: Math.round((55 + next() * 35) * 10) / 10,
+    max: 100,
   }))
 
   const streamCurators = CURATORS.filter((c) => c.streamIds.includes(streamId))
