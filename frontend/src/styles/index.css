@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+@import "@fontsource-variable/golos-text/index.css";
+@import "@fontsource-variable/jetbrains-mono/index.css";
+
+/* ---------------------------------------------------------------------------
+   Метафора интерфейса — не терминал, а разметка на полях: куратор читает
+   работу и оставляет пометки. Отсюда палитра (бумага, графит, чернила),
+   подсветка цитаты песочной полосой с линейкой слева и моноширинный шрифт
+   только там, где действительно код.
+   Значения для графиков — из валидированной палитры dataviz.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-plane: #f1f2f0;
+  --color-surface: #fbfbfa;
+  --color-raised: #ffffff;
+  --color-sunken: #ecedea;
+
+  --color-ink: #1b1a18;
+  --color-ink-soft: #4d4c47;
+  --color-muted: #6e6d67;
+  --color-faint: #93918a;
+
+  --color-line: #e3e4df;
+  --color-line-soft: #ededea;
+
+  --color-accent: #1c5cab;
+  --color-accent-ink: #164a8a;
+  --color-accent-wash: #eaf1fb;
+  --color-accent-line: #cbdef5;
+
+  --color-mark: #fdf5e6;
+  --color-mark-rule: #dda93f;
+  --color-mark-ink: #7a5a12;
+
+  --color-good: #0ca30c;
+  --color-good-ink: #056b05;
+  --color-good-wash: #ecf7ec;
+  --color-warn: #d68a00;
+  --color-warn-ink: #8a5a00;
+  --color-warn-wash: #fdf4e3;
+  --color-critical: #d03b3b;
+  --color-critical-ink: #a32b2b;
+  --color-critical-wash: #fdeeee;
+
+  --color-viz-1: #2a78d6;
+  --color-viz-2: #eb6834;
+  --color-viz-3: #1baf7a;
+  --color-viz-4: #eda100;
+  --color-viz-5: #e87ba4;
+  --color-viz-6: #4a3aa7;
+
+  --font-sans: "Golos Text Variable", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-card: 12px;
+
+  --shadow-soft: 0 1px 2px rgba(27, 26, 24, 0.04), 0 1px 10px rgba(27, 26, 24, 0.025);
+  --shadow-lift: 0 2px 6px rgba(27, 26, 24, 0.06), 0 12px 32px rgba(27, 26, 24, 0.07);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-plane);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: "ss01";
+  }
+
+  ::selection {
+    background: var(--color-accent-wash);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #d8d9d3 transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: #d8d9d3;
+    border: 3.5px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: #c6c7bf;
+    background-clip: content-box;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+@layer components {
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+
+  .label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-muted);
+  }
+
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Пометка на полях: тонкая линейка слева, песочная бумага, без рамки. */
+  .mark {
+    background: var(--color-mark);
+    box-shadow: inset 2px 0 0 var(--color-mark-rule);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
