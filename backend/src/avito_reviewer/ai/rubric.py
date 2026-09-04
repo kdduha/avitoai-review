@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
@@ -169,8 +170,82 @@ class Rubric(BaseModel):
         return [c for c in self.criteria if c.ai_sensitive]
 
 
+ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
+
+
+def validate_rubric(rubric: Rubric) -> list[str]:
+    """Что не так с рубрикой. Пустой список — можно принимать.
+
+    Проверяет код, а не модель, и проверяет то, что ломает подсчёт балла на
+    каждой работе потока: рубрика действует до конца курса, и арифметическая
+    ошибка в ней стоит дороже любой ошибки в одном черновике.
+    """
+    problems: list[str] = []
+
+    if not ID_PATTERN.match(rubric.assignment_id):
+        problems.append(
+            f"идентификатор {rubric.assignment_id!r} не годится для имени файла: "
+            f"латиница, цифры, точка, дефис и подчёркивание"
+        )
+    if not rubric.criteria:
+        problems.append("в рубрике нет ни одного критерия")
+
+    ids = [c.id for c in rubric.criteria]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        problems.append("повторяющиеся идентификаторы критериев: " + ", ".join(duplicates))
+
+    if rubric.scale.total_max <= 0:
+        problems.append("максимальный балл должен быть больше нуля")
+    if rubric.scale.step < 0:
+        problems.append("шаг шкалы не может быть отрицательным")
+
+    threshold = rubric.scale.pass_threshold
+    if threshold is not None and threshold > rubric.scale.total_max:
+        problems.append(
+            f"порог зачёта {threshold:g} выше максимума {rubric.scale.total_max:g} — "
+            f"зачёт недостижим"
+        )
+
+    for criterion in rubric.criteria:
+        if criterion.max_score <= 0:
+            problems.append(f"{criterion.id}: максимум критерия должен быть больше нуля")
+        minimum = criterion.min_score_for_pass
+        if minimum is not None and minimum > criterion.max_score:
+            problems.append(
+                f"{criterion.id}: обязательный минимум {minimum:g} выше максимума "
+                f"{criterion.max_score:g} — критерий провален всегда"
+            )
+
+    # Сумма может не совпадать с максимумом: у критериев бывают веса. А вот
+    # недостижимый максимум — это уже поломка шкалы.
+    reachable = round(sum(c.max_score * (c.weight or 1.0) for c in rubric.criteria), 4)
+    if rubric.criteria and reachable < rubric.scale.total_max:
+        problems.append(
+            f"максимум {rubric.scale.total_max:g} недостижим: по всем критериям "
+            f"с весами набирается {reachable:g}"
+        )
+    return problems
+
+
 def load_rubric(path: str | Path) -> Rubric:
     return Rubric.model_validate(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+class RubricRejected(ValueError):
+    """Рубрика не прошла проверку и в каталог не попала."""
+
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__("; ".join(problems))
+        self.problems = problems
+
+
+class RubricExists(ValueError):
+    """Рубрика с таким идентификатором уже есть."""
+
+    def __init__(self, assignment_id: str) -> None:
+        super().__init__(f"рубрика {assignment_id!r} уже существует")
+        self.assignment_id = assignment_id
 
 
 class RubricStore:
@@ -201,6 +276,28 @@ class RubricStore:
 
     def get(self, assignment_id: str) -> Rubric | None:
         return self._rubrics.get(assignment_id)
+
+    def save(self, rubric: Rubric, *, overwrite: bool = False) -> Path:
+        """Положить подтверждённую рубрику в каталог.
+
+        Молча переписать существующую нельзя: по ней уже могли быть проверены
+        работы, и подмена задним числом делает их баллы необъяснимыми.
+        """
+        problems = validate_rubric(rubric)
+        if problems:
+            raise RubricRejected(problems)
+
+        path = self.directory / f"{rubric.assignment_id}.json"
+        if path.exists() and not overwrite:
+            raise RubricExists(rubric.assignment_id)
+
+        self.directory.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            rubric.model_dump_json(indent=2, exclude_defaults=False), encoding="utf-8"
+        )
+        self._rubrics[rubric.assignment_id] = rubric
+        log.info("rubrics: saved %s to %s", rubric.assignment_id, path)
+        return path
 
     @property
     def ids(self) -> list[str]:

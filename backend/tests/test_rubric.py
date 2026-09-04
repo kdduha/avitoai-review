@@ -13,7 +13,15 @@ from pathlib import Path
 import pytest
 from factories import NOW
 
-from avito_reviewer.ai.rubric import LatePolicy, Rubric, RubricStore, load_rubric
+from avito_reviewer.ai.rubric import (
+    LatePolicy,
+    Rubric,
+    RubricExists,
+    RubricRejected,
+    RubricStore,
+    load_rubric,
+    validate_rubric,
+)
 
 RUBRICS = Path(__file__).resolve().parents[1] / "rubrics"
 
@@ -141,3 +149,107 @@ def test_malformed_gate_entry_is_skipped_not_fatal(tmp_path):
     )
     store = RubricStore(tmp_path)
     assert [c.check for c in store.get("r").format_gate] == ["required_paths"]
+
+
+# --------------------------------------------------------------------------- #
+# проверка перед принятием
+# --------------------------------------------------------------------------- #
+
+def rubric_with(**overrides) -> Rubric:
+    payload = {
+        "assignment_id": "lab1",
+        "scale": {"total_max": 4, "pass_threshold": 3, "step": 0.5},
+        "criteria": [
+            {"id": "c1", "title": "Раз", "max_score": 2},
+            {"id": "c2", "title": "Два", "max_score": 2},
+        ],
+    }
+    payload.update(overrides)
+    return Rubric.model_validate(payload)
+
+
+def test_a_working_rubric_passes():
+    assert validate_rubric(rubric_with()) == []
+
+
+def test_unreachable_threshold_is_rejected():
+    """Порог выше максимума — зачёт не получит никто и никогда."""
+    problems = validate_rubric(rubric_with(scale={"total_max": 4, "pass_threshold": 10}))
+    assert any("зачёт недостижим" in p for p in problems)
+
+
+def test_unreachable_maximum_is_rejected():
+    """Шкала на 10 при критериях на 4 — балл не сойдётся ни на одной работе."""
+    problems = validate_rubric(rubric_with(scale={"total_max": 10}))
+    assert any("недостижим" in p for p in problems)
+
+
+def test_minimum_above_maximum_is_rejected():
+    """Такой критерий провален всегда, что бы студент ни сдал."""
+    problems = validate_rubric(rubric_with(criteria=[
+        {"id": "c1", "title": "Раз", "max_score": 2, "min_score_for_pass": 5},
+        {"id": "c2", "title": "Два", "max_score": 2},
+    ]))
+    assert any("провален всегда" in p for p in problems)
+
+
+def test_duplicate_criteria_ids_are_rejected():
+    problems = validate_rubric(rubric_with(criteria=[
+        {"id": "c1", "title": "Раз", "max_score": 2},
+        {"id": "c1", "title": "Два", "max_score": 2},
+    ]))
+    assert any("повторяющиеся идентификаторы" in p for p in problems)
+
+
+def test_id_unfit_for_a_filename_is_rejected():
+    assert any("не годится для имени файла" in p for p in validate_rubric(rubric_with(assignment_id="../etc/passwd")))
+
+
+def test_empty_rubric_is_rejected():
+    assert any("ни одного критерия" in p for p in validate_rubric(rubric_with(criteria=[])))
+
+
+def test_weights_let_the_sum_differ_from_the_maximum():
+    """Сумма критериев не обязана равняться максимуму: у критериев бывают веса."""
+    weighted = rubric_with(
+        scale={"total_max": 8},
+        criteria=[
+            {"id": "c1", "title": "Раз", "max_score": 2, "weight": 2},
+            {"id": "c2", "title": "Два", "max_score": 2, "weight": 2},
+        ],
+    )
+    assert validate_rubric(weighted) == []
+
+
+# --------------------------------------------------------------------------- #
+# запись в каталог
+# --------------------------------------------------------------------------- #
+
+def test_confirmed_rubric_lands_in_the_catalogue(tmp_path):
+    store = RubricStore(tmp_path)
+    path = store.save(rubric_with())
+
+    assert path.exists()
+    assert store.get("lab1") is not None
+    assert RubricStore(tmp_path).ids == ["lab1"]  # переживает перезапуск
+
+
+def test_existing_rubric_is_not_overwritten_silently(tmp_path):
+    """По старой рубрике могли быть выставлены баллы: подмена делает их необъяснимыми."""
+    store = RubricStore(tmp_path)
+    store.save(rubric_with())
+
+    with pytest.raises(RubricExists):
+        store.save(rubric_with(title="другая"))
+
+    store.save(rubric_with(title="другая"), overwrite=True)
+    assert store.get("lab1").title == "другая"
+
+
+def test_broken_rubric_never_reaches_the_catalogue(tmp_path):
+    store = RubricStore(tmp_path)
+    with pytest.raises(RubricRejected) as exc:
+        store.save(rubric_with(scale={"total_max": 4, "pass_threshold": 99}))
+
+    assert exc.value.problems
+    assert list(tmp_path.iterdir()) == []
