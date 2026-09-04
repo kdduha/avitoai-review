@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FlaskConical } from 'lucide-react'
 import type { DetectionSpan, Evidence } from '@/lib/backend'
-import { getRun, setScore, setSpanVerdict } from '@/lib/runs'
+import { demoThread, getRun, setScore, setSpanVerdict } from '@/lib/runs'
 import { formatDateTime, timeLeft } from '@/lib/format'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -166,7 +166,7 @@ export function ReviewPage() {
         />
       </div>
 
-      <ChatDock live={workspace.live} />
+      <ChatDock live={workspace.live} thread={demoThread(workspace.id)} />
     </div>
   )
 }

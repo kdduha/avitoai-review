@@ -11,16 +11,75 @@ import { buildWorkspace, withScore, type Workspace } from './workspace'
 import { DEMO_DETECT, DEMO_REVIEW, DEMO_RUN_ID } from '@/mocks/demoRun'
 
 export { DEMO_RUN_ID }
-import { DEMO_RUBRIC } from '@/mocks/rubric'
+import { DEMO_SYSDESIGN_DETECT, DEMO_SYSDESIGN_ID, DEMO_SYSDESIGN_REVIEW } from '@/mocks/demoSysdesign'
+import { DEMO_RUBRIC, DEMO_RUBRIC_SYSDESIGN } from '@/mocks/rubric'
 
 const runs = new Map<string, Workspace>()
 
 function demo(): Workspace {
-  const workspace = buildWorkspace(DEMO_RUN_ID, DEMO_REVIEW, DEMO_DETECT, DEMO_RUBRIC)
-  return { ...workspace, live: false }
+  return { ...buildWorkspace(DEMO_RUN_ID, DEMO_REVIEW, DEMO_DETECT, DEMO_RUBRIC), live: false }
+}
+
+function demoSysdesign(): Workspace {
+  return {
+    ...buildWorkspace(DEMO_SYSDESIGN_ID, DEMO_SYSDESIGN_REVIEW, DEMO_SYSDESIGN_DETECT, DEMO_RUBRIC_SYSDESIGN),
+    live: false,
+  }
 }
 
 runs.set(DEMO_RUN_ID, demo())
+runs.set(DEMO_SYSDESIGN_ID, demoSysdesign())
+
+/** Демо-разбор есть только там, где есть рубрика: показывать разбор работы по
+ *  Tech QA против рубрики по Go — хуже, чем не показывать ничего. */
+const DEMO_BY_COURSE: Record<string, string> = {
+  go: DEMO_RUN_ID,
+  'system-design': DEMO_SYSDESIGN_ID,
+}
+
+/** Записанные ветки разговора — свои у каждого демо-прогона. */
+const DEMO_THREADS: Record<string, { id: string; author: 'human' | 'ai'; text: string }[]> = {
+  [DEMO_RUN_ID]: [
+    { id: 'm1', author: 'human', text: 'Обоснуй балл по чистоте кода, посмотри ещё README.' },
+    {
+      id: 'm2',
+      author: 'ai',
+      text:
+        'В README описано чтение .env, которого в коде нет: config.Load ходит только в os.Getenv. Плюс ошибка w.Write не обработана в обоих хендлерах. Оба замечания по одному критерию, поэтому 1 из 2 выглядит справедливо; поднимать не предлагаю.',
+    },
+  ],
+  [DEMO_SYSDESIGN_ID]: [
+    {
+      id: 'm1',
+      author: 'human',
+      text: 'Работа встала ровно на пороге. Проверь, не занижен ли балл за модель данных.',
+    },
+    {
+      id: 'm2',
+      author: 'ai',
+      text:
+        'В разделе 5 названы три сущности и одна связь, полей и ключей нет, обоснования выбора тоже. Критерий требует описанную модель и её обоснование — по нему ноль обоснован. Ближе к границе другой критерий: контракты заданы без ошибочных ответов, и там стоит 0.5 из 0.5. Если поднимать, то честнее пересмотреть его, а не модель данных.',
+    },
+  ],
+}
+
+/** Демо-прогон, собранный против этой рубрики. */
+const DEMO_BY_RUBRIC: Record<string, string> = {
+  'go-task1': DEMO_RUN_ID,
+  'sysdesign-lab1': DEMO_SYSDESIGN_ID,
+}
+
+export function demoRunForRubric(rubricId: string | undefined): string {
+  return (rubricId && DEMO_BY_RUBRIC[rubricId]) ?? DEMO_RUN_ID
+}
+
+export function demoThread(runId: string) {
+  return DEMO_THREADS[runId] ?? []
+}
+
+export function demoRunForCourse(courseId: string | undefined): string | null {
+  return (courseId && DEMO_BY_COURSE[courseId]) ?? null
+}
 
 export interface StartRunParams {
   link: string

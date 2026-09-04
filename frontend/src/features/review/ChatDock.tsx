@@ -2,33 +2,20 @@ import { useState } from 'react'
 import { ArrowUp, MessageSquare, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 
-interface Message {
+export interface ChatMessage {
   id: string
   author: 'human' | 'ai'
   text: string
-  proposal?: { label: string; applied: boolean | null }
 }
 
-const DEMO_THREAD: Message[] = [
-  {
-    id: 'm1',
-    author: 'human',
-    text: 'Обоснуй балл по чистоте кода, посмотри ещё README.',
-  },
-  {
-    id: 'm2',
-    author: 'ai',
-    text:
-      'В README описано чтение .env, которого в коде нет: config.Load ходит только в os.Getenv. Плюс ошибка w.Write не обработана в обоих хендлерах. Оба замечания — по одному критерию, поэтому 1 из 2 выглядит справедливо; поднимать не предлагаю.',
-  },
-]
-
 /** Разговор с моделью. Ручки на бэкенде ещё нет, поэтому на живом прогоне
- *  панель честно говорит об этом, а не подсовывает выдуманный ответ. */
-export function ChatDock({ live }: { live: boolean }) {
+ *  панель честно говорит об этом, а не подсовывает выдуманный ответ.
+ *  Записанная ветка приходит вместе с прогоном: разбор по системному дизайну
+ *  не должен обсуждать чужой сервис на Go. */
+export function ChatDock({ live, thread }: { live: boolean; thread: ChatMessage[] }) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
-  const messages = live ? [] : DEMO_THREAD
+  const messages = live ? [] : thread
 
   return (
     <div className="shrink-0 border-t border-line bg-surface">

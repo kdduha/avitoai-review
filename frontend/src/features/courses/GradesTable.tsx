@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Search, Sparkle } from 'lucide-react'
-import { DEMO_RUN_ID } from '@/lib/runs'
+import { demoRunForCourse } from '@/lib/runs'
 import type { Assignment, Curator, Grade, Student, StudentTotals } from '@/lib/types'
 import { cn } from '@/lib/cn'
 import { Avatar } from '@/components/ui/Avatar'
@@ -24,7 +24,15 @@ const STATUS_HINT: Record<Grade['status'], string> = {
 
 type SortKey = 'name' | 'total'
 
-function GradeCell({ grade, passThreshold }: { grade: Grade | undefined; passThreshold: number }) {
+function GradeCell({
+  grade,
+  passThreshold,
+  runId,
+}: {
+  grade: Grade | undefined
+  passThreshold: number
+  runId: string | null
+}) {
   if (!grade || grade.score === null) {
     return (
       <td className="px-2 py-2 text-center">
@@ -36,14 +44,10 @@ function GradeCell({ grade, passThreshold }: { grade: Grade | undefined; passThr
   }
 
   const pending = grade.status === 'draft_ready' || grade.status === 'in_review'
+  const hint = `${STATUS_HINT[grade.status]}${grade.daysLate ? `, +${grade.daysLate} дн` : ''}`
 
-  return (
-    <td className="px-2 py-2 text-center">
-      <Link
-        to={`/review/${DEMO_RUN_ID}`}
-        title={`${STATUS_HINT[grade.status]}${grade.daysLate ? `, +${grade.daysLate} дн` : ''}`}
-        className="group inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-sunken"
-      >
+  const body = (
+    <>
         <span
           className={cn(
             'num text-[13px]',
@@ -55,10 +59,30 @@ function GradeCell({ grade, passThreshold }: { grade: Grade | undefined; passThr
         </span>
         {pending ? <span className="size-1.5 rounded-full bg-mark-rule" title="ждёт куратора" /> : null}
         {grade.status === 'late' ? <span className="text-[10.5px] text-warn-ink">+{grade.daysLate}д</span> : null}
-        {grade.aiFlag !== null ? (
-          <Sparkle size={10} strokeWidth={2} className="text-warn" aria-label="сигнал ГенИИ" />
-        ) : null}
-      </Link>
+      {grade.aiFlag !== null ? (
+        <Sparkle size={10} strokeWidth={2} className="text-warn" aria-label="сигнал ГенИИ" />
+      ) : null}
+    </>
+  )
+
+  return (
+    <td className="px-2 py-2 text-center">
+      {runId ? (
+        <Link
+          to={`/review/${runId}`}
+          title={hint}
+          className="group inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition-colors hover:bg-sunken"
+        >
+          {body}
+        </Link>
+      ) : (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5"
+          title={`${hint} · разбор для этой программы ещё не собран`}
+        >
+          {body}
+        </span>
+      )}
     </td>
   )
 }
@@ -164,6 +188,7 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
                   {assignments.map((assignment) => (
                     <GradeCell
                       key={assignment.id}
+                      runId={demoRunForCourse(assignment.courseId)}
                       passThreshold={assignment.passThreshold}
                       grade={(byStudent.get(student.id) ?? []).find((g) => g.assignmentId === assignment.id)}
                     />

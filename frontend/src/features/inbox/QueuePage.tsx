@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, Play } from 'lucide-react'
 import { api } from '@/lib/api'
-import { DEMO_RUN_ID } from '@/lib/runs'
+import { demoRunForCourse } from '@/lib/runs'
 import { plural } from '@/lib/format'
 import { useSession } from '@/app/session'
 import { Avatar } from '@/components/ui/Avatar'
@@ -32,6 +32,11 @@ export function QueuePage() {
   const queue = grades
     .filter((grade) => mine.has(grade.studentId))
     .filter((grade) => grade.status === 'draft_ready' || grade.status === 'in_review')
+    .map((grade) => ({
+      grade,
+      assignment: assignments.find((item) => item.id === grade.assignmentId),
+    }))
+    .filter((row) => Boolean(demoRunForCourse(row.assignment?.courseId)))
     .slice(0, 6)
 
   return (
@@ -52,19 +57,19 @@ export function QueuePage() {
 
       <div className="mt-5">
         <MockNotice>
-          Очередь на демо-данных: у бэкенда нет хранилища сдач, он работает от ссылки на pull request.
-          Любая карточка открывает демо-прогон — настоящий разбор запускается кнопкой «Проверить работу».
+          Очередь синтетическая: у бэкенда нет хранилища сдач, он работает от ссылки на pull request.
+          В ней только программы, для которых есть рубрика, и карточка открывает демонстрационный
+          разбор этой программы. Настоящий разбор запускается кнопкой «Проверить работу».
         </MockNotice>
       </div>
 
       <div className="space-y-2">
-        {queue.map((grade) => {
+        {queue.map(({ grade, assignment }) => {
           const student = students.find((item) => item.id === grade.studentId)
-          const assignment = assignments.find((item) => item.id === grade.assignmentId)
           return (
             <Link
               key={`${grade.studentId}-${grade.assignmentId}`}
-              to={`/review/${DEMO_RUN_ID}`}
+              to={`/review/${demoRunForCourse(assignment?.courseId)}`}
               className="group flex items-center gap-4 rounded-card border border-line bg-surface px-4 py-3.5 transition-colors hover:border-[#d6d7d1] hover:bg-raised"
             >
               <Avatar name={student?.name ?? '—'} size={32} />

@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
-import { startRun } from '@/lib/runs'
-import { DEMO_RUN_ID } from '@/lib/runs'
+import { demoRunForRubric, startRun } from '@/lib/runs'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 
@@ -83,7 +82,7 @@ export function CheckPage() {
               <code className="font-mono text-[12px]">cd backend &amp;&amp; uv run uvicorn avito_reviewer.app.main:app</code>
               . Посмотреть интерфейс без бэкенда можно на демо-прогоне.
             </p>
-            <Button size="sm" className="mt-2.5" onClick={() => navigate(`/review/${DEMO_RUN_ID}`)}
+            <Button size="sm" className="mt-2.5" onClick={() => navigate(`/review/${demoRunForRubric(chosen)}`)}
               icon={<FlaskConical size={13} strokeWidth={1.8} />}>
               Открыть демо-прогон
             </Button>
@@ -193,7 +192,7 @@ export function CheckPage() {
           >
             {run.isPending ? 'Разбираю работу' : 'Запустить разбор'}
           </Button>
-          <Button variant="ghost" onClick={() => navigate(`/review/${DEMO_RUN_ID}`)}>
+          <Button variant="ghost" onClick={() => navigate(`/review/${demoRunForRubric(chosen)}`)}>
             Открыть демо-прогон
           </Button>
           {status.data ? (

@@ -4,7 +4,7 @@ import { ArrowLeft, Sparkle } from 'lucide-react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
-import { DEMO_RUN_ID } from '@/lib/runs'
+import { demoRunForCourse } from '@/lib/runs'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { AXIS, ChartTooltip, GRID, Panel, SERIES } from '@/features/courses/chart'
@@ -40,6 +40,7 @@ export function StudentPage() {
   const stream = streams.find((item) => item.id === student.streamId)
   const curator = curators.find((item) => item.id === student.curatorId)
 
+  const runId = demoRunForCourse(student.courseId)
   const scored = grades.filter((g) => g.score !== null)
   const average = scored.length
     ? Math.round((scored.reduce((sum, g) => sum + (g.score ?? 0), 0) / scored.length) * 10) / 10
@@ -123,10 +124,10 @@ export function StudentPage() {
                 </>
               )
 
-              return grade.submissionId ? (
+              return grade.submissionId && runId ? (
                 <Link
                   key={grade.assignmentId}
-                  to={`/review/${DEMO_RUN_ID}`}
+                  to={`/review/${runId}`}
                   className="flex items-center gap-3 border-b border-line-soft px-4 py-3 last:border-b-0 hover:bg-[#f8f9f6]"
                 >
                   {body}
