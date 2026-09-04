@@ -72,8 +72,8 @@ class StubIngest:
 
 
 @pytest.fixture
-def make_client():
-    def build(*, ingest=None, responses=None, rubrics=True):
+def make_client(tmp_path):
+    def build(*, ingest=None, responses=None, rubrics=True, writable=False):
         app = create_app()
         client = TestClient(app)
         client.__enter__()
@@ -82,6 +82,9 @@ def make_client():
         app.state.ai = AIService(AIConfig(), gateway=gateway, resolver=app.state.ingest)
         if not rubrics:
             app.state.rubrics = RubricStore("нет такого каталога")
+        if writable:
+            # Каталог на запись: подтверждение рубрики не должно трогать рабочий.
+            app.state.rubrics = RubricStore(tmp_path)
         return client, provider
 
     return build
@@ -372,3 +375,72 @@ def test_model_failure_on_compile_is_502(make_client):
         "/rubrics/compile", json={"assignment_id": "lab1", "condition_text": CONDITION}
     )
     assert response.status_code == 502
+
+
+# --------------------------------------------------------------------------- #
+# подтверждение рубрики
+# --------------------------------------------------------------------------- #
+
+CONFIRMED = {
+    "assignment_id": "lab1",
+    "title": "Лаба 1",
+    "scale": {"total_max": 4, "pass_threshold": 3, "step": 0.5},
+    "criteria": [
+        {"id": "c1", "title": "Раз", "max_score": 2},
+        {"id": "c2", "title": "Два", "max_score": 2},
+    ],
+}
+
+
+def test_confirmed_rubric_becomes_available_for_review(make_client):
+    """Смысл шага: с этого момента по рубрике можно проверять работы."""
+    client, _ = make_client(writable=True)
+    response = client.post(
+        "/rubrics", json={"rubric": CONFIRMED, "confirmed_by": "Ирина Ходасевич"}
+    )
+
+    assert response.status_code == 200
+    assert "Ирина Ходасевич" in response.json()["rubric"]["source_note"]
+    assert client.get("/rubrics/lab1").status_code == 200
+    assert any(r["assignment_id"] == "lab1" for r in client.get("/rubrics").json())
+
+
+def test_rubric_that_does_not_add_up_is_refused_with_reasons(make_client):
+    """Рубрика действует до конца курса: ошибка в ней стоит дороже любого черновика."""
+    client, _ = make_client(writable=True)
+    broken = {**CONFIRMED, "scale": {"total_max": 4, "pass_threshold": 99}}
+    response = client.post("/rubrics", json={"rubric": broken, "confirmed_by": "методист"})
+
+    assert response.status_code == 422
+    assert any("зачёт недостижим" in p for p in response.json()["detail"])
+    assert client.get("/rubrics/lab1").status_code == 404
+
+
+def test_existing_rubric_needs_an_explicit_overwrite(make_client):
+    client, _ = make_client(writable=True)
+    client.post("/rubrics", json={"rubric": CONFIRMED, "confirmed_by": "методист"})
+
+    again = client.post("/rubrics", json={"rubric": CONFIRMED, "confirmed_by": "методист"})
+    assert again.status_code == 409
+
+    forced = client.post(
+        "/rubrics",
+        json={"rubric": {**CONFIRMED, "title": "Правленая"}, "confirmed_by": "методист",
+              "overwrite": True},
+    )
+    assert forced.status_code == 200
+    assert client.get("/rubrics/lab1").json()["title"] == "Правленая"
+
+
+def test_compile_then_confirm_is_one_road(make_client):
+    """Черновик компилятора должен приниматься ручкой подтверждения как есть."""
+    client, _ = make_client(responses=[COMPILED], writable=True)
+    draft = client.post(
+        "/rubrics/compile", json={"assignment_id": "lab1", "condition_text": CONDITION}
+    ).json()["draft"]
+
+    confirmed = client.post(
+        "/rubrics", json={"rubric": draft["rubric"], "confirmed_by": "методист"}
+    )
+    assert confirmed.status_code == 200
+    assert "Подтверждено: методист" in confirmed.json()["rubric"]["source_note"]

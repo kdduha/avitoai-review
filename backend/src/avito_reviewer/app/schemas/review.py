@@ -170,3 +170,23 @@ class CompileRubricResponse(BaseModel):
 
     draft: RubricDraft
     grounded_share: float
+
+
+class ConfirmRubricRequest(BaseModel):
+    """Подтверждение рубрики методистом: она вступает в силу для всего потока."""
+
+    rubric: Rubric
+    confirmed_by: str = Field(min_length=2, description="кто подтверждает — попадёт в рубрику")
+    overwrite: bool = Field(
+        default=False,
+        description=(
+            "Переписать существующую рубрику. По умолчанию нельзя: по ней могли "
+            "быть проверены работы, и подмена задним числом делает их баллы "
+            "необъяснимыми."
+        ),
+    )
+
+
+class ConfirmRubricResponse(BaseModel):
+    rubric: Rubric
+    path: str

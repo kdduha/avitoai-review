@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from functools import partial
 
 from fastapi import APIRouter, HTTPException, Request
@@ -8,11 +9,13 @@ from fastapi.concurrency import run_in_threadpool
 
 from avito_reviewer.ai import AIService, Rubric
 from avito_reviewer.ai.compiler import CompilerError, RubricCompiler
-from avito_reviewer.ai.rubric import RubricStore
+from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
     CompileRubricRequest,
     CompileRubricResponse,
+    ConfirmRubricRequest,
+    ConfirmRubricResponse,
     CostSummary,
     DetectRequest,
     DetectResponse,
@@ -108,6 +111,42 @@ async def compile_rubric(body: CompileRubricRequest, request: Request) -> Compil
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     return CompileRubricResponse(draft=draft, grounded_share=draft.grounded_share)
+
+
+@router.post("/rubrics", summary="Confirm a rubric and put it into the catalogue")
+async def confirm_rubric(body: ConfirmRubricRequest, request: Request) -> ConfirmRubricResponse:
+    """Принять рубрику: с этого момента по ней проверяются работы потока.
+
+    Это тот самый шаг, ради которого компилятор ничего не сохраняет сам. Здесь
+    же — единственная проверка, которую нельзя доверить модели: код смотрит, что
+    рубрика вообще считается. Недостижимый порог зачёта, обязательный минимум
+    выше максимума критерия, повторяющиеся идентификаторы — всё это ломает
+    подсчёт балла не на одной работе, а на каждой до конца курса.
+
+    ``409`` — рубрика с таким идентификатором уже есть; перезапись только явным
+    `overwrite`, потому что по старой уже могли быть выставлены баллы.
+    ``422`` — рубрика не считается, в ответе список поломок.
+    """
+    store: RubricStore = request.app.state.rubrics
+    rubric = body.rubric.model_copy(
+        update={
+            "source_note": (
+                f"{body.rubric.source_note} Подтверждено: {body.confirmed_by}, "
+                f"{datetime.now(tz=UTC).date().isoformat()}."
+            ).strip()
+        }
+    )
+    try:
+        path = store.save(rubric, overwrite=body.overwrite)
+    except RubricRejected as exc:
+        raise HTTPException(status_code=422, detail=exc.problems) from exc
+    except RubricExists as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"не удалось записать рубрику: {exc}") from exc
+
+    _log.info("рубрика %s подтверждена: %s", rubric.assignment_id, body.confirmed_by)
+    return ConfirmRubricResponse(rubric=rubric, path=str(path))
 
 
 @router.post("/review", summary="Draft a review of a submission against a rubric")
