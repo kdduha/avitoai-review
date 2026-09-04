@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardCheck, GraduationCap, Play, Users } from 'lucide-react'
+import { ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/app/session'
@@ -72,14 +72,16 @@ export function Sidebar() {
         })}
       </div>
 
+      <Section>Программа</Section>
+      <NavLink to="/rubrics" className={linkClass}>
+        <Ruler size={15} strokeWidth={1.7} className="text-faint" />
+        Рубрики
+      </NavLink>
       {role === 'head' ? (
-        <>
-          <Section>Программа</Section>
-          <NavLink to="/curators" className={linkClass}>
-            <Users size={15} strokeWidth={1.7} className="text-faint" />
-            Кураторы
-          </NavLink>
-        </>
+        <NavLink to="/curators" className={linkClass}>
+          <Users size={15} strokeWidth={1.7} className="text-faint" />
+          Кураторы
+        </NavLink>
       ) : null}
     </nav>
   )

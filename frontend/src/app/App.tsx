@@ -5,6 +5,7 @@ import { CheckPage } from '@/features/review/CheckPage'
 import { ReviewPage } from '@/features/review/ReviewPage'
 import { CoursePage } from '@/features/courses/CoursePage'
 import { CuratorsPage } from '@/features/courses/CuratorsPage'
+import { RubricsPage } from '@/features/rubrics/RubricsPage'
 import { StudentPage } from '@/features/students/StudentPage'
 import { useSession } from './session'
 
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/courses/:courseId" element={<CoursePage />} />
         <Route path="/students/:studentId" element={<StudentPage />} />
         <Route path="/curators" element={<CuratorsPage />} />
+        <Route path="/rubrics" element={<RubricsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
