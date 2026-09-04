@@ -237,7 +237,7 @@ class RubricCompiler:
                     self.gateway,
                     build_messages(condition_text, hint=hint),
                     CompilerOutput,
-                    task=TaskKind.REVIEW,
+                    task=TaskKind.COMPILE,
                     data_class=DataClass.CONTAINS_PD,
                     temperature=self.temperature,
                     max_tokens=max_tokens,

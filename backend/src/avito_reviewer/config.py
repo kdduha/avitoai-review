@@ -67,6 +67,15 @@ class LLMConfig(BaseModel):
     local_model: str = "qwen2.5-7b-instruct"
     local_base_url: str = "http://localhost:11434/v1"
 
+    task_models: dict[str, str] = Field(default_factory=dict)
+    """Модель на задачу: `{"compile": "gpt-5.6-luna-pro"}`.
+
+    Матрица роутинга из архитектуры §8.3. Массовые задачи идут на дешёвой
+    модели, а те, чей текст читает человек и чья ошибка тиражируется, — на
+    сильной. Rubric Compiler считается один раз на задание, и цена там роли
+    не играет, зато нестабильность стоит дорого.
+    """
+
     # Kill switch for external providers: every task is served locally or fails.
     force_local: bool = False
     timeout: int = 120

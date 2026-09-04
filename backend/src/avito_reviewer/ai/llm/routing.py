@@ -12,6 +12,7 @@ from enum import Enum
 
 class TaskKind(str, Enum):
     REVIEW = "review"          # разбор работы по критериям
+    COMPILE = "compile"        # условие задания → черновик рубрики
     JUDGE = "judge"            # классификация фрагментов на признаки генерации
     CHAT = "chat"              # диалог ревьюера с моделью
     NER = "ner"                # поиск ПДн

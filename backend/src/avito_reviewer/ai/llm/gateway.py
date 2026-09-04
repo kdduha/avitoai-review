@@ -55,6 +55,7 @@ class PrivacyGateway:
         *,
         audit: AuditLog | None = None,
         force_local: bool = False,
+        task_models: dict[str, str] | None = None,
     ) -> None:
         """
         `force_local=True` отключает внешние вызовы целиком. Это режим для
@@ -65,6 +66,8 @@ class PrivacyGateway:
         self.local = local or (external if external and getattr(external, "is_local", False) else None)
         self.audit = audit or AuditLog()
         self.force_local = force_local
+        self.task_models = task_models or {}
+        """Матрица роутинга: какой задаче какая модель. Пусто — модель провайдера."""
 
     # ------------------------------------------------------------------ #
 
@@ -127,6 +130,7 @@ class PrivacyGateway:
             response = provider.complete(
                 scrubbed, temperature=temperature,
                 max_tokens=max_tokens, json_mode=json_mode,
+                model=self.task_models.get(task.value),
             )
         except (LLMError, LLMUnavailable) as exc:
             error = f"{type(exc).__name__}: {exc}"
@@ -183,7 +187,7 @@ class PrivacyGateway:
             AuditRecord(
                 request_id=request_id,
                 provider=getattr(provider, "name", "unknown"),
-                model=getattr(provider, "model", "unknown"),
+                model=response.model if response else getattr(provider, "model", "unknown"),
                 task=task.value,
                 data_class=data_class.value,
                 route=route.value,
@@ -206,6 +210,7 @@ def gateway_from_config(config: LLMConfig) -> PrivacyGateway:
         external=None if is_local else provider,
         local=provider if is_local else None,
         force_local=config.force_local,
+        task_models=dict(config.task_models),
     )
 
 

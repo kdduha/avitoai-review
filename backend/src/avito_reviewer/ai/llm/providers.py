@@ -64,6 +64,7 @@ class Provider(Protocol):
         temperature: float = 0.0,
         max_tokens: int = 2000,
         json_mode: bool = False,
+        model: str | None = None,
     ) -> LLMResponse: ...
 
 
@@ -92,9 +93,10 @@ class OpenAICompatibleProvider:
         temperature: float = 0.0,
         max_tokens: int = 2000,
         json_mode: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
         payload: dict[str, Any] = {
-            "model": self.model,
+            "model": model or self.model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
@@ -180,6 +182,7 @@ class FakeProvider:
     model: str = "fake-model"
     is_local: bool = True
     calls: list[list[dict[str, str]]] = field(default_factory=list)
+    models: list[str] = field(default_factory=list)
     default: str = "{}"
 
     def complete(
@@ -189,12 +192,16 @@ class FakeProvider:
         temperature: float = 0.0,
         max_tokens: int = 2000,
         json_mode: bool = False,
+        model: str | None = None,
     ) -> LLMResponse:
         self.calls.append(messages)
+        self.models.append(model or self.model)
         text = self.responses.pop(0) if self.responses else self.default
         if isinstance(text, Exception):  # позволяет проверять обработку сбоев
             raise text
-        return LLMResponse(text=text, model=self.model, tokens_in=100, tokens_out=50)
+        # Отвечает той моделью, которую попросили: настоящий провайдер делает так же,
+        # и на этом расхождении двойника прячутся ошибки роутинга.
+        return LLMResponse(text=text, model=model or self.model, tokens_in=100, tokens_out=50)
 
     @property
     def last_prompt(self) -> str:

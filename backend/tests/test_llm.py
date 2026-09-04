@@ -111,6 +111,39 @@ def test_a_name_the_scrubber_missed_downgrades_the_route(monkeypatch):
     assert external.calls == []
 
 
+def test_task_routing_picks_the_model_per_task():
+    """Матрица роутинга §8.3: массовое — на дешёвой, читаемое человеком — на сильной."""
+    provider = FakeProvider(responses=["a", "b"], model="дешёвая")
+    gateway = PrivacyGateway(
+        external=provider, local=provider, task_models={"compile": "сильная"}
+    )
+
+    gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.COMPILE)
+    gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+
+    assert provider.models == ["сильная", "дешёвая"]
+
+
+def test_audit_records_the_model_that_actually_answered():
+    """Иначе счёт за прогон приписывается не той модели, а тарифы у них разные."""
+    provider = FakeProvider(responses=["ответ"], model="дешёвая")
+    gateway = PrivacyGateway(
+        external=provider, local=provider, task_models={"compile": "сильная"}
+    )
+    gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.COMPILE)
+
+    assert gateway.audit.records[0].model == "сильная"
+
+
+def test_routing_is_empty_by_default():
+    """Без настройки — модель провайдера: роутинг включают осознанно."""
+    provider = FakeProvider(responses=["ответ"], model="обычная")
+    PrivacyGateway(external=provider, local=provider).complete(
+        [{"role": "user", "content": "x"}], task=TaskKind.REVIEW
+    )
+    assert provider.models == ["обычная"]
+
+
 def test_ner_never_leaves_the_perimeter():
     """Отправлять персональные данные наружу, чтобы их найти, бессмысленно."""
     external = FakeProvider(responses=["внешний"], name="external", is_local=False)
@@ -366,9 +399,10 @@ def test_truncated_answer_buys_more_room_instead_of_a_pointless_repair():
     budgets: list[int] = []
     original = provider.complete
 
-    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False, model=None):
         budgets.append(max_tokens)
-        response = original(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode)
+        response = original(messages, temperature=temperature, max_tokens=max_tokens,
+                            json_mode=json_mode, model=model)
         response.truncated = len(budgets) == 1
         return response
 
@@ -396,9 +430,10 @@ def test_empty_answer_also_buys_more_room():
     budgets: list[int] = []
     original = provider.complete
 
-    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False, model=None):
         budgets.append(max_tokens)
-        return original(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode)
+        return original(messages, temperature=temperature, max_tokens=max_tokens,
+                        json_mode=json_mode, model=model)
 
     provider.complete = spy  # type: ignore[method-assign]
     answer, _ = complete_json(
@@ -415,9 +450,10 @@ def _budget_spy(provider):
     budgets: list[int] = []
     original = provider.complete
 
-    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False, model=None):
         budgets.append(max_tokens)
-        return original(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode)
+        return original(messages, temperature=temperature, max_tokens=max_tokens,
+                        json_mode=json_mode, model=model)
 
     provider.complete = spy  # type: ignore[method-assign]
     return budgets

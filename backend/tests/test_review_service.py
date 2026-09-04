@@ -278,7 +278,7 @@ def test_overlapping_reviews_report_their_own_cost():
     class SlowProvider:
         name, model, is_local = "slow", "slow-model", True
 
-        def complete(self, messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+        def complete(self, messages, *, temperature=0.0, max_tokens=2000, json_mode=False, model=None):
             started = time.monotonic()
             time.sleep(0.05)
             spans.append((started, time.monotonic()))
