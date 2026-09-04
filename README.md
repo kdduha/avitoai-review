@@ -32,6 +32,9 @@ cd frontend && npm install && npm run dev
   на моках и помечены плашкой. См. `frontend/README.md`.
 - `backend/rubrics/` — рубрики как данные: добавить курс = добавить JSON.
 
+Кто берёт бэкенд дальше — начните с **[docs/handover-backend.md](docs/handover-backend.md)**:
+состояние, запуск, конфигурация и грабли, на которые уже наступали.
+
 ![architecture](docs/backend.drawio.png)
 
 ## Как это работает

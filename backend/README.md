@@ -1,5 +1,8 @@
 # backend — avito-reviewer
 
+Передача работы: **[../docs/handover-backend.md](../docs/handover-backend.md)** —
+что готово, что нет и на чём здесь спотыкаются.
+
 Единый модульный сервис: FastAPI + uv, Python 3.11.
 
 ## Запуск
