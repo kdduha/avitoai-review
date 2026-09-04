@@ -11,6 +11,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, computed_field
 
+from avito_reviewer.ai.gate import GateReport
+
 
 class EvidenceStatus(str, Enum):
     VALID = "valid"                    # цитата найдена там, где указано
@@ -102,6 +104,8 @@ class ReviewDraft(BaseModel):
     late_explanation: str = ""
 
     gate_facts: list[str] = Field(default_factory=list)
+    gate: GateReport | None = None
+    """Результат формальных проверок. `blocked` значит, что модель не запускалась."""
     needs_human_attention: bool = False
     attention_reasons: list[str] = Field(default_factory=list)
 

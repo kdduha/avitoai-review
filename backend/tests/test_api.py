@@ -260,3 +260,36 @@ def test_cost_accumulates_across_runs(make_client):
     assert after_first["calls"] > 0
     assert after_second["calls"] == after_first["calls"] * 2
     assert after_second["cost_rub"] > after_first["cost_rub"]
+
+
+# --------------------------------------------------------------------------- #
+# Format Gate в конвейере
+# --------------------------------------------------------------------------- #
+
+def test_blocked_submission_never_reaches_the_model(make_client):
+    """Работа, не принимаемая по формату, не должна стоить ни рубля токенов."""
+    bundle = go_bundle(artifacts=[artifact("cmd/main.go", text="package main\nfunc main() {}\n")])
+    client, provider = make_client(ingest=StubIngest(bundle))
+
+    body = client.post(
+        "/review", json={"link": "https://x/pull/1", "rubric_id": "go-task1"}
+    ).json()
+
+    assert body["draft"]["gate"]["status"] == "blocked"
+    assert provider.calls == []
+    assert body["draft"]["cost_rub"] == 0
+    assert body["draft"]["needs_human_attention"] is True
+
+
+def test_gate_facts_are_returned_with_the_draft(make_client):
+    client, _ = make_client()
+    body = client.post(
+        "/review", json={"link": "https://x/pull/1", "rubric_id": "go-task1"}
+    ).json()
+
+    gate = body["draft"]["gate"]
+    assert gate["status"] in ("passed", "warning")
+    assert any("Shutting down service-courier" in fact for fact in body["draft"]["gate_facts"])
+    # Каждая проверка приходит с местом, чтобы ревьюер мог кликнуть.
+    found = [o for o in gate["outcomes"] if o["passed"] and o["locations"]]
+    assert found and ":" in found[0]["locations"][0]

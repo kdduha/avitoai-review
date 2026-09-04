@@ -19,6 +19,7 @@ from datetime import datetime
 from avito_reviewer.config import AIConfig
 from avito_reviewer.ingest import SubmissionBundle
 
+from . import gate
 from .content import ArtifactText, ContentResolver, build_texts
 from .detection import DetectionReport, DetectionService
 from .llm import PrivacyGateway, gateway_from_config
@@ -60,17 +61,38 @@ class AIService:
         gate_facts: list[str] | None = None,
         condition_text: str = "",
     ) -> ReviewDraft:
-        draft = self.review_service.review(
-            texts,
-            rubric,
-            submitted_at=bundle.submitted_at,
-            deadline_at=bundle.deadline_at,
-            gate_facts=gate_facts,
-            condition_text=condition_text,
-        )
+        # Формальные проверки идут первыми и не стоят токенов. Если работа не
+        # принимается по формату, модель не запускается вовсе — ревьюер и так
+        # вернёт её студенту.
+        checks = gate.run(bundle, texts, rubric)
+        facts = list(gate_facts or []) + checks.facts
+
+        if checks.blocked:
+            reason = "не пройдены формальные требования: " + "; ".join(
+                outcome.label for outcome in checks.failures if outcome.level == "blocking"
+            )
+            draft = self.review_service.without_model(
+                rubric,
+                reason,
+                submitted_at=bundle.submitted_at,
+                deadline_at=bundle.deadline_at,
+            )
+        else:
+            draft = self.review_service.review(
+                texts,
+                rubric,
+                submitted_at=bundle.submitted_at,
+                deadline_at=bundle.deadline_at,
+                gate_facts=facts,
+                condition_text=condition_text,
+            )
+
+        draft.gate = checks
+        draft.gate_facts = facts
         log.info(
-            "review %s — %.4g/%.4g, цитат у %.0f%% вердиктов, %d токенов, %.2f ₽",
+            "review %s [%s] — %.4g/%.4g, цитат у %.0f%% вердиктов, %d токенов, %.2f ₽",
             rubric.assignment_id,
+            checks.status.value,
             draft.score,
             draft.max_score,
             draft.evidence_coverage * 100,

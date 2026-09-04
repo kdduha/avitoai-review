@@ -5,14 +5,26 @@
   "stage": "task1",
   "source_note": "Скомпилировано из GO/task1.md. В условии баллов нет — шкала задана методистом, веса равные.",
   "ai_policy": "declare_required",
-  "scale": { "total_max": 10, "pass_threshold": 6, "step": 0.5 },
-  "late_policy": { "grace_days": 1, "penalty_per_grace_day": 1, "after_grace": "zero" },
-
+  "scale": {
+    "total_max": 10,
+    "pass_threshold": 6,
+    "step": 0.5
+  },
+  "late_policy": {
+    "grace_days": 1,
+    "penalty_per_grace_day": 1,
+    "after_grace": "zero"
+  },
   "format_gate": [
     {
       "check": "required_paths",
       "level": "warning",
-      "params": { "paths": ["cmd/", "internal/"] },
+      "params": {
+        "paths": [
+          "cmd/",
+          "internal/"
+        ]
+      },
       "note": "«Разделите код на логические директории (cmd/, internal/, pkg/)»"
     },
     {
@@ -22,7 +34,9 @@
         "pattern": "Shutting down service-courier",
         "label": "Сообщение о завершении работы в логе",
         "expected": "строка «Shutting down service-courier»",
-        "in": [".go"]
+        "in": [
+          ".go"
+        ]
       },
       "note": "Условие задаёт текст сообщения буквально"
     },
@@ -33,7 +47,9 @@
         "pattern": "\"port\"|--port|PORT",
         "label": "Переопределение порта флагом командной строки",
         "expected": "обработка флага --port",
-        "in": [".go"]
+        "in": [
+          ".go"
+        ]
       },
       "note": "«go run cmd/main.go --port 3000»"
     },
@@ -44,7 +60,9 @@
         "pattern": "/ping",
         "label": "Эндпоинт GET /ping",
         "expected": "маршрут /ping",
-        "in": [".go"]
+        "in": [
+          ".go"
+        ]
       }
     },
     {
@@ -54,7 +72,9 @@
         "pattern": "healthcheck",
         "label": "Эндпоинт HEAD /healthcheck",
         "expected": "маршрут /healthcheck",
-        "in": [".go"]
+        "in": [
+          ".go"
+        ]
       }
     },
     {
@@ -64,27 +84,40 @@
         "pattern": "signal\\.Notify|SIGTERM|SIGINT",
         "label": "Обработка сигналов завершения",
         "expected": "signal.Notify с SIGINT/SIGTERM",
-        "in": [".go"]
+        "in": [
+          ".go"
+        ]
       }
     },
     {
       "check": "required_paths",
       "level": "warning",
-      "params": { "paths": [".env.example"] },
+      "params": {
+        "paths": [
+          ".env.example"
+        ]
+      },
       "note": "Параметры сервера читаются из .env — пример файла должен быть в репозитории"
     },
     {
-      "check": "code_absent",
+      "check": "forbidden_paths",
       "level": "warning",
       "params": {
-        "pattern": "(^|/)\\.env$",
+        "paths": [
+          ".env"
+        ],
         "label": "Реальный .env не закоммичен"
       },
       "note": "Закоммиченный .env — и нарушение гигиены, и потенциальная утечка секретов"
     },
-    { "check": "token_budget", "level": "info", "params": { "max_tokens": 40000 } }
+    {
+      "check": "token_budget",
+      "level": "info",
+      "params": {
+        "max_tokens": 40000
+      }
+    }
   ],
-
   "criteria": [
     {
       "id": "c1",
