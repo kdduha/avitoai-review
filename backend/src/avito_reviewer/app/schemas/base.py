@@ -13,3 +13,5 @@ class InitResponse(BaseModel):
     service: str
     version: str
     sources: list[SubmissionSource]
+    llm_provider: str
+    rubrics: list[str]

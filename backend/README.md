@@ -7,38 +7,117 @@
 ```bash
 uv sync
 uv run uvicorn avito_reviewer.app.main:app --reload   # http://localhost:8000/docs
+uv run pytest                                         # тесты
 uv run python scripts/ingest_pr_example.py            # разбор реального PR
 
 docker compose up --build                             # из корня репозитория
 ```
 
-Конфиг — переменные окружения `INGEST_*` (см. `avito_reviewer/config.py`),
-`LOG_LEVEL` (по умолчанию `INFO`).
+Конфиг — переменные окружения `INGEST_*` и `AI_*` (см. `avito_reviewer/config.py`),
+`LOG_LEVEL` (по умолчанию `INFO`). Без ключей приложение стартует на провайдере
+`fake`: весь путь проходится, модель не вызывается.
+
+```bash
+AI_LLM__PROVIDER=openrouter AI_LLM__API_KEY=...   # внешняя модель
+AI_LLM__PROVIDER=local AI_LLM__LOCAL_BASE_URL=... # локальный контур целиком
+AI_LLM__FORCE_LOCAL=true                          # аварийный тумблер
+```
 
 ## Эндпоинты
 
 - `GET /health` — liveness
-- `GET /init` — статус бутстрапа (поднятые провайдеры ingest)
+- `GET /init` — статус бутстрапа: провайдеры ingest, маршрут модели, рубрики
 - `POST /ingest` — `{link, source, assignment_id?, deadline_at?}` → `SubmissionBundle`
+- `GET /rubrics`, `GET /rubrics/{assignment_id}` — каталог рубрик
+- `POST /review` — `{link, rubric_id | rubric, gate_facts?, condition_text?}` →
+  `{bundle, files, draft}`: сдача, тексты файлов и черновик с проверенными цитатами
+- `POST /detect` — `{link, rubric_id?}` → `{bundle, files, report}`: рекомендательный
+  отчёт о признаках ГенИИ
+- `GET /cost` — журнал шлюза в цифрах: вызовы, токены, рубли
+
+`/review` и `/detect` сами тянут сдачу по ссылке и отдают `bundle` вместе с
+результатом: разложить это на три вызова значило бы трижды сходить в GitHub за
+одним и тем же. Базы ещё нет, поэтому каждый прогон — свежий ingest.
+
+## Демо без ключа и без GitHub
+
+```bash
+uv run python scripts/demo.py review     # записанный бандл, ключей не нужно
+uv run python scripts/demo.py detect
+```
+
+По умолчанию берётся `scripts/fixtures/go-task1-pr42.json` — ровно та форма, что
+отдаёт ingest на настоящем PR, включая крупный файл без инлайненного тела. Другие
+источники (флаги идут до подкоманды):
+
+```bash
+git clone https://github.com/ai-talent-hub-avito/homework_examples.git
+uv run python scripts/demo.py --repo "homework_examples/GO/Хорошее решение 1-3" review
+uv run python scripts/demo.py --link https://github.com/owner/repo/pull/1 review
+```
+
+`scripts/local_bundle.py` собирает из каталога тот же `SubmissionBundle`, что отдал
+бы провайдер, — демо идёт по настоящему пути, а не по параллельному. Провайдером
+он не оформлен намеренно: заглушек под нереализованные источники в коде не держим.
 
 ## Структура
 
 ```
 src/avito_reviewer/
-  config.py              IngestConfig / GitHubConfig, читаются из env
+  config.py              IngestConfig / AIConfig и вложенные, читаются из env
   logsetup.py            configure_logging(): один stderr-хендлер на дерево avito_reviewer
   app/                   HTTP-слой
     main.py              create_app(): configure_logging, lifespan (IngestService), роутеры
     routers/             APIRouter по доменам: base (/health, /init), ingest (/ingest)
     schemas/             Pydantic-модели запросов/ответов, по файлу на роутер
   ingest/                ссылка → SubmissionBundle
-    service.py           IngestService: SubmissionSource → провайдер
+    service.py           IngestService: SubmissionSource → провайдер; резолвер content_ref
     models.py            SubmissionBundle и связанные модели — контракт для всех слоёв ниже
-    diff.py              разбор unified diff (unidiff)
+    diff.py              разбор unified diff (unidiff): изменённые строки и текст головы
+    content.py           разбор ручек content_ref — схемы знает только ingest
     providers/github.py  единственный провайдер, клиент — githubkit
-  ai/                    PrivacyGateway, Review Agent, AI-Detection — пока пусто
-scripts/                 ручные примеры (не тесты)
+  ai/                    всё, что связано с моделями
+    service.py           AIService: prepare (async) → review / detect (sync)
+    content.py           тексты артефактов: excerpt | дозагрузка | дифф, флаг partial
+    rubric.py            схема рубрики, разбор JSON, реестр каталога
+    llm/                 PrivacyGateway — единственный выход к моделям
+    review/              промпт из рубрики, валидатор цитат, агрегатор баллов
+    detection/           ансамбль сигналов ГенИИ + signals/
+rubrics/                 рубрики как данные: добавить курс = добавить JSON
+scripts/                 ручные примеры и демо (не тесты)
+tests/                   pytest; factories.py строит настоящие модели, не двойники
 ```
+
+### Границы
+
+`ai` работает только с `SubmissionBundle` и `Rubric` — про источник сдачи он не
+знает ничего, эта зависимость заперта в `ingest`. Обратно: схемы `content_ref`
+разбирает только `ingest`, а `ai` ходит за телами файлов через протокол
+`ContentResolver`, которому `IngestService` удовлетворяет структурно.
+
+Наружу к моделям ходит один `PrivacyGateway`. Прямые вызовы провайдеров вне
+`ai/llm` запрещены архитектурно и проверяются тестом
+`test_llm_calls_leave_only_through_the_gateway`: он же разрешает сетевые вызовы в
+`ingest` — доступ к источнику сдачи это его работа — и запрещает там SDK моделей.
+
+### Чего в `SubmissionBundle` нет, и что из этого следует
+
+**Полного текста файла может не быть.** Ingest инлайнит `excerpt` только в пределах
+своего бюджета; крупные файлы едут diff-only. `ai/content.py` сводит три источника
+(`excerpt`, дозагрузка по `content_ref`, дифф) к одному объекту и помечает неполные
+флагом `partial`. Дифф файла, добавленного этой сдачей, — это весь файл, и
+фрагментом он не считается.
+
+Что из этого следует по всему слою: в промпте такой файл помечен, и системная
+инструкция запрещает утверждать по нему, что чего-то нет; валидатор цитат говорит
+«не найдено в доступной части», а не «такого текста нет»; стилометрия и перплексия
+такие файлы пропускают; список уходит в черновик (`partial_artifacts`) и в
+ограничения детектора.
+
+**История не хранит списка файлов.** `Revision` несёт время и объём коммита, но не
+пути: GitHub отдаёт их отдельным запросом на каждый коммит. Поэтому форензика не
+обещает «эта строка из того коммита» — она подсвечивает крупные файлы, добавленные
+сдачей, и пишет в обосновании, что связь косвенная.
 
 Роутер только оркестрирует, логика — в сервисах; схемы ответа отделены от доменных
 моделей; всё I/O — `async`. Общий `IngestService` создаётся в lifespan и берётся из
@@ -74,18 +153,22 @@ scripts/                 ручные примеры (не тесты)
 - [ ] классификатор артефактов + денилист шума (`solution` / `evidence` / `tooling` / `noise`)
 - [ ] стриппинг ноутбуков; парсеры docx / xlsx / pdf
 - [ ] GitHub webhook: проверка HMAC-подписи, дедуп по `delivery_id`; poller как fallback
-- [ ] `get_file`-тул: резолвер `content_ref` и произвольных путей репозитория
+- [x] резолвер `content_ref` (`IngestService.fetch_content`) и ручки на любой путь репо
+- [ ] `get_file` как тул агента в чате ревьюера (резолвер под ним уже есть)
 
 **Проверки и оценка**
-- [ ] Format Gate (объём, шрифты, число тест-кейсов, smoke-тесты) — до вызова LLM
+- [ ] Format Gate (объём, шрифты, число тест-кейсов, smoke-тесты) — до вызова LLM;
+      правила уже лежат в рубриках (`format_gate`), исполнителя ещё нет
 - [ ] Rubric Compiler: условие → JSON-рубрика, подтверждение методистом
 - [ ] Assignment Engine: `WorkProfile` от LLM + детерминированный солвер (венгерский / min-cost flow)
-- [ ] агрегатор баллов в коде: `Σ criterion × weight`, штраф за срок, confidence-флаги
+- [x] агрегатор баллов в коде: `Σ criterion × weight`, штраф за срок, confidence-флаги
 
 **AI-слой**
-- [ ] PrivacyGateway: regex + NER (Natasha / slovnet) + псевдонимизация + валидатор остатка + аудит
-- [ ] Review Agent: structured output по критериям, обязательные цитаты + их программная валидация
-- [ ] AI-Detection: git-форензика + перплексия (local logprobs) + стилометрия + LLM-judge, калибровка
+- [x] PrivacyGateway: regex + псевдонимизация + валидатор остатка + аудит
+- [ ] PrivacyGateway: NER на локальной модели (Natasha / slovnet) поверх регулярок
+- [x] Review Agent: structured output по критериям, обязательные цитаты + их программная валидация
+- [x] AI-Detection: git-форензика + стилометрия + LLM-judge; перплексия ждёт локального сервинга
+- [ ] калибровка порогов детектора на вердиктах ревьюеров — данных пока нет
 
 **Интеграции**
 - [ ] экспорт ведомости в Google Sheets

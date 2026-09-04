@@ -5,3 +5,11 @@ services:
       - "8000:8000"
     environment:
       INGEST_GITHUB__TOKEN: ${INGEST_GITHUB__TOKEN:-}
+      # Без ключа поднимается провайдер `fake`: весь путь проходится,
+      # модель не вызывается.
+      AI_LLM__PROVIDER: ${AI_LLM__PROVIDER:-fake}
+      AI_LLM__API_KEY: ${AI_LLM__API_KEY:-}
+      AI_LLM__MODEL: ${AI_LLM__MODEL:-openai/gpt-4o-mini}
+      AI_LLM__LOCAL_BASE_URL: ${AI_LLM__LOCAL_BASE_URL:-}
+      AI_LLM__FORCE_LOCAL: ${AI_LLM__FORCE_LOCAL:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}

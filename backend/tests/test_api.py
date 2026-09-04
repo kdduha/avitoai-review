@@ -1,0 +1,242 @@
+"""HTTP-слой: ревью и детектор как ручки, а не как библиотека.
+
+Сеть не трогаем: ingest подменяется заглушкой, модель — фейковым провайдером.
+Проверяется то, за что отвечает слой: коды ошибок, состав ответа и то, что
+блокирующий разбор не выполняется в событийном цикле.
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+from factories import GO_MAIN, artifact, go_bundle, go_rubric, partial_artifact
+from fastapi.testclient import TestClient
+
+from avito_reviewer.ai import AIService
+from avito_reviewer.ai.llm import fake_gateway
+from avito_reviewer.ai.rubric import RubricStore
+from avito_reviewer.app.main import create_app
+from avito_reviewer.config import AIConfig
+from avito_reviewer.ingest import InvalidLinkError, ProviderFetchError
+
+VERDICTS = json.dumps(
+    {
+        "verdicts": [
+            {
+                "criterion_id": cid,
+                "score": 2,
+                "confidence": 0.9,
+                "verdict": f"разбор {cid}",
+                "evidence": [
+                    {"artifact": "cmd/main.go", "start_line": 11, "end_line": 11,
+                     "quote": 'r.Get("/ping", handlePing)'}
+                ],
+                "student_feedback": "",
+                "improvement_hint": "",
+                "needs_human_attention": False,
+                "attention_reason": "",
+            }
+            for cid in ("c1", "c2", "c3")
+        ]
+    },
+    ensure_ascii=False,
+)
+
+LINK = "https://github.com/acme/courier/pull/7"
+
+
+class StubIngest:
+    """Заглушка ingest: ручки не должны требовать сети, чтобы быть проверяемыми."""
+
+    def __init__(self, bundle=None, error: Exception | None = None) -> None:
+        self.bundle = bundle if bundle is not None else go_bundle()
+        self.error = error
+        self.calls = 0
+
+    async def ingest(self, link, source, *, context=None):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.bundle
+
+    async def fetch_content(self, content_ref):
+        return None
+
+    async def aclose(self):
+        return None
+
+    @property
+    def sources(self):
+        return []
+
+
+@pytest.fixture
+def make_client():
+    def build(*, ingest=None, responses=None, rubrics=True):
+        app = create_app()
+        client = TestClient(app)
+        client.__enter__()
+        gateway, provider = fake_gateway(responses if responses is not None else [VERDICTS])
+        app.state.ingest = ingest or StubIngest()
+        app.state.ai = AIService(AIConfig(), gateway=gateway, resolver=app.state.ingest)
+        if not rubrics:
+            app.state.rubrics = RubricStore("нет такого каталога")
+        return client, provider
+
+    return build
+
+
+# --------------------------------------------------------------------------- #
+# каталог рубрик
+# --------------------------------------------------------------------------- #
+
+def test_rubrics_are_listed(make_client):
+    client, _ = make_client()
+    listed = client.get("/rubrics").json()
+    assert any(item["assignment_id"] == "go-task1" for item in listed)
+
+
+def test_one_rubric_comes_back_in_full(make_client):
+    """Ревьюеру нужны критерии и якоря, чтобы понимать, против чего стоял вердикт."""
+    client, _ = make_client()
+    rubric = client.get("/rubrics/go-task1").json()
+    assert rubric["criteria"][0]["checks"]
+    assert client.get("/rubrics/нет-такой").status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# ревью
+# --------------------------------------------------------------------------- #
+
+def test_review_returns_bundle_files_and_draft(make_client):
+    """Одним запросом — всё, что нужно рабочему месту: иначе три похода в GitHub."""
+    client, _ = make_client()
+    body = client.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).json()
+
+    assert body["bundle"]["origin_url"] == LINK
+    assert [f["path"] for f in body["files"]] == ["cmd/main.go"]
+    assert body["files"][0]["text"].startswith("package main")
+    assert body["draft"]["score"] > 0
+    assert body["draft"]["verdicts"][0]["evidence"][0]["status"] == "valid"
+
+
+def test_review_accepts_an_inline_rubric(make_client):
+    """Rubric Compiler отдаёт рубрику на подтверждение — в каталоге её ещё нет."""
+    client, _ = make_client()
+    response = client.post(
+        "/review",
+        json={"link": LINK, "rubric": go_rubric().model_dump(mode="json")},
+    )
+    assert response.status_code == 200
+    assert len(response.json()["draft"]["verdicts"]) == 3
+
+
+def test_review_demands_exactly_one_rubric(make_client):
+    client, _ = make_client()
+    assert client.post("/review", json={"link": LINK}).status_code == 422
+    assert client.post(
+        "/review",
+        json={"link": LINK, "rubric_id": "go-task1",
+              "rubric": go_rubric().model_dump(mode="json")},
+    ).status_code == 422
+
+
+def test_unknown_rubric_is_404_and_names_what_exists(make_client):
+    client, _ = make_client()
+    response = client.post("/review", json={"link": LINK, "rubric_id": "нет"})
+    assert response.status_code == 404
+    assert "go-task1" in response.json()["detail"]
+
+
+def test_gate_facts_reach_the_model(make_client):
+    client, provider = make_client()
+    client.post(
+        "/review",
+        json={"link": LINK, "rubric_id": "go-task1",
+              "gate_facts": ["Тест-кейсов: ожидалось 21, фактически 18."]},
+    )
+    assert "фактически 18" in provider.last_prompt
+
+
+def test_partial_files_are_visible_in_the_response(make_client):
+    """Ревьюер должен видеть, по каким файлам вывод модели заведомо неполон."""
+    bundle = go_bundle(artifacts=[
+        artifact("cmd/main.go", text=GO_MAIN),
+        partial_artifact("internal/store/pg.go"),
+    ])
+    client, _ = make_client(ingest=StubIngest(bundle))
+    body = client.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).json()
+
+    partial = [f for f in body["files"] if f["partial"]]
+    assert [f["path"] for f in partial] == ["internal/store/pg.go"]
+    assert body["draft"]["partial_artifacts"] == ["internal/store/pg.go"]
+
+
+# --------------------------------------------------------------------------- #
+# детектор
+# --------------------------------------------------------------------------- #
+
+def test_detect_returns_an_advisory_report(make_client):
+    client, _ = make_client(responses=['{"findings": []}'])
+    body = client.post("/detect", json={"link": LINK}).json()
+
+    assert body["report"]["advisory"] is True
+    assert body["report"]["limitations"]
+    assert "не влияет на балл" in body["report"]["advisory_note"]
+
+
+def test_detect_spans_are_addressable(make_client):
+    """Ревьюер подтверждает или отклоняет конкретный спан — ему нужен идентификатор."""
+    bundle = go_bundle(artifacts=[artifact("internal/service/order.go", text="x\n" * 900)])
+    client, _ = make_client(ingest=StubIngest(bundle), responses=['{"findings": []}'])
+    body = client.post("/detect", json={"link": LINK}).json()
+
+    for span in body["report"]["spans"]:
+        assert span["id"] and span["reviewer_verdict"] == "pending"
+
+
+# --------------------------------------------------------------------------- #
+# ошибки источника
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(
+    "error,status",
+    [(InvalidLinkError("не ссылка на PR"), 422), (ProviderFetchError("502 от GitHub"), 502)],
+)
+def test_ingest_failures_are_translated(make_client, error, status):
+    client, _ = make_client(ingest=StubIngest(error=error))
+    assert client.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).status_code == status
+    assert client.post("/detect", json={"link": LINK}).status_code == status
+
+
+def test_a_missing_rubric_costs_no_ingest_call(make_client):
+    """Незачем ходить в GitHub за работой, которую не с чем сверять."""
+    ingest = StubIngest()
+    client, _ = make_client(ingest=ingest)
+    client.post("/review", json={"link": LINK, "rubric_id": "нет"})
+    assert ingest.calls == 0
+
+
+# --------------------------------------------------------------------------- #
+# служебное
+# --------------------------------------------------------------------------- #
+
+def test_init_reports_the_model_route_and_rubrics(make_client):
+    client, _ = make_client()
+    body = client.get("/init").json()
+    assert body["llm_provider"] == "fake"
+    assert "go-task1" in body["rubrics"]
+
+
+def test_cost_accumulates_across_runs(make_client):
+    """Журнал общий на приложение: счёт за поток работ складывается из прогонов."""
+    client, _ = make_client(responses=[VERDICTS] * 4)
+    client.post("/review", json={"link": LINK, "rubric_id": "go-task1"})
+    after_first = client.get("/cost").json()
+    client.post("/review", json={"link": LINK, "rubric_id": "go-task1"})
+    after_second = client.get("/cost").json()
+
+    assert after_first["calls"] > 0
+    assert after_second["calls"] == after_first["calls"] * 2
+    assert after_second["cost_rub"] > after_first["cost_rub"]
