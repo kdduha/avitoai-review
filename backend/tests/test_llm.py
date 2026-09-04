@@ -19,6 +19,7 @@ from avito_reviewer.ai.llm import (
     TaskKind,
     complete_json,
     fake_gateway,
+    gateway_from_config,
     provider_from_config,
     residual_risk,
 )
@@ -118,7 +119,31 @@ def test_force_local_disables_external_calls():
     assert external.calls == []
 
 
-def test_local_only_without_local_provider_fails_loudly():
+def test_a_local_only_deployment_still_serves_review():
+    """`AI_LLM__PROVIDER=local` должен включать локальный контур целиком.
+
+    Ревью объявляет маршрут «наружу после скраба». Внешнего провайдера при
+    такой настройке нет, и падать тут неправильно: данные и так не покидают
+    периметр. Маршрут понижается, и понижение видно в ответе.
+    """
+    local = FakeProvider(responses=["локальный"], name="local", is_local=True)
+    gateway = PrivacyGateway(external=None, local=local)
+
+    result = gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+    assert result.text == "локальный"
+    assert result.route is RoutePolicy.LOCAL_ONLY
+    assert result.downgraded is True
+
+
+def test_a_gateway_built_from_config_can_actually_answer():
+    """Шлюз из конфига, а не из тестового двойника: на этом стыке ломается тише всего."""
+    gateway = gateway_from_config(LLMConfig())
+    result = gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+    assert result.text
+    assert gateway.audit.summary()["calls"] == 1
+
+
+def test_local_only_without_any_provider_fails_loudly():
     gateway = PrivacyGateway(external=FakeProvider(name="external", is_local=False), local=None)
     with pytest.raises(LLMUnavailable, match="локальной модели"):
         gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.NER)
@@ -165,16 +190,55 @@ def test_audit_counts_cost():
     assert summary["cost_rub"] > 0
 
 
-def test_checkpoint_scopes_the_summary_to_one_run():
+def test_collect_scopes_the_summary_to_one_run():
     """Журнал общий на приложение, а счёт за прогон должен быть свой у каждого."""
     gateway, _ = fake_gateway(["a", "b", "c"])
     gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
-    mark = gateway.audit.checkpoint()
-    gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
-    gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+    with gateway.audit.collect() as spend:
+        gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+        gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
 
-    assert gateway.audit.summary(since=mark)["calls"] == 2
+    assert gateway.audit.summary(spend)["calls"] == 2
     assert gateway.audit.summary()["calls"] == 3
+
+
+def test_overlapping_runs_do_not_bill_each_other():
+    """`/review` уходит в поток: два прогона идут внахлёст, и срез по длине врал бы."""
+    gateway, _ = fake_gateway(["a", "b", "c", "d"])
+
+    with gateway.audit.collect() as first:
+        gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+        with gateway.audit.collect() as second:
+            gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+        gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+
+    assert gateway.audit.summary(second)["calls"] == 1
+    assert gateway.audit.summary(first)["calls"] == 3
+
+
+def test_collect_is_thread_safe():
+    """Шлюз один на приложение, а запросы приходят из разных потоков."""
+    import threading
+
+    gateway, provider = fake_gateway([])
+    provider.default = "ok"
+    per_thread: list[int] = []
+
+    def run() -> None:
+        with gateway.audit.collect() as spend:
+            for _ in range(20):
+                gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+            per_thread.append(len(spend))
+
+    threads = [threading.Thread(target=run) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(gateway.audit.records) == 160
+    # Каждый прогон видит минимум свои 20 записей и никогда не теряет их.
+    assert all(count >= 20 for count in per_thread)
 
 
 def test_audit_records_failures():

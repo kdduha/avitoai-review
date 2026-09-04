@@ -293,6 +293,50 @@ def test_distant_spans_do_not_merge():
     ])) == 2
 
 
+def test_located_finding_keeps_its_lines_next_to_a_whole_file_span():
+    """У находки в файле-фрагменте нет смещений — только строки.
+
+    Слияние по смещениям утаскивало такую находку в «спан на весь файл», и
+    ревьюер терял место, где что-то нашли.
+    """
+    merged = merge_spans(
+        [
+            Span(artifact="pg.go", score=0.6, signals=[SignalKind.FORENSICS], reason="коммит"),
+            Span(
+                artifact="pg.go",
+                start_line=44,
+                end_line=58,
+                score=0.7,
+                signals=[SignalKind.JUDGE],
+                reason="клише",
+            ),
+        ]
+    )
+    located = [span for span in merged if span.start_line is not None]
+
+    assert len(merged) == 2
+    assert (located[0].start_line, located[0].end_line) == (44, 58)
+
+
+def test_overlapping_line_spans_merge_without_offsets():
+    merged = merge_spans(
+        [
+            Span(
+                artifact="pg.go", start_line=40, end_line=50, score=0.6, signals=[SignalKind.JUDGE]
+            ),
+            Span(
+                artifact="pg.go",
+                start_line=45,
+                end_line=60,
+                score=0.7,
+                signals=[SignalKind.PERPLEXITY],
+            ),
+        ]
+    )
+    assert len(merged) == 1
+    assert (merged[0].start_line, merged[0].end_line) == (40, 60)
+
+
 def test_span_has_a_stable_id_for_the_reviewer_verdict():
     span = Span(artifact="a.go", start_line=4, end_line=9, score=0.5, signals=[SignalKind.JUDGE])
     twin = Span(artifact="a.go", start_line=4, end_line=9, score=0.9, signals=[SignalKind.FORENSICS])

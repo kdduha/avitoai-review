@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -64,10 +64,14 @@ class LatePolicy(BaseModel):
     def apply(
         self, score: float, submitted_at: datetime | None, deadline_at: datetime | None
     ) -> tuple[float, str]:
-        if not submitted_at or not deadline_at or submitted_at <= deadline_at:
+        if not submitted_at or not deadline_at:
             return score, "сдано в срок"
 
-        days = max(1, -(-(submitted_at - deadline_at) // timedelta(days=1)))
+        submitted, deadline = _aligned(submitted_at, deadline_at)
+        if submitted <= deadline:
+            return score, "сдано в срок"
+
+        days = max(1, -(-(submitted - deadline) // timedelta(days=1)))
         if days <= self.grace_days:
             penalty = self.penalty_per_grace_day * days
             return max(0.0, score - penalty), f"просрочка {days} дн., штраф −{penalty:g}"
@@ -75,6 +79,22 @@ class LatePolicy(BaseModel):
             return 0.0, f"просрочка {days} дн. — 0 баллов"
         penalty = self.penalty_per_grace_day * days
         return max(0.0, score - penalty), f"просрочка {days} дн., штраф −{penalty:g}"
+
+
+def _aligned(left: datetime, right: datetime) -> tuple[datetime, datetime]:
+    """Привести срок и время сдачи к сравнимому виду.
+
+    `submitted_at` приходит от провайдера и всегда со смещением, а `deadline_at`
+    — из тела запроса, где клиент может прислать «2026-02-09T23:59» без зоны.
+    Сравнение таких дат роняет запрос целиком, поэтому наивную дату читаем как
+    UTC: ошибиться на смещение лучше, чем отдать 500 на штатном вводе.
+    """
+    if (left.tzinfo is None) == (right.tzinfo is None):
+        return left, right
+    return (
+        left if left.tzinfo else left.replace(tzinfo=UTC),
+        right if right.tzinfo else right.replace(tzinfo=UTC),
+    )
 
 
 class FormatCheck(BaseModel):
@@ -137,6 +157,7 @@ class Rubric(BaseModel):
                 {**check, "level": level}
                 for level in ("blocking", "warning", "info")
                 for check in value.get(level, [])
+                if isinstance(check, dict)
             ]
         return value
 
@@ -172,7 +193,7 @@ class RubricStore:
         for path in sorted(self.directory.glob("*.json")):
             try:
                 rubric = load_rubric(path)
-            except (ValueError, OSError) as exc:
+            except (ValueError, TypeError, OSError) as exc:
                 log.warning("rubrics: skipping %s — %s", path.name, exc)
                 continue
             self._rubrics[rubric.assignment_id] = rubric

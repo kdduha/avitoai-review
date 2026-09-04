@@ -52,6 +52,16 @@ class DetectionService:
         studied = solution_texts(texts)
         options = self.options
 
+        if self.gateway is None:
+            return self._run(bundle, studied, spend=None)
+
+        # Подписка открывается до первого сигнала: перплексия со своим scorer
+        # тоже ходит к модели, и её токены — часть стоимости этого прогона.
+        with self.gateway.audit.collect() as spend:
+            return self._run(bundle, studied, spend=spend)
+
+    def _run(self, bundle, studied, *, spend) -> DetectionReport:
+        options = self.options
         signals = [
             forensics.analyse(bundle, weight=options.weight_forensics),
             stylometry.analyse(studied, weight=options.weight_stylometry),
@@ -62,8 +72,6 @@ class DetectionService:
                 scorer=self.scorer,
             ),
         ]
-
-        mark = self.gateway.audit.checkpoint() if self.gateway is not None else 0
         if options.use_judge and self.gateway is not None:
             signals.append(judge.analyse(self.gateway, studied, weight=options.weight_judge))
 
@@ -71,8 +79,8 @@ class DetectionService:
         self._note_partial(report, studied)
         self._check_declaration(report, studied)
 
-        if self.gateway is not None:
-            summary = self.gateway.audit.summary(since=mark)
+        if spend is not None and self.gateway is not None:
+            summary = self.gateway.audit.summary(spend)
             report.tokens_in = int(summary["tokens_in"])
             report.tokens_out = int(summary["tokens_out"])
             report.cost_rub = float(summary["cost_rub"])

@@ -37,3 +37,7 @@ class SubmissionProvider(ABC):
         itself never touched.
         """
         return None
+
+    async def aclose(self) -> None:
+        """Release whatever the provider holds open. Called once on shutdown."""
+        return None

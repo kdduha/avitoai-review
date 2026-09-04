@@ -102,6 +102,14 @@ class PrivacyGateway:
         if self.force_local:
             route = RoutePolicy.LOCAL_ONLY
 
+        # Внешнего провайдера нет, локальный есть: считаем локально и говорим об
+        # этом. Уронить задачу было бы строже, но не безопаснее — данные и так
+        # не покидают периметр, — а `AI_LLM__PROVIDER=local` иначе не работал бы
+        # вовсе: локальный контур целиком должен включаться одной переменной.
+        if route is RoutePolicy.EXTERNAL_AFTER_SCRUB and self.external is None and self.local:
+            route = RoutePolicy.LOCAL_ONLY
+            downgraded = True
+
         provider = self._pick(route, task)
         started = time.monotonic()
         error: str | None = None

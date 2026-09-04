@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from .schema import DetectionReport, SignalKind, SignalResult, Span
 
@@ -82,31 +82,27 @@ def combine(
 # --------------------------------------------------------------------------- #
 
 def merge_spans(spans: Iterable[Span]) -> list[Span]:
-    """Слить пересекающиеся спаны одного файла в один с общими основаниями."""
+    """Слить пересекающиеся спаны одного файла в один с общими основаниями.
+
+    Пересечение считается по номерам строк, а не по смещениям в символах.
+    Смещений нет у находок в файлах, доступных фрагментом, — но строки есть, и
+    ронять их в «спан на весь файл» нельзя: ревьюер потеряет место находки, а
+    интерфейс покажет карточку без диапазона.
+    """
     by_artifact: dict[str, list[Span]] = {}
     for span in spans:
         by_artifact.setdefault(span.artifact, []).append(span)
 
     merged: list[Span] = []
     for artifact_spans in by_artifact.values():
-        positioned = [s for s in artifact_spans if s.start is not None]
-        whole_file = [s for s in artifact_spans if s.start is None]
+        by_line = [s for s in artifact_spans if s.start_line is not None]
+        by_char = [s for s in artifact_spans if s.start_line is None and s.start is not None]
+        whole_file = [s for s in artifact_spans if s.start_line is None and s.start is None]
 
-        positioned.sort(key=lambda s: (s.start or 0))
-        current: Span | None = None
-        for span in positioned:
-            if current is None:
-                current = span.model_copy(deep=True)
-                continue
-            if span.start is not None and current.end is not None and span.start <= current.end:
-                current = _fuse(current, span)
-            else:
-                merged.append(current)
-                current = span.model_copy(deep=True)
-        if current is not None:
-            merged.append(current)
+        merged.extend(_merge_run(by_line, _line_bounds))
+        merged.extend(_merge_run(by_char, _char_bounds))
 
-        # Файловые спаны от форензики: сливаем в один на файл.
+        # Спаны на весь файл (форензика, стилометрия): один на файл.
         if whole_file:
             fused = whole_file[0].model_copy(deep=True)
             for span in whole_file[1:]:
@@ -116,9 +112,41 @@ def merge_spans(spans: Iterable[Span]) -> list[Span]:
     return merged
 
 
+def _line_bounds(span: Span) -> tuple[int, int]:
+    start = span.start_line or 0
+    return start, span.end_line or start
+
+
+def _char_bounds(span: Span) -> tuple[int, int]:
+    start = span.start or 0
+    return start, span.end or start
+
+
+def _merge_run(
+    spans: list[Span], bounds: Callable[[Span], tuple[int, int]]
+) -> list[Span]:
+    """Слить пересекающиеся спаны, сравнивая их в одной системе координат."""
+    merged: list[Span] = []
+    current: Span | None = None
+    for span in sorted(spans, key=lambda s: bounds(s)[0]):
+        if current is None:
+            current = span.model_copy(deep=True)
+            continue
+        if bounds(span)[0] <= bounds(current)[1]:
+            current = _fuse(current, span)
+        else:
+            merged.append(current)
+            current = span.model_copy(deep=True)
+    if current is not None:
+        merged.append(current)
+    return merged
+
+
 def _fuse(left: Span, right: Span) -> Span:
     fused = left.model_copy(deep=True)
+    fused.start = _min(left.start, right.start)
     fused.end = max(left.end or 0, right.end or 0) or None
+    fused.start_line = _min(left.start_line, right.start_line)
     fused.end_line = max(left.end_line or 0, right.end_line or 0) or None
     fused.signals = list(dict.fromkeys(left.signals + right.signals))
     # Совпадение двух независимых сигналов усиливает вывод, но не до единицы:
@@ -128,6 +156,11 @@ def _fuse(left: Span, right: Span) -> Span:
     fused.reason = "; ".join(dict.fromkeys(reasons))
     fused.excerpt = left.excerpt or right.excerpt
     return fused
+
+
+def _min(left: int | None, right: int | None) -> int | None:
+    present = [value for value in (left, right) if value is not None]
+    return min(present) if present else None
 
 
 def _interval(available: list[SignalResult], score: float) -> tuple[float, float]:

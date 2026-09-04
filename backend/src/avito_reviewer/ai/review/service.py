@@ -74,15 +74,14 @@ class ReviewService:
             partial_artifacts=[text.path for text in gradable if text.partial],
         )
 
-        mark = self.gateway.audit.checkpoint()
-
-        for batch in batch_criteria(criteria, self.options.batch_size):
-            verdicts = self._review_batch(
-                batch, rubric, gradable, gate_facts or [], condition_text, draft
-            )
-            for verdict in verdicts:
-                criterion = rubric.criterion(verdict.criterion_id)
-                draft.verdicts.append(validator.validate_verdict(verdict, criterion))
+        with self.gateway.audit.collect() as spend:
+            for batch in batch_criteria(criteria, self.options.batch_size):
+                verdicts = self._review_batch(
+                    batch, rubric, gradable, gate_facts or [], condition_text, draft
+                )
+                for verdict in verdicts:
+                    criterion = rubric.criterion(verdict.criterion_id)
+                    draft.verdicts.append(validator.validate_verdict(verdict, criterion))
 
         self._fill_missing(draft, criteria)
 
@@ -102,7 +101,7 @@ class ReviewService:
             )
         draft.needs_human_attention = bool(draft.attention_reasons) or bool(draft.failed_criteria)
 
-        summary = self.gateway.audit.summary(since=mark)
+        summary = self.gateway.audit.summary(spend)
         draft.tokens_in = int(summary["tokens_in"])
         draft.tokens_out = int(summary["tokens_out"])
         draft.cost_rub = float(summary["cost_rub"])

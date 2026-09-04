@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 import json
+import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,21 +49,35 @@ class AuditRecord:
 @dataclass
 class AuditLog:
     records: list[AuditRecord] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
+    _sinks: list[list[AuditRecord]] = field(default_factory=list, repr=False, compare=False)
 
     def add(self, record: AuditRecord) -> None:
-        self.records.append(record)
+        with self._lock:
+            self.records.append(record)
+            for sink in self._sinks:
+                sink.append(record)
 
     # ------------------------------------------------------------------ #
 
-    def checkpoint(self) -> int:
-        """Mark the current end of the journal to summarise one run against.
+    @contextmanager
+    def collect(self) -> Iterator[list[AuditRecord]]:
+        """Записи одного прогона, отдельно от общего журнала.
 
-        The journal is per-application, not per-request: it has to be, because the
-        cost of a course run is the sum over its submissions. So a single review
-        reports its own tokens by taking a checkpoint first and summarising the
-        tail — otherwise every draft would claim the whole day's spend.
+        Журнал один на приложение — иначе не сложить стоимость прогона курса.
+        Но черновик обязан отчитаться о своих токенах, а не о чужих, и срезом по
+        длине это не решается: `/review` уходит в поток, два запроса идут
+        внахлёст, и «хвост журнала» первого включит записи второго. Поэтому
+        подписка, а не индекс.
         """
-        return len(self.records)
+        sink: list[AuditRecord] = []
+        with self._lock:
+            self._sinks.append(sink)
+        try:
+            yield sink
+        finally:
+            with self._lock:
+                self._sinks.remove(sink)
 
     @property
     def total_cost_rub(self) -> float:
@@ -79,9 +96,9 @@ class AuditLog:
     def external_calls(self) -> list[AuditRecord]:
         return [r for r in self.records if r.route != "local_only"]
 
-    def summary(self, since: int = 0) -> dict[str, object]:
-        """Counters over the records added after ``since`` (a :meth:`checkpoint`)."""
-        window = self.records[since:]
+    def summary(self, records: Sequence[AuditRecord] | None = None) -> dict[str, object]:
+        """Counters over ``records``, or over the whole journal when omitted."""
+        window = list(self.records if records is None else records)
         return {
             "calls": len(window),
             "external_calls": sum(1 for r in window if r.route != "local_only"),

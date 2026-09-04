@@ -179,6 +179,9 @@ def provider_from_config(config: LLMConfig) -> Provider:
     ``fake`` is the default on purpose: the service must start, and its tests must
     run, without anyone holding a key.
     """
+    if config.provider == "fake":
+        return FakeProvider()
+
     if config.provider == "local":
         return OpenAICompatibleProvider(
             base_url=config.local_base_url,
@@ -191,16 +194,19 @@ def provider_from_config(config: LLMConfig) -> Provider:
         )
 
     if config.provider == "openrouter":
-        if config.api_key is None:
+        # `AI_LLM__API_KEY=` в compose приезжает пустой строкой, а не None:
+        # пустой ключ должен падать здесь, а не 401-м на первом же ревью.
+        key = config.api_key.get_secret_value() if config.api_key else ""
+        if not key:
             raise LLMError("AI_LLM__PROVIDER=openrouter, но AI_LLM__API_KEY не задан")
         return OpenAICompatibleProvider(
             base_url=config.base_url,
             model=config.model,
-            api_key=config.api_key.get_secret_value(),
+            api_key=key,
             name="openrouter",
             is_local=False,
             timeout=config.timeout,
             max_retries=config.max_retries,
         )
 
-    return FakeProvider()
+    raise LLMError(f"неизвестный провайдер: {config.provider}")

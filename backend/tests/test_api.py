@@ -222,6 +222,26 @@ def test_a_missing_rubric_costs_no_ingest_call(make_client):
 # служебное
 # --------------------------------------------------------------------------- #
 
+def test_the_app_produces_a_draft_on_its_default_config():
+    """Без ключей приложение обязано проходить весь путь, а не только стартовать.
+
+    Здесь намеренно не подменяется шлюз: собранный из конфига, он ходит к
+    провайдеру `fake`. Тот отвечает не по схеме, поэтому батчи не разбираются —
+    и это правильный исход: черновик приходит с явной пометкой «оценить
+    вручную», а обращения попадают в журнал стоимости.
+    """
+    app = create_app()
+    with TestClient(app) as client:
+        app.state.ingest = StubIngest()
+        body = client.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).json()
+        cost = client.get("/cost").json()
+
+    draft = body["draft"]
+    assert draft["failed_criteria"], "провайдер ответил не по схеме — это должно быть видно"
+    assert all(v["needs_human_attention"] for v in draft["verdicts"])
+    assert cost["calls"] > 0, "обращения к модели обязаны попадать в журнал"
+
+
 def test_init_reports_the_model_route_and_rubrics(make_client):
     client, _ = make_client()
     body = client.get("/init").json()

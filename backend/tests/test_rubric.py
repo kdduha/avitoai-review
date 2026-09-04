@@ -114,3 +114,30 @@ def test_a_broken_file_does_not_take_down_the_catalogue(tmp_path):
 
 def test_a_missing_directory_is_survivable(tmp_path):
     assert RubricStore(tmp_path / "nope").ids == []
+
+
+def test_naive_deadline_does_not_crash_the_endpoint():
+    """`deadline_at` приходит из тела запроса и может приехать без зоны."""
+    policy = LatePolicy(grace_days=1, penalty_per_grace_day=1)
+    aware = NOW
+    naive = NOW.replace(tzinfo=None)
+
+    assert policy.apply(6.0, aware, naive) == (6.0, "сдано в срок")
+    score, note = policy.apply(6.0, aware + timedelta(hours=3), naive)
+    assert score == 5.0 and "штраф" in note
+
+
+def test_malformed_gate_entry_is_skipped_not_fatal(tmp_path):
+    """Одна кривая запись не должна валить разбор рубрики TypeError'ом."""
+    (tmp_path / "r.json").write_text(
+        json.dumps(
+            {
+                "assignment_id": "r",
+                "scale": {"total_max": 1},
+                "format_gate": {"blocking": ["нет тестов", {"check": "required_paths"}]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = RubricStore(tmp_path)
+    assert [c.check for c in store.get("r").format_gate] == ["required_paths"]
