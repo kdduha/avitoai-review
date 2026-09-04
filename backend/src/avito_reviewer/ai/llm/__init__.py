@@ -17,7 +17,7 @@ from .providers import (
     provider_from_config,
 )
 from .routing import DataClass, RoutePolicy, TaskKind
-from .scrub import Scrubber, residual_risk
+from .scrub import Identity, Scrubber, residual_risk
 from .structured import StructuredError, complete_json
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "DataClass",
     "FakeProvider",
     "GatewayResult",
+    "Identity",
     "LLMError",
     "LLMResponse",
     "LLMUnavailable",

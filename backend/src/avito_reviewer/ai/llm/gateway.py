@@ -15,6 +15,7 @@ import hashlib
 import json
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -30,7 +31,7 @@ from .providers import (
     provider_from_config,
 )
 from .routing import DataClass, RoutePolicy, TaskKind, resolve_policy
-from .scrub import Scrubber, residual_risk
+from .scrub import Identity, Scrubber, residual_risk
 
 
 @dataclass
@@ -75,12 +76,19 @@ class PrivacyGateway:
         temperature: float = 0.0,
         max_tokens: int = 2000,
         json_mode: bool = False,
+        identities: Sequence[Identity] = (),
     ) -> GatewayResult:
+        """`identities` — те, чья личность известна до разбора.
+
+        Скрабер вычищает их точно, а не по совпадению шаблона: логин студента
+        стоит в каждой строке импорта, и угадывать его было бы странно, когда
+        он лежит в бандле.
+        """
         request_id = uuid.uuid4().hex[:12]
         route = resolve_policy(task, data_class)
         downgraded = False
 
-        scrubber = Scrubber()
+        scrubber = Scrubber(identities)
         scrubbed: list[dict[str, str]] = []
         redactions = 0
         mapping: dict[str, str] = {}
@@ -94,7 +102,7 @@ class PrivacyGateway:
         # Валидатор остаточного риска: если после скраба что-то осталось,
         # маршрут понижается принудительно. Fail-safe, а не fail-open.
         if route is RoutePolicy.EXTERNAL_AFTER_SCRUB:
-            leftovers = residual_risk("\n".join(m["content"] for m in scrubbed))
+            leftovers = residual_risk("\n".join(m["content"] for m in scrubbed), identities)
             if leftovers:
                 route = RoutePolicy.LOCAL_ONLY
                 downgraded = True

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from avito_reviewer.ai.llm import (
     DataClass,
     FakeProvider,
+    Identity,
     LLMError,
     LLMUnavailable,
     PrivacyGateway,
@@ -72,6 +73,42 @@ def test_gateway_rehydrates_the_answer():
     gateway, _ = fake_gateway(["связаться с [EMAIL_1]"])
     result = gateway.complete([{"role": "user", "content": "почта ivan@x.ru"}], task=TaskKind.REVIEW)
     assert result.text == "связаться с ivan@x.ru"
+
+
+def test_known_identities_are_scrubbed_before_the_call():
+    """Сквозная гарантия: что бы ни сделал вызывающий код, логин не уедет."""
+    gateway, provider = fake_gateway(["ответ"])
+    gateway.complete(
+        [{"role": "user", "content": 'import "github.com/student-1043/svc"'}],
+        task=TaskKind.REVIEW,
+        identities=[Identity(role="student", handles=("student-1043",))],
+    )
+    assert "student-1043" not in provider.last_prompt
+    assert "[STUDENT_HANDLE]" in provider.last_prompt
+
+
+def test_a_name_the_scrubber_missed_downgrades_the_route(monkeypatch):
+    """Валидатор остаточного риска — последняя преграда, и он смотрит на имена."""
+    external = FakeProvider(responses=["внешний"], name="external", is_local=False)
+    local = FakeProvider(responses=["локальный"], name="local", is_local=True)
+    gateway = PrivacyGateway(external=external, local=local)
+
+    import avito_reviewer.ai.llm.gateway as gateway_module
+    from avito_reviewer.ai.llm.scrub import ScrubResult
+
+    class BlindScrubber:
+        def __init__(self, *args, **kwargs) -> None: ...
+
+        def scrub(self, text):
+            return ScrubResult(text=text, mapping={}, redactions=0)
+
+    monkeypatch.setattr(gateway_module, "Scrubber", BlindScrubber)
+    result = gateway.complete(
+        [{"role": "user", "content": "Проверил Ерёмин Сергей Петрович"}], task=TaskKind.REVIEW
+    )
+
+    assert result.downgraded is True
+    assert external.calls == []
 
 
 def test_ner_never_leaves_the_perimeter():

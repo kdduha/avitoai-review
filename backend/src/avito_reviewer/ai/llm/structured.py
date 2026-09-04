@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
 from .gateway import GatewayResult, PrivacyGateway
 from .routing import DataClass, TaskKind
+from .scrub import Identity
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -71,6 +73,7 @@ def complete_json(
     temperature: float = 0.0,
     max_tokens: int = 3000,
     repair_attempts: int = 1,
+    identities: Sequence[Identity] = (),
 ) -> tuple[T, GatewayResult]:
     """Получить ответ, разобранный в `model_cls`."""
     conversation = list(messages)
@@ -85,6 +88,7 @@ def complete_json(
             temperature=temperature,
             max_tokens=max_tokens,
             json_mode=True,
+            identities=identities,
         )
         last_raw = result.text
 

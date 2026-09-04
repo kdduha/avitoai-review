@@ -22,7 +22,7 @@ from avito_reviewer.ingest import SubmissionBundle
 from . import gate
 from .content import ArtifactText, ContentResolver, build_texts
 from .detection import DetectionReport, DetectionService
-from .llm import PrivacyGateway, gateway_from_config
+from .llm import Identity, PrivacyGateway, gateway_from_config
 from .review import ReviewDraft, ReviewService
 from .rubric import Rubric
 
@@ -52,6 +52,23 @@ class AIService:
         """Тексты артефактов сдачи, с дозагрузкой тел в пределах бюджета."""
         return await build_texts(bundle, self.resolver, config=self.config.content)
 
+    @staticmethod
+    def identities(bundle: SubmissionBundle, student_name: str | None = None) -> list[Identity]:
+        """Кого скрабер обязан вычистить точно, а не по совпадению шаблона.
+
+        Логины лежат в бандле, поэтому закрываются всегда: `student-1043` стоит
+        в каждой строке импорта, и полагаться тут на общие правила незачем.
+        Имени в `StudentRef` нет намеренно — его подставляет платформа, когда
+        знает; без него имя остаётся на общих детекторах.
+        """
+        return [
+            Identity(
+                role="student",
+                name=student_name,
+                handles=tuple(bundle.student_ref.external_handles.values()),
+            )
+        ]
+
     def review(
         self,
         bundle: SubmissionBundle,
@@ -60,6 +77,7 @@ class AIService:
         *,
         gate_facts: list[str] | None = None,
         condition_text: str = "",
+        student_name: str | None = None,
     ) -> ReviewDraft:
         # Формальные проверки идут первыми и не стоят токенов. Если работа не
         # принимается по формату, модель не запускается вовсе — ревьюер и так
@@ -85,6 +103,7 @@ class AIService:
                 deadline_at=bundle.deadline_at,
                 gate_facts=facts,
                 condition_text=condition_text,
+                identities=self.identities(bundle, student_name),
             )
 
         draft.gate = checks
@@ -106,8 +125,10 @@ class AIService:
         bundle: SubmissionBundle,
         texts: list[ArtifactText],
         rubric: Rubric | None = None,
+        *,
+        student_name: str | None = None,
     ) -> DetectionReport:
-        report = self.detection_service.analyse(bundle, texts)
+        report = self.detection_service.analyse(bundle, texts, self.identities(bundle, student_name))
         if rubric and rubric.ai_sensitive_criteria:
             # Ревьюеру важно, по каким именно критериям сигнал вообще что-то
             # меняет: сгенерированный docker-compose и сгенерированная карта

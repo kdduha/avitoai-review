@@ -9,9 +9,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 
 from avito_reviewer.ai.content import ArtifactText, solution_texts
-from avito_reviewer.ai.llm import PrivacyGateway
+from avito_reviewer.ai.llm import Identity, PrivacyGateway
 from avito_reviewer.config import DetectionOptions
 from avito_reviewer.ingest import SubmissionBundle
 
@@ -45,7 +46,10 @@ class DetectionService:
         self.ai_sensitive_paths = ai_sensitive_paths or set()
 
     def analyse(
-        self, bundle: SubmissionBundle, texts: list[ArtifactText]
+        self,
+        bundle: SubmissionBundle,
+        texts: list[ArtifactText],
+        identities: Sequence[Identity] = (),
     ) -> DetectionReport:
         # `tooling` и `noise` исключены и отсюда тоже: сгенерированный
         # Dockerfile ничего не говорит о самостоятельности студента.
@@ -58,9 +62,9 @@ class DetectionService:
         # Подписка открывается до первого сигнала: перплексия со своим scorer
         # тоже ходит к модели, и её токены — часть стоимости этого прогона.
         with self.gateway.audit.collect() as spend:
-            return self._run(bundle, studied, spend=spend)
+            return self._run(bundle, studied, spend=spend, identities=identities)
 
-    def _run(self, bundle, studied, *, spend) -> DetectionReport:
+    def _run(self, bundle, studied, *, spend, identities: Sequence[Identity] = ()) -> DetectionReport:
         options = self.options
         signals = [
             forensics.analyse(bundle, weight=options.weight_forensics),
@@ -73,7 +77,7 @@ class DetectionService:
             ),
         ]
         if options.use_judge and self.gateway is not None:
-            signals.append(judge.analyse(self.gateway, studied, weight=options.weight_judge))
+            signals.append(judge.analyse(self.gateway, studied, weight=options.weight_judge, identities=identities))
 
         report = combine(signals, ai_sensitive_paths=self.ai_sensitive_paths)
         self._note_partial(report, studied)

@@ -1,32 +1,127 @@
 """Обезличивание перед отправкой наружу.
 
-Здесь сейчас базовый слой: регулярки по контактам и идентификаторам плюс
-метаданные git. Полный контур из архитектуры — NER на локальной модели,
-код-специфика, валидатор остаточного риска — отдельный модуль, который
-встанет на это же место.
+Три слоя, в порядке убывания надёжности.
 
-Принципиальное решение уже здесь: **псевдонимизация, а не вырезание**.
-Модель должна видеть, что `[PERSON_1]` в README и `[PERSON_1]` в комментарии
-к коду — один человек, иначе разбор теряет связность. Обратная карта живёт
-ровно столько, сколько идёт запрос, и наружу не уходит.
+**Известные личности.** Система знает, чью работу разбирает: в бандле лежит
+`StudentRef` с логинами, а имена приходят от платформы. Гадать про эти
+идентификаторы не нужно — они вычищаются точно, вместе с падежами фамилии,
+инициалами, логином внутри путей импорта и локальной частью почты. Это самый
+надёжный слой, и он первый.
+
+**Имена, которых мы не знаем.** В работе встречаются третьи лица: соавтор,
+преподаватель, коллега из чата. Их ловят детерминированные признаки русского
+ФИО — прежде всего отчество (`-ович`, `-евна`, `-инична`), которое почти не
+даёт ложных срабатываний, и маркеры «Автор:», «Выполнил:», «Проверил:».
+Опознание ограничено кириллицей намеренно: имена живут в тексте, а латиница —
+это идентификаторы кода, и трогать их значило бы ломать разбор.
+
+**Контакты и номера.** Почта, телефон, телеграм, СНИЛС, ИНН, паспорт, карта.
+
+Принципиальное решение: **псевдонимизация, а не вырезание**. Модель должна
+видеть, что `[STUDENT]` в README и `[STUDENT]` в комментарии к коду — один
+человек, иначе разбор теряет связность. Обратная карта живёт ровно столько,
+сколько идёт запрос, и наружу не уходит.
+
+Чего слой не делает: не читает морфологию словарём и не запускает NER. По
+архитектуре сюда встанет NER на локальной модели (`TaskKind.NER` уже заперт в
+локальный маршрут) — он добавит имена без отчества и без маркера. До тех пор
+`residual_risk` честно сообщает о том, что осталось похожим на имя, и маршрут
+понижается, а не притворяется чистым.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 # Порядок важен: сначала длинные и специфичные шаблоны, потом общие.
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b")),
     ("PHONE", re.compile(r"(?<!\d)(?:\+7|8)[\s(-]?\d{3}[\s)-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}(?!\d)")),
-    ("TELEGRAM", re.compile(r"(?<![\w/])@[A-Za-z][A-Za-z0-9_]{4,31}\b")),
+    ("TELEGRAM", re.compile(
+        r"(?<![\w/])@(?!author|param|return|throws|see|deprecated|override|inheritDoc)"
+        r"[A-Za-z][A-Za-z0-9_]{4,31}\b",
+        re.I,
+    )),
     ("SNILS", re.compile(r"(?<!\d)\d{3}-\d{3}-\d{3}[\s-]\d{2}(?!\d)")),
     ("INN", re.compile(r"(?<!\d)\d{12}(?!\d)")),
     ("PASSPORT", re.compile(r"(?<!\d)\d{4}\s?\d{6}(?!\d)")),
     ("CARD", re.compile(r"(?<!\d)(?:\d{4}[\s-]?){3}\d{4}(?!\d)")),
     ("URL_PROFILE", re.compile(r"https?://(?:t\.me|vk\.com|linkedin\.com)/\S+")),
 ]
+
+_WORD = r"[А-ЯЁ][а-яё]+"
+
+# Отчество — самый специфичный признак русского ФИО: слов с такими окончаниями
+# вне имён почти нет, поэтому по нему можно забирать соседние слова целиком.
+PATRONYMIC = r"[А-ЯЁ][а-яё]+(?:ович|овича|овичу|овичем|евич|евича|евичу|евичем|ьич|ича|овна|овны|овне|овну|овной|евна|евны|евне|евну|евной|инична|иничны)"
+
+NAME_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    # «Улитин Пётр Валерьевич», «Пётр Валерьевич Улитин»
+    ("PERSON", re.compile(rf"\b{_WORD}\s+{_WORD}\s+{PATRONYMIC}\b")),
+    ("PERSON", re.compile(rf"\b{_WORD}\s+{PATRONYMIC}\b")),
+    ("PERSON", re.compile(rf"\b{PATRONYMIC}\s+{_WORD}\b")),
+    # «Улитин П. В.», «Улитин П.»
+    ("PERSON", re.compile(rf"\b{_WORD}\s+[А-ЯЁ]\.\s*(?:[А-ЯЁ]\.)?")),
+    ("PERSON", re.compile(rf"\b[А-ЯЁ]\.\s*(?:[А-ЯЁ]\.)?\s*{_WORD}\b")),
+]
+
+# Два слова с заглавных подряд в одной строке. Замер на 7938 словах реального
+# технического текста: три срабатывания, из них два — настоящее имя. При такой
+# точности правило дешевле держать включённым, чем объяснять ревьюеру, почему
+# соавтор уехал во внешнюю модель.
+CAPITALIZED_PAIR = re.compile(rf"(?<![.!?]\s)\b{_WORD}[ \t]+{_WORD}\b")
+
+# Явные маркеры авторства: то, что стоит после них, — имя, даже если отчества нет.
+AUTHOR_MARKER = re.compile(
+    r"(?P<marker>\b(?:Автор|Авторы|Студент|Студентка|Выполнил|Выполнила|Выполнено|Сдал|Сдала|"
+    r"Проверил|Проверила|Ревьюер|Куратор|Преподаватель|Наставник|Ментор|Author|Student)\b\s*[:—–-]?\s*)"
+    rf"(?P<name>{_WORD}(?:\s+{_WORD}){{0,2}}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){{0,2}})"
+)
+
+# Хвосты окончаний для склонения фамилии и имени. Морфологию словарём не
+# читаем: на фамилиях этого хватает, а ошибка в сторону лишней замены дешевле.
+_ENDINGS = ("", "а", "ы", "у", "е", "ом", "ым", "ой", "ей", "и", "я", "ю", "ём", "ев", "ева")
+
+# Код-специфика: владелец пометки и подпись коммита. Логин здесь стоит по
+# конвенции, поэтому ловится и тогда, когда системе он неизвестен — в бандле
+# лежит только тот логин, под которым сдавали.
+CODE_OWNER = re.compile(
+    r"(?P<marker>\b(?:TODO|FIXME|HACK|XXX|NOTE)\s*\()(?P<name>[\w.@-]{3,})(?=\))", re.I
+)
+AUTHOR_TAG = re.compile(
+    r"(?P<marker>(?:@author|Signed-off-by|Co-authored-by|Reviewed-by)\s*:?\s*)(?P<name>[^\n<]{2,58}[^\s<])", re.I
+)
+
+STUDENT_ID = re.compile(r"\b(?:студенческий\s+билет|зачётка|зачетка|студ\.?\s*билет)\s*№?\s*\d+", re.I)
+
+
+@dataclass(frozen=True)
+class Identity:
+    """Тот, чья личность известна системе до разбора.
+
+    Имя приходит не из бандла: `StudentRef` намеренно его не хранит. Его
+    подставляет платформа, когда знает; без имени остаются логины, и это уже
+    закрывает пути импорта вида `github.com/student-1043/...`.
+    """
+
+    role: str = "person"
+    name: str | None = None
+    handles: tuple[str, ...] = ()
+    emails: tuple[str, ...] = ()
+
+    @property
+    def token(self) -> str:
+        return f"[{self.role.upper()}]"
+
+    @property
+    def handle_token(self) -> str:
+        return f"[{self.role.upper()}_HANDLE]"
+
+    @property
+    def email_token(self) -> str:
+        return f"[{self.role.upper()}_EMAIL]"
 
 
 @dataclass
@@ -42,14 +137,55 @@ class ScrubResult:
         return text
 
 
+def _variants(word: str) -> str:
+    """Регулярка на слово со всеми ходовыми падежными окончаниями."""
+    stem = word.rstrip("аеёиоуыэюя") if len(word) > 4 else word
+    tails = "|".join(sorted((re.escape(e) for e in _ENDINGS if e), key=len, reverse=True))
+    return rf"{re.escape(stem)}(?:{tails})?"
+
+
+def _identity_patterns(identity: Identity) -> list[tuple[str, re.Pattern[str]]]:
+    """Точные шаблоны на известного человека — самый надёжный слой скраба."""
+    out: list[tuple[str, re.Pattern[str]]] = []
+
+    for handle in identity.handles:
+        if len(handle) < 3:
+            continue
+        # Логин встречается и сам по себе, и внутри пути импорта каждого файла.
+        out.append((identity.handle_token, re.compile(rf"(?<![\w-]){re.escape(handle)}(?![\w-])", re.I)))
+
+    for email in identity.emails:
+        out.append((identity.email_token, re.compile(re.escape(email), re.I)))
+        local = email.split("@")[0]
+        if len(local) >= 4:
+            out.append((identity.handle_token, re.compile(rf"(?<![\w.]){re.escape(local)}(?![\w@])", re.I)))
+
+    if identity.name:
+        parts = [p for p in re.split(r"\s+", identity.name.strip()) if p]
+        if len(parts) >= 2:
+            # Сначала самая длинная форма, иначе она распадётся на куски.
+            out.append((identity.token, re.compile(rf"\b{re.escape(identity.name)}\b")))
+            surname, given = parts[0], parts[1]
+            out.append((identity.token, re.compile(rf"\b{_variants(surname)}\s+{_variants(given)}\b")))
+            out.append((identity.token, re.compile(rf"\b{_variants(given)}\s+{_variants(surname)}\b")))
+            out.append((identity.token, re.compile(rf"\b{_variants(surname)}\s+[А-ЯЁ]\.\s*(?:[А-ЯЁ]\.)?")))
+        for part in parts:
+            if len(part) >= 4:
+                out.append((identity.token, re.compile(rf"\b{_variants(part)}\b")))
+    return out
+
+
 class Scrubber:
     """Псевдонимизатор с устойчивыми токенами в пределах одного запроса."""
 
-    def __init__(self) -> None:
+    def __init__(self, identities: Sequence[Identity] = ()) -> None:
         self._counters: dict[str, int] = {}
         self._seen: dict[str, str] = {}
+        self.identities = tuple(identities)
 
     def _token_for(self, kind: str, value: str) -> str:
+        if kind.startswith("["):  # токен известной личности задан заранее
+            return kind
         key = f"{kind}:{value.lower()}"
         if key not in self._seen:
             self._counters[kind] = self._counters.get(kind, 0) + 1
@@ -60,33 +196,80 @@ class Scrubber:
         mapping: dict[str, str] = {}
         redactions = 0
 
-        for kind, pattern in PATTERNS:
+        def apply(kind: str, pattern: re.Pattern[str], value_group: str | None = None) -> None:
+            nonlocal text, redactions
+
             def replace(match: re.Match[str]) -> str:
                 nonlocal redactions
-                original = match.group(0)
+                original = match.group(value_group) if value_group else match.group(0)
+                if original.startswith("["):
+                    return match.group(0)
                 token = self._token_for(kind, original)
-                mapping[token] = original
+                mapping.setdefault(token, original)
                 redactions += 1
+                if value_group:
+                    return match.group("marker") + token
                 return token
 
             text = pattern.sub(replace, text)
 
+        # 1. Известные личности — точно и первыми.
+        for identity in self.identities:
+            for kind, pattern in _identity_patterns(identity):
+                apply(kind, pattern)
+
+        # 2. Код-специфика и подписи: конструкция известна целиком, поэтому
+        #    она разбирается до общих шаблонов — иначе «@author» уходит в
+        #    правило телеграма и подпись теряет форму.
+        apply("HANDLE", CODE_OWNER, value_group="name")
+        apply("PERSON", AUTHOR_TAG, value_group="name")
+        apply("PERSON", AUTHOR_MARKER, value_group="name")
+
+        # 3. Контакты и номера.
+        for kind, pattern in PATTERNS:
+            apply(kind, pattern)
+
+        # 4. Имена, которых мы не знали.
+        for kind, pattern in NAME_PATTERNS:
+            apply(kind, pattern)
+        apply("PERSON", CAPITALIZED_PAIR)
+        apply("STUDENT_ID", STUDENT_ID)
+
         return ScrubResult(text=text, mapping=mapping, redactions=redactions)
 
 
-HIGH_CONFIDENCE_LEFTOVERS = [
-    re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b"),
-    re.compile(r"(?<!\d)(?:\+7|8)[\s(-]?\d{3}[\s)-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}(?!\d)"),
+HIGH_CONFIDENCE_LEFTOVERS: list[tuple[str, re.Pattern[str]]] = [
+    ("почта", re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b")),
+    ("телефон", re.compile(r"(?<!\d)(?:\+7|8)[\s(-]?\d{3}[\s)-]?\d{3}[\s-]?\d{2}[\s-]?\d{2}(?!\d)")),
+    ("отчество", re.compile(rf"\b{PATRONYMIC}\b")),
+    ("имя после маркера авторства", AUTHOR_MARKER),
+    ("похоже на имя", CAPITALIZED_PAIR),
+    ("владелец пометки в коде", CODE_OWNER),
+    ("подпись автора", AUTHOR_TAG),
 ]
 
 
-def residual_risk(text: str) -> list[str]:
+def residual_risk(text: str, identities: Iterable[Identity] = ()) -> list[str]:
     """Второй проход по уже очищенному тексту.
 
     Если после скраба что-то осталось, маршрут понижается до локального.
     Ошибка в сторону «не отправили» дешевле ошибки в сторону «отправили».
+
+    Проверять здесь ровно то же, что вычищал скрабер, — не дублирование, а
+    смысл валидатора: он ловит случай, когда шаблон не сработал, а отчёт
+    сказал «заменено N». Отчёт без проверки хуже отсутствия отчёта.
     """
     found: list[str] = []
-    for pattern in HIGH_CONFIDENCE_LEFTOVERS:
-        found.extend(pattern.findall(text))
+
+    for identity in identities:
+        for _, pattern in _identity_patterns(identity):
+            match = pattern.search(text)
+            if match and not match.group(0).startswith("["):
+                found.append(f"{identity.role}: {match.group(0)[:40]}")
+
+    for label, pattern in HIGH_CONFIDENCE_LEFTOVERS:
+        for match in pattern.finditer(text):
+            fragment = match.group("name") if "name" in (match.groupdict() or {}) else match.group(0)
+            if not fragment.startswith("["):
+                found.append(f"{label}: {fragment[:40]}")
     return found

@@ -17,11 +17,13 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 
 from avito_reviewer.ai.content import ArtifactText, gradable_texts
 from avito_reviewer.ai.llm import (
     DataClass,
+    Identity,
     LLMError,
     LLMUnavailable,
     PrivacyGateway,
@@ -56,6 +58,7 @@ class ReviewService:
         deadline_at: datetime | None = None,
         gate_facts: list[str] | None = None,
         condition_text: str = "",
+        identities: Sequence[Identity] = (),
     ) -> ReviewDraft:
         gradable = gradable_texts(texts)
         validator = EvidenceValidator(gradable)
@@ -77,7 +80,8 @@ class ReviewService:
         with self.gateway.audit.collect() as spend:
             for batch in batch_criteria(criteria, self.options.batch_size):
                 verdicts = self._review_batch(
-                    batch, rubric, gradable, gate_facts or [], condition_text, draft
+                    batch, rubric, gradable, gate_facts or [], condition_text, draft,
+                    identities,
                 )
                 for verdict in verdicts:
                     criterion = rubric.criterion(verdict.criterion_id)
@@ -150,6 +154,7 @@ class ReviewService:
         gate_facts: list[str],
         condition_text: str,
         draft: ReviewDraft,
+        identities: Sequence[Identity] = (),
     ) -> list[CriterionVerdict]:
         messages = build_messages(
             rubric, batch, texts, gate_facts=gate_facts, condition_text=condition_text
@@ -163,6 +168,7 @@ class ReviewService:
                 data_class=DataClass.CONTAINS_PD,
                 temperature=self.options.temperature,
                 max_tokens=self.options.max_tokens,
+                identities=identities,
             )
         except (StructuredError, LLMError, LLMUnavailable) as exc:
             # Батч потерян, но остальные критерии ещё можно разобрать.

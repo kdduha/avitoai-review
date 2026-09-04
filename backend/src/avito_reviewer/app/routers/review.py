@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -97,6 +98,7 @@ async def review(body: ReviewRequest, request: Request) -> ReviewResponse:
         rubric,
         gate_facts=body.gate_facts,
         condition_text=body.condition_text,
+        student_name=body.student_name,
     )
     return ReviewResponse(
         bundle=bundle,
@@ -120,7 +122,9 @@ async def detect(body: DetectRequest, request: Request) -> DetectResponse:
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)
-    report = await run_in_threadpool(ai.detect, bundle, texts, rubric)
+    report = await run_in_threadpool(
+        partial(ai.detect, bundle, texts, rubric, student_name=body.student_name)
+    )
     return DetectResponse(
         bundle=bundle,
         files=[ArtifactTextOut.of(text) for text in texts],

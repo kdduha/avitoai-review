@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 
 from pydantic import BaseModel, Field
 
 from avito_reviewer.ai.content import ArtifactText
 from avito_reviewer.ai.llm import (
     DataClass,
+    Identity,
     LLMError,
     LLMUnavailable,
     PrivacyGateway,
@@ -106,6 +108,7 @@ def analyse(
     *,
     weight: float = 0.25,
     max_artifacts: int = 8,
+    identities: Sequence[Identity] = (),
 ) -> SignalResult:
     result = SignalResult(kind=SignalKind.JUDGE, weight=weight)
 
@@ -131,6 +134,7 @@ def analyse(
             data_class=DataClass.CONTAINS_PD,
             temperature=0.0,
             max_tokens=2000,
+            identities=identities,
         )
     except (StructuredError, LLMError, LLMUnavailable) as exc:
         # Детектор не должен ронять обработку сдачи: три остальных сигнала

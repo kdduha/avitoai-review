@@ -20,6 +20,14 @@ class SubmissionRequest(BaseModel):
     assignment_id: UUID | None = None
     deadline_at: datetime | None = None
     student_internal_id: str | None = None
+    student_name: str | None = Field(
+        default=None,
+        description=(
+            "ФИО студента, если платформа его знает. Не уходит в модель: шлюз "
+            "вычищает его вместе с падежами и инициалами. В бандле имени нет "
+            "намеренно, поэтому без этого поля оно остаётся на общих детекторах."
+        ),
+    )
 
 
 class ReviewRequest(SubmissionRequest):
