@@ -12,6 +12,12 @@ docker compose up --build
 - API — http://localhost:8000
 - Swagger — http://localhost:8000/docs
 
+```bash
+cd frontend && npm install && npm run dev
+```
+
+- UI — http://localhost:5173
+
 Ключей для старта не нужно: без них LLM-слой работает на провайдере `fake`. Весь
 конвейер проходится целиком, но отвечать заглушке нечем, поэтому черновик
 приходит с пометкой «оценить вручную» — это и есть штатное поведение при отказе
@@ -21,7 +27,9 @@ docker compose up --build
 ## Состав репозитория
 
 - `backend/` — Python-сервис (FastAPI + uv): ingest, ревью-агент, детектор ГенИИ.
-- `frontend/` — React + Vite, пока на моках.
+- `frontend/` — рабочее место куратора (React + Vite + TS). Проверка работы ходит
+  в настоящий API, типы сгенерированы из OpenAPI; ведомость и каталог курсов пока
+  на моках и помечены плашкой. См. `frontend/README.md`.
 - `backend/rubrics/` — рубрики как данные: добавить курс = добавить JSON.
 
 ![architecture](docs/backend.drawio.png)
