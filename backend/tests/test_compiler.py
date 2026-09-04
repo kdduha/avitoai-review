@@ -119,9 +119,27 @@ def test_missing_scores_become_a_question_not_a_number():
                    "source_quote": "Выполнить декомпозицию системы по двум и более признакам."}],
     ))
 
-    assert any("задайте вес" in q for q in draft.open_questions)
+    assert any("расставьте веса" in q for q in draft.open_questions)
     assert any("не задан максимальный балл" in q for q in draft.open_questions)
     assert any("порог зачёта" in q for q in draft.open_questions)
+
+
+def test_missing_scores_ask_once_not_per_criterion():
+    """Двенадцать одинаковых строк прячут решение, которое нужно принять один раз."""
+    draft, _ = compile_with(answer(total_max=None, criteria=[
+        {"id": f"c{i}", "title": f"Критерий {i}", "max_score": None,
+         "source_quote": "Выполнить декомпозицию системы по двум и более признакам."}
+        for i in range(1, 7)
+    ]))
+    about_weights = [q for q in draft.open_questions if "вес" in q]
+    assert len(about_weights) == 1
+    assert "6 шт." in about_weights[0]
+
+
+def test_questions_are_not_repeated():
+    """Модель охотно дублирует то, что уже вывел код."""
+    draft, _ = compile_with(answer(open_questions=["Задайте шкалу", "Задайте шкалу"]))
+    assert draft.open_questions.count("Задайте шкалу") == 1
 
 
 def test_scale_that_does_not_add_up_is_reported():

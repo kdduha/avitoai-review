@@ -280,6 +280,7 @@ def _assemble(
     criteria: list[Criterion] = []
     sources: list[CriterionSource] = []
     seen: set[str] = set()
+    unscored: list[str] = []
 
     for index, proposed in enumerate(output.criteria, start=1):
         criterion_id = proposed.id or f"c{index}"
@@ -290,9 +291,7 @@ def _assemble(
 
         sources.append(_check_source(criterion_id, proposed.source_quote, haystack))
         if proposed.max_score is None:
-            questions.append(
-                f"{criterion_id} «{proposed.title}»: в условии нет балла — задайте вес"
-            )
+            unscored.append(criterion_id)
         criteria.append(
             Criterion(
                 id=criterion_id,
@@ -306,6 +305,18 @@ def _assemble(
                 auto_verifiable=proposed.auto_verifiable,
                 ai_sensitive=proposed.ai_sensitive,
             )
+        )
+
+    # Одним вопросом, а не по одному на критерий: методисту нужно решение о
+    # шкале целиком, а список из двенадцати одинаковых строк это решение прячет.
+    if unscored and len(unscored) == len(criteria):
+        questions.append(
+            f"в условии нет баллов ни за один критерий ({len(unscored)} шт.) — "
+            f"расставьте веса или подтвердите равные"
+        )
+    elif unscored:
+        questions.append(
+            "в условии нет балла за критерии: " + ", ".join(unscored) + " — задайте веса"
         )
 
     scale, scale_warnings, scale_questions = _scale(output, criteria)
@@ -343,7 +354,17 @@ def _assemble(
         ],
         criteria=criteria,
     )
-    return RubricDraft(rubric=rubric, sources=sources, warnings=warnings, open_questions=questions)
+    return RubricDraft(
+        rubric=rubric,
+        sources=sources,
+        warnings=_unique(warnings),
+        open_questions=_unique(questions),
+    )
+
+
+def _unique(items: list[str]) -> list[str]:
+    """Порядок сохраняем, повторы убираем: модель часто дублирует наши же выводы."""
+    return list(dict.fromkeys(item.strip() for item in items if item.strip()))
 
 
 def _check_source(criterion_id: str, quote: str, haystack: str) -> CriterionSource:
