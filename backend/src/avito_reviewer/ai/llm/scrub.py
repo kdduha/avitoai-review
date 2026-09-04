@@ -59,12 +59,12 @@ PATRONYMIC = r"[А-ЯЁ][а-яё]+(?:ович|овича|овичу|овичем
 
 NAME_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # «Улитин Пётр Валерьевич», «Пётр Валерьевич Улитин»
-    ("PERSON", re.compile(rf"\b{_WORD}\s+{_WORD}\s+{PATRONYMIC}\b")),
-    ("PERSON", re.compile(rf"\b{_WORD}\s+{PATRONYMIC}\b")),
-    ("PERSON", re.compile(rf"\b{PATRONYMIC}\s+{_WORD}\b")),
+    ("PERSON", re.compile(rf"\b{_WORD}[ \t]+{_WORD}[ \t]+{PATRONYMIC}\b")),
+    ("PERSON", re.compile(rf"\b{_WORD}[ \t]+{PATRONYMIC}\b")),
+    ("PERSON", re.compile(rf"\b{PATRONYMIC}[ \t]+{_WORD}\b")),
     # «Улитин П. В.», «Улитин П.»
-    ("PERSON", re.compile(rf"\b{_WORD}\s+[А-ЯЁ]\.\s*(?:[А-ЯЁ]\.)?")),
-    ("PERSON", re.compile(rf"\b[А-ЯЁ]\.\s*(?:[А-ЯЁ]\.)?\s*{_WORD}\b")),
+    ("PERSON", re.compile(rf"\b{_WORD}[ \t]+[А-ЯЁ]\.(?:[ \t]*[А-ЯЁ]\.)?")),
+    ("PERSON", re.compile(rf"\b[А-ЯЁ]\.(?:[ \t]*[А-ЯЁ]\.)?[ \t]*{_WORD}\b")),
 ]
 
 # Два слова с заглавных подряд в одной строке. Замер на 7938 словах реального
@@ -76,8 +76,8 @@ CAPITALIZED_PAIR = re.compile(rf"(?<![.!?]\s)\b{_WORD}[ \t]+{_WORD}\b")
 # Явные маркеры авторства: то, что стоит после них, — имя, даже если отчества нет.
 AUTHOR_MARKER = re.compile(
     r"(?P<marker>\b(?:Автор|Авторы|Студент|Студентка|Выполнил|Выполнила|Выполнено|Сдал|Сдала|"
-    r"Проверил|Проверила|Ревьюер|Куратор|Преподаватель|Наставник|Ментор|Author|Student)\b\s*[:—–-]?\s*)"
-    rf"(?P<name>{_WORD}(?:\s+{_WORD}){{0,2}}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+){{0,2}})"
+    r"Проверил|Проверила|Ревьюер|Куратор|Преподаватель|Наставник|Ментор|Author|Student)\b[ \t]*[:—–-]?[ \t]*)"
+    rf"(?P<name>{_WORD}(?:[ \t]+{_WORD}){{0,2}}|[A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+){{0,2}})"
 )
 
 # Хвосты окончаний для склонения фамилии и имени. Морфологию словарём не
@@ -88,13 +88,13 @@ _ENDINGS = ("", "а", "ы", "у", "е", "ом", "ым", "ой", "ей", "и", "�
 # конвенции, поэтому ловится и тогда, когда системе он неизвестен — в бандле
 # лежит только тот логин, под которым сдавали.
 CODE_OWNER = re.compile(
-    r"(?P<marker>\b(?:TODO|FIXME|HACK|XXX|NOTE)\s*\()(?P<name>[\w.@-]{3,})(?=\))", re.I
+    r"(?P<marker>\b(?:TODO|FIXME|HACK|XXX|NOTE)[ \t]*\()(?P<name>[\w.@-]{3,})(?=\))", re.I
 )
 AUTHOR_TAG = re.compile(
-    r"(?P<marker>(?:@author|Signed-off-by|Co-authored-by|Reviewed-by)\s*:?\s*)(?P<name>[^\n<]{2,58}[^\s<])", re.I
+    r"(?P<marker>(?:@author|Signed-off-by|Co-authored-by|Reviewed-by)[ \t]*:?[ \t]*)(?P<name>[^\n<]{2,58}[^\s<])", re.I
 )
 
-STUDENT_ID = re.compile(r"\b(?:студенческий\s+билет|зачётка|зачетка|студ\.?\s*билет)\s*№?\s*\d+", re.I)
+STUDENT_ID = re.compile(r"\b(?:студенческий[ \t]+билет|зачётка|зачетка|студ\.?[ \t]*билет)[ \t]*№?[ \t]*\d+", re.I)
 
 
 @dataclass(frozen=True)
@@ -166,9 +166,9 @@ def _identity_patterns(identity: Identity) -> list[tuple[str, re.Pattern[str]]]:
             # Сначала самая длинная форма, иначе она распадётся на куски.
             out.append((identity.token, re.compile(rf"\b{re.escape(identity.name)}\b")))
             surname, given = parts[0], parts[1]
-            out.append((identity.token, re.compile(rf"\b{_variants(surname)}\s+{_variants(given)}\b")))
-            out.append((identity.token, re.compile(rf"\b{_variants(given)}\s+{_variants(surname)}\b")))
-            out.append((identity.token, re.compile(rf"\b{_variants(surname)}\s+[А-ЯЁ]\.\s*(?:[А-ЯЁ]\.)?")))
+            out.append((identity.token, re.compile(rf"\b{_variants(surname)}[ \t]+{_variants(given)}\b")))
+            out.append((identity.token, re.compile(rf"\b{_variants(given)}[ \t]+{_variants(surname)}\b")))
+            out.append((identity.token, re.compile(rf"\b{_variants(surname)}[ \t]+[А-ЯЁ]\.(?:[ \t]*[А-ЯЁ]\.)?")))
         for part in parts:
             if len(part) >= 4:
                 out.append((identity.token, re.compile(rf"\b{_variants(part)}\b")))

@@ -157,3 +157,67 @@ def test_validator_is_quiet_on_clean_text():
 
 def test_validator_ignores_tokens_it_put_there():
     assert residual_risk("Автор: [STUDENT], ревьюер [PERSON_1]", [STUDENT]) == []
+
+
+# --------------------------------------------------------------------------- #
+# скраб не должен ломать то, что идёт после него
+# --------------------------------------------------------------------------- #
+
+def test_replacement_never_swallows_a_line_break():
+    """Съеденный перенос сдвигает нумерацию строк и рушит цитаты.
+
+    Шаблон имени с `\\s` захватывал перевод строки, склеивая «Автор: Улитин П.»
+    со следующей строкой работы.
+    """
+    source = "# Сервис\nАвтор: Улитин П.\nПринимает заказы.\n"
+    assert len(scrub(source).splitlines()) == len(source.splitlines())
+
+
+def test_rehydrated_answer_stays_parseable():
+    """Перенос, возвращённый внутрь строки JSON, ронял разбор всего батча."""
+    import json
+
+    from avito_reviewer.ai.llm import TaskKind, fake_gateway
+
+    gateway, _ = fake_gateway([json.dumps({"quote": "Автор: [STUDENT]"}, ensure_ascii=False)])
+    result = gateway.complete(
+        [{"role": "user", "content": "Автор: Улитин П.\nДалее по тексту."}],
+        task=TaskKind.REVIEW,
+        identities=[STUDENT],
+    )
+    assert json.loads(result.text)["quote"] == "Автор: Улитин П."
+
+
+def test_citation_still_validates_against_the_original_file():
+    """Модель видит псевдоним, цитирует его, а сверяем мы с настоящим файлом.
+
+    Если регидратация вернёт не ту форму имени, валидатор объявит верную цитату
+    выдумкой — обезличивание не имеет права ломать проверку цитат.
+    """
+    import json
+
+    from avito_reviewer.ai.content import from_artifact
+    from avito_reviewer.ai.llm import TaskKind, fake_gateway
+    from avito_reviewer.ai.review.evidence import EvidenceValidator
+    from avito_reviewer.ai.review.schema import Evidence, EvidenceStatus
+    from avito_reviewer.ingest import Artifact, ArtifactRole, ChangeStatus, LineRange
+
+    body = "# Сервис\nАвтор: Улитин П.\nПринимает заказы.\n"
+    artifact = Artifact(
+        path="README.md", status=ChangeStatus.ADDED, role=ArtifactRole.SOLUTION,
+        lang="markdown", size_bytes=len(body.encode()), line_count=4,
+        changed_ranges=[LineRange(start=1, end=3)], excerpt=body, diff=None,
+    )
+    text = from_artifact(artifact)
+    assert text is not None
+
+    gateway, _ = fake_gateway([json.dumps({"quote": "Автор: [STUDENT]"}, ensure_ascii=False)])
+    answer = gateway.complete(
+        [{"role": "user", "content": body}], task=TaskKind.REVIEW, identities=[STUDENT]
+    )
+    quote = json.loads(answer.text)["quote"]
+
+    evidence = EvidenceValidator([text]).validate(
+        Evidence(artifact="README.md", start_line=2, quote=quote)
+    )
+    assert evidence.status is EvidenceStatus.VALID
