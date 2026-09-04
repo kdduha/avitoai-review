@@ -129,23 +129,39 @@ class OpenAICompatibleProvider:
             except json.JSONDecodeError as exc:
                 last_error = LLMError(f"{self.name} вернул не JSON: {exc}")
             else:
-                usage = body.get("usage", {})
-                reported = usage.get("cost_rub")
-                return LLMResponse(
-                    text=body["choices"][0]["message"]["content"] or "",
-                    model=body.get("model", self.model),
-                    tokens_in=usage.get("prompt_tokens", 0),
-                    tokens_out=usage.get("completion_tokens", 0),
-                    truncated=body["choices"][0].get("finish_reason") == "length",
-                    cost_rub=float(reported) if isinstance(reported, (int, float)) else None,
-                    latency_ms=int((time.monotonic() - started) * 1000),
-                    raw=body,
-                )
+                return self._parse(body, started)
 
             if attempt < self.max_retries:
                 time.sleep(1.5 * (attempt + 1))
 
         raise last_error or LLMUnavailable(f"{self.name}: неизвестная ошибка")
+
+    def _parse(self, body: dict[str, Any], started: float) -> LLMResponse:
+        """Разобрать ответ, не веря его форме.
+
+        Шлюзы присылают `"usage": null`, пустой `choices`, ответ без `message`.
+        Разбор «в лоб» дал бы AttributeError или KeyError — а конвейер выше
+        ловит только `LLMError`, и всякая такая неожиданность превращалась бы в
+        пятисотку на весь запрос вместо потери одного батча критериев.
+        """
+        try:
+            choice = (body.get("choices") or [])[0]
+            message = choice.get("message") or {}
+        except (LookupError, AttributeError, TypeError) as exc:
+            raise LLMError(f"{self.name} вернул ответ неизвестной формы: {exc}") from exc
+
+        usage = body.get("usage") or {}
+        reported = usage.get("cost_rub") if isinstance(usage, dict) else None
+        return LLMResponse(
+            text=message.get("content") or "",
+            model=body.get("model", self.model),
+            tokens_in=usage.get("prompt_tokens", 0) if isinstance(usage, dict) else 0,
+            tokens_out=usage.get("completion_tokens", 0) if isinstance(usage, dict) else 0,
+            truncated=choice.get("finish_reason") == "length",
+            cost_rub=float(reported) if isinstance(reported, (int, float)) else None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            raw=body,
+        )
 
 
 # --------------------------------------------------------------------------- #

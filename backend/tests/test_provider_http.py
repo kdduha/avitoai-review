@@ -143,3 +143,44 @@ def test_gateway_works_over_real_http(server):
     assert "ivan@avito.ru" not in json.dumps(Handler.received[0]["body"], ensure_ascii=False)
     assert result.text == "свяжитесь с ivan@avito.ru"
     assert gateway.audit.records[0].redactions == 1
+
+
+# --------------------------------------------------------------------------- #
+# ответы неожиданной формы
+# --------------------------------------------------------------------------- #
+
+def test_null_usage_does_not_crash_the_request(server):
+    """Шлюзы присылают `"usage": null`, и `.get("usage", {})` отдаёт None.
+
+    Дальше падал AttributeError, которого конвейер не ловит: он ждёт LLMError.
+    Один странный ответ шлюза ронял весь `/review` пятисоткой.
+    """
+    Handler.script = [(200, {"model": "m", "usage": None,
+                             "choices": [{"message": {"content": "готово"}}]})]
+    response = provider_for(server).complete([{"role": "user", "content": "x"}])
+
+    assert response.text == "готово"
+    assert response.tokens_in == 0 and response.cost_rub is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"model": "m"},                                  # без choices
+        {"model": "m", "choices": []},                   # пустой список
+        {"model": "m", "choices": "нет"},                # вообще не список
+        {"model": "m", "choices": [{"finish_reason": "stop"}]},  # без message
+    ],
+)
+def test_malformed_body_becomes_a_catchable_error(server, body):
+    """Неизвестная форма ответа — потеря одного батча, а не пятисотка на запрос."""
+    Handler.script = [(200, body)]
+    provider = provider_for(server, max_retries=0)
+
+    if body.get("choices") == [{"finish_reason": "stop"}]:
+        # `message` нет — это пустой ответ, его чинит повтор с большим бюджетом.
+        assert provider.complete([{"role": "user", "content": "x"}]).text == ""
+        return
+
+    with pytest.raises(LLMError):
+        provider.complete([{"role": "user", "content": "x"}])
