@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Minus, Plus, Quote, TriangleAlert } from 'lucide-react'
+import { ChevronDown, ListChecks, Minus, Plus, Quote, TriangleAlert } from 'lucide-react'
 import type { Evidence } from '@/lib/backend'
 import type { WorkspaceVerdict } from '@/lib/workspace'
 import { cn } from '@/lib/cn'
@@ -76,9 +76,17 @@ export function CriterionRow({ verdict, onScore, onEvidence, activeQuote, scoreS
         </div>
       </div>
 
-      {verdict.edited ? (
-        <div className="mt-1.5">
-          <Badge tone="accent">Балл поправлен куратором</Badge>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {verdict.edited ? <Badge tone="accent">Балл поправлен куратором</Badge> : null}
+        {verdict.aiSensitive ? (
+          <Badge tone="mark">критерий чувствителен к самостоятельности</Badge>
+        ) : null}
+      </div>
+
+      {verdict.minScoreForPass !== null && verdict.score < verdict.minScoreForPass ? (
+        <div className="mt-2 rounded-lg border border-[#f0d3d3] bg-critical-wash px-3 py-2 text-[12.5px] leading-snug text-critical-ink">
+          Ниже обязательного минимума {verdict.minScoreForPass} — по этому критерию работа не
+          засчитывается целиком, сколько бы ни было набрано на остальных.
         </div>
       ) : null}
 
@@ -123,6 +131,23 @@ export function CriterionRow({ verdict, onScore, onEvidence, activeQuote, scoreS
             )
           })}
         </div>
+      ) : null}
+
+      {verdict.checks.length ? (
+        <details className="group mt-2.5">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[12.5px] font-medium text-muted hover:text-ink">
+            <ListChecks size={13} strokeWidth={1.7} />
+            Что проверяли по рубрике
+            <span className="num text-faint">{verdict.checks.length}</span>
+          </summary>
+          <ul className="mt-2 space-y-1 border-l border-line pl-3">
+            {verdict.checks.map((check) => (
+              <li key={check} className="max-w-[60ch] text-[12.5px] leading-[1.5] text-ink-soft">
+                {check}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       {verdict.studentFeedback || verdict.improvementHint ? (

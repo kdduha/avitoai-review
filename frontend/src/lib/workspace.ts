@@ -40,6 +40,14 @@ export interface WorkspaceVerdict {
   /** Вес критерия: сервер складывает `score × weight`, и сумма на экране
    *  обязана считаться так же, иначе поднятие балла может её уронить. */
   weight: number
+  /** Проверочные пункты из рубрики — то, что модель обязана была разобрать.
+   *  Рядом с вердиктом они превращают «модель сказала 1 из 2» в проверяемое
+   *  утверждение. */
+  checks: string[]
+  /** Провал по обязательному минимуму — незачёт по работе целиком, а не
+   *  просто потерянные баллы. */
+  minScoreForPass: number | null
+  aiSensitive: boolean
   score: number
   confidence: number
   verdict: string
@@ -129,6 +137,9 @@ export function buildWorkspace(
       title: criterion?.title ?? verdict.criterion_id,
       maxScore: criterion?.max_score ?? 0,
       weight: criterion?.weight || 1,
+      checks: criterion?.checks ?? [],
+      minScoreForPass: criterion?.min_score_for_pass ?? null,
+      aiSensitive: criterion?.ai_sensitive ?? false,
       score: verdict.score,
       confidence: verdict.confidence ?? 0.5,
       verdict: verdict.verdict,
