@@ -27,6 +27,10 @@ log = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+MAX_BUDGET_FACTOR = 4
+"""Во сколько раз бюджет ответа может вырасти против запрошенного."""
+MAX_BUDGET_RETRIES = 2
+
 FENCE = re.compile(r"```(?:json)?\s*(.*?)```", re.S)
 
 
@@ -92,9 +96,16 @@ def complete_json(
     conversation = list(messages)
     last_raw = ""
     last_error = ""
-    budget = max_tokens
 
-    for attempt in range(repair_attempts + 1):
+    budget = max_tokens
+    # Выше потолка не поднимаемся: часть моделей отвечает на завышенный
+    # `max_tokens` четырёхсоткой, а 4xx не ретраится — попытка добыть места
+    # обернулась бы потерей батча вместо обрыва, который мы лечим.
+    ceiling = max_tokens * MAX_BUDGET_FACTOR
+    budget_retries = MAX_BUDGET_RETRIES
+    repairs = repair_attempts
+
+    while True:
         result = gateway.complete(
             conversation,
             task=task,
@@ -111,38 +122,44 @@ def complete_json(
             return model_cls.model_validate(payload), result
         except (json.JSONDecodeError, ValidationError, TypeError) as exc:
             last_error = _describe(exc)
-            if attempt >= repair_attempts:
-                break
 
-            if result.truncated or not result.text.strip():
-                # Модель не ошиблась в форматировании — ей не хватило места.
-                # Пустой ответ у рассуждающей модели того же происхождения:
-                # бюджет ушёл в `reasoning`, до содержимого очередь не дошла, и
-                # `finish_reason` при этом бывает штатным. Просить «верни
-                # валидный JSON» в обоих случаях бессмысленно — следующий ответ
-                # упрётся в тот же потолок и удвоит счёт. Даём бюджет.
-                log.warning(
-                    "ответ %s при лимите %d токенов, повтор с %d",
-                    "оборван" if result.truncated else "пуст",
-                    budget,
-                    budget * 2,
-                )
-                budget *= 2
-                continue
+        # Модель не ошиблась в форматировании — ей не хватило места. Пустой
+        # ответ у рассуждающей модели того же происхождения: бюджет ушёл в
+        # `reasoning`, до содержимого очередь не дошла, а `finish_reason` при
+        # этом бывает штатным. Просить «верни валидный JSON» бессмысленно —
+        # ответ упрётся в тот же потолок и удвоит счёт.
+        needs_room = result.truncated or not result.text.strip()
+        if needs_room and budget_retries and budget < ceiling:
+            budget_retries -= 1
+            grown = min(budget * 2, ceiling)
+            log.warning(
+                "ответ %s при лимите %d токенов, повтор с %d",
+                "оборван" if result.truncated else "пуст",
+                budget,
+                grown,
+            )
+            budget = grown
+            # Попытка добыть места не тратит попытку починки: это разные
+            # неисправности, и лечатся они по-разному.
+            continue
 
-            # Ремонтный запрос: показываем модели её собственный вывод и ошибку.
-            conversation = conversation + [
-                {"role": "assistant", "content": result.text},
-                {
-                    "role": "user",
-                    "content": (
-                        "Ответ не прошёл разбор по схеме.\n"
-                        f"Ошибка: {last_error}\n\n"
-                        "Верни только валидный JSON по той же схеме, без пояснений "
-                        "и без markdown-обрамления."
-                    ),
-                },
-            ]
+        if not repairs:
+            break
+        repairs -= 1
+
+        # Ремонтный запрос: показываем модели её собственный вывод и ошибку.
+        conversation = conversation + [
+            {"role": "assistant", "content": result.text},
+            {
+                "role": "user",
+                "content": (
+                    "Ответ не прошёл разбор по схеме.\n"
+                    f"Ошибка: {last_error}\n\n"
+                    "Верни только валидный JSON по той же схеме, без пояснений "
+                    "и без markdown-обрамления."
+                ),
+            },
+        ]
 
     raise StructuredError(
         f"Модель не вернула валидный ответ по схеме {model_cls.__name__}: {last_error}",

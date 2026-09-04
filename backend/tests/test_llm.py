@@ -410,6 +410,58 @@ def test_empty_answer_also_buys_more_room():
     assert budgets == [4000, 8000]
 
 
+def _budget_spy(provider):
+    """Записывает, с каким лимитом уходил каждый запрос."""
+    budgets: list[int] = []
+    original = provider.complete
+
+    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+        budgets.append(max_tokens)
+        return original(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode)
+
+    provider.complete = spy  # type: ignore[method-assign]
+    return budgets
+
+
+def test_budget_growth_has_a_ceiling():
+    """Завышенный `max_tokens` часть моделей встречает четырёхсоткой.
+
+    А 4xx не ретраится: попытка добыть места обернулась бы потерей батча
+    вместо обрыва, который мы и лечим.
+    """
+    provider = FakeProvider(responses=[""] * 6)
+    gateway = PrivacyGateway(external=provider, local=provider)
+    budgets = _budget_spy(provider)
+
+    with pytest.raises(StructuredError):
+        complete_json(
+            gateway, [{"role": "user", "content": "оцени"}], Answer,
+            task=TaskKind.REVIEW, max_tokens=1000,
+        )
+
+    assert max(budgets) <= 1000 * 4
+    assert budgets == sorted(budgets), "бюджет не должен уменьшаться"
+
+
+def test_asking_for_room_does_not_spend_the_repair_attempt():
+    """Обрыв и кривой формат — разные неисправности, и лечатся по-разному.
+
+    Раньше повтор с большим бюджетом съедал единственную попытку починки, и
+    последовавшая ошибка формата уже не чинилась.
+    """
+    provider = FakeProvider(responses=["", "не json совсем", '{"score": 7, "comment": "ок"}'])
+    gateway = PrivacyGateway(external=provider, local=provider)
+
+    answer, _ = complete_json(
+        gateway, [{"role": "user", "content": "оцени"}], Answer, task=TaskKind.REVIEW
+    )
+
+    assert answer.score == 7
+    assert len(provider.calls) == 3
+    # Третий запрос — ремонтный: в нём есть упрёк, которого не было во втором.
+    assert "не прошёл разбор" in provider.calls[2][-1]["content"]
+
+
 def test_hopeless_output_raises_with_the_raw_text():
     gateway, _ = fake_gateway(["мусор", "снова мусор"])
     with pytest.raises(StructuredError) as exc:
