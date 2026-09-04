@@ -39,6 +39,16 @@ class LLMResponse:
     tokens_in: int = 0
     tokens_out: int = 0
     latency_ms: int = 0
+    truncated: bool = False
+    """Ответ оборван по лимиту токенов, а не закончен моделью.
+
+    Рассуждающие модели тратят на `reasoning` часть того же бюджета, поэтому
+    JSON обрывается на середине. Отличать это от кривого форматирования
+    обязательно: во втором случае помогает ремонтный запрос, в первом он
+    упрётся в тот же потолок и просто удвоит счёт."""
+    cost_rub: float | None = None
+    """Стоимость, названная самим провайдером. Наша оценка по токенам — запасной
+    вариант: тарифы у моделей разные, и на рассуждающих она расходится в разы."""
     raw: dict[str, Any] = field(default_factory=dict)
 
 
@@ -120,11 +130,14 @@ class OpenAICompatibleProvider:
                 last_error = LLMError(f"{self.name} вернул не JSON: {exc}")
             else:
                 usage = body.get("usage", {})
+                reported = usage.get("cost_rub")
                 return LLMResponse(
                     text=body["choices"][0]["message"]["content"] or "",
                     model=body.get("model", self.model),
                     tokens_in=usage.get("prompt_tokens", 0),
                     tokens_out=usage.get("completion_tokens", 0),
+                    truncated=body["choices"][0].get("finish_reason") == "length",
+                    cost_rub=float(reported) if isinstance(reported, (int, float)) else None,
                     latency_ms=int((time.monotonic() - started) * 1000),
                     raw=body,
                 )

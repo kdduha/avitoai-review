@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Sequence
 from typing import TypeVar
@@ -21,6 +22,8 @@ from pydantic import BaseModel, ValidationError
 from .gateway import GatewayResult, PrivacyGateway
 from .routing import DataClass, TaskKind
 from .scrub import Identity
+
+log = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -79,6 +82,7 @@ def complete_json(
     conversation = list(messages)
     last_raw = ""
     last_error = ""
+    budget = max_tokens
 
     for attempt in range(repair_attempts + 1):
         result = gateway.complete(
@@ -86,7 +90,7 @@ def complete_json(
             task=task,
             data_class=data_class,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=budget,
             json_mode=True,
             identities=identities,
         )
@@ -99,6 +103,17 @@ def complete_json(
             last_error = _describe(exc)
             if attempt >= repair_attempts:
                 break
+
+            if result.truncated:
+                # Модель не ошиблась в форматировании — ей не хватило места.
+                # Просить «верни валидный JSON» бессмысленно: следующий ответ
+                # упрётся в тот же потолок и удвоит счёт. Даём бюджет.
+                log.warning(
+                    "ответ оборван по лимиту в %d токенов, повтор с %d", budget, budget * 2
+                )
+                budget *= 2
+                continue
+
             # Ремонтный запрос: показываем модели её собственный вывод и ошибку.
             conversation = conversation + [
                 {"role": "assistant", "content": result.text},

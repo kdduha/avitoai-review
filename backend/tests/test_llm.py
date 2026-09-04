@@ -352,6 +352,38 @@ def test_broken_json_triggers_one_repair_attempt():
     assert "не прошёл разбор" in provider.calls[1][-1]["content"]
 
 
+def test_truncated_answer_buys_more_room_instead_of_a_pointless_repair():
+    """Оборванный JSON — не ошибка форматирования, а нехватка места.
+
+    Просить «верни валидный JSON» в том же бюджете бессмысленно: следующий
+    ответ упрётся в тот же потолок и удвоит счёт. У рассуждающих моделей это
+    штатный случай — `reasoning` тратит тот же лимит.
+    """
+    provider = FakeProvider(responses=['{"score": 3, "comm', '{"score": 3, "comment": "ок"}'])
+    provider.responses[0] = provider.responses[0]
+    gateway = PrivacyGateway(external=provider, local=provider)
+
+    budgets: list[int] = []
+    original = provider.complete
+
+    def spy(messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+        budgets.append(max_tokens)
+        response = original(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode)
+        response.truncated = len(budgets) == 1
+        return response
+
+    provider.complete = spy  # type: ignore[method-assign]
+    answer, _ = complete_json(
+        gateway, [{"role": "user", "content": "оцени"}], Answer,
+        task=TaskKind.REVIEW, max_tokens=3000,
+    )
+
+    assert answer.score == 3
+    assert budgets == [3000, 6000], "бюджет обязан вырасти, а не повториться"
+    # Повторяем исходный запрос, а не диалог с упрёком: модель не ошиблась.
+    assert len(provider.calls[1]) == len(provider.calls[0])
+
+
 def test_hopeless_output_raises_with_the_raw_text():
     gateway, _ = fake_gateway(["мусор", "снова мусор"])
     with pytest.raises(StructuredError) as exc:

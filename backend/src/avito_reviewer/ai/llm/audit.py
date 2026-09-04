@@ -35,11 +35,15 @@ class AuditRecord:
     tokens_in: int
     tokens_out: int
     latency_ms: int
+    reported_cost_rub: float | None = None
+    """Цена от провайдера, если он её назвал: точнее любой нашей оценки."""
     error: str | None = None
     at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
     def cost_rub(self) -> float:
+        if self.reported_cost_rub is not None:
+            return self.reported_cost_rub
         return round(
             self.tokens_in / 1_000_000 * RUB_PER_MTOK_IN
             + self.tokens_out / 1_000_000 * RUB_PER_MTOK_OUT,

@@ -44,6 +44,7 @@ class GatewayResult:
     tokens_out: int
     redactions: int
     downgraded: bool = False
+    truncated: bool = False
 
 
 class PrivacyGateway:
@@ -150,6 +151,7 @@ class PrivacyGateway:
             tokens_out=response.tokens_out,
             redactions=redactions,
             downgraded=downgraded,
+            truncated=response.truncated,
         )
 
     # ------------------------------------------------------------------ #
@@ -190,6 +192,7 @@ class PrivacyGateway:
                 tokens_in=response.tokens_in if response else 0,
                 tokens_out=response.tokens_out if response else 0,
                 latency_ms=latency_ms,
+                reported_cost_rub=response.cost_rub if response else None,
                 error=error,
             )
         )

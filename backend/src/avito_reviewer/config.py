@@ -93,7 +93,9 @@ class ContentConfig(BaseModel):
 class ReviewOptions(BaseModel):
     batch_size: int = 3
     temperature: float = 0.0
-    max_tokens: int = 3000
+    max_tokens: int = 6000
+    """Бюджет на ответ. У рассуждающих моделей `reasoning` тратит его же, и на
+    трёх критериях 3000 не хватало: JSON обрывался на середине."""
     skip_auto_verifiable: bool = False
 
 
