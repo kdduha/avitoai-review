@@ -443,4 +443,7 @@ def test_compile_then_confirm_is_one_road(make_client):
         "/rubrics", json={"rubric": draft["rubric"], "confirmed_by": "методист"}
     )
     assert confirmed.status_code == 200
-    assert "Подтверждено: методист" in confirmed.json()["rubric"]["source_note"]
+    note = confirmed.json()["rubric"]["source_note"]
+    assert "Подтверждено: методист" in note
+    # Метка черновика снята: рубрика не может ждать подтверждения и быть подтверждённой.
+    assert "Подлежит подтверждению" not in note

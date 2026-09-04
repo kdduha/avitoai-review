@@ -47,6 +47,10 @@ from avito_reviewer.ai.rubric import Criterion, FormatCheck, LatePolicy, Rubric,
 
 log = logging.getLogger(__name__)
 
+DRAFT_NOTE = "Черновик Rubric Compiler. Подлежит подтверждению методистом."
+"""Метка черновика. Ручка подтверждения её снимает — рубрика не должна
+одновременно сообщать, что ждёт подтверждения и что подтверждена."""
+
 MIN_QUOTE_CHARS = 12
 MAX_CONDITION_CHARS = 40_000
 
@@ -340,7 +344,7 @@ def _assemble(
         assignment_id=assignment_id,
         title=output.title,
         course=course or output.course,
-        source_note="Черновик Rubric Compiler. Подлежит подтверждению методистом.",
+        source_note=DRAFT_NOTE,
         scale=scale,
         late_policy=LatePolicy(),
         format_gate=[

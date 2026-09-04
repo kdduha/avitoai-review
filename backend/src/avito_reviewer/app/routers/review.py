@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
 from avito_reviewer.ai import AIService, Rubric
-from avito_reviewer.ai.compiler import CompilerError, RubricCompiler
+from avito_reviewer.ai.compiler import DRAFT_NOTE, CompilerError, RubricCompiler
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
@@ -128,13 +128,12 @@ async def confirm_rubric(body: ConfirmRubricRequest, request: Request) -> Confir
     ``422`` — рубрика не считается, в ответе список поломок.
     """
     store: RubricStore = request.app.state.rubrics
+    # Метку черновика снимаем: рубрика не может одновременно ждать подтверждения
+    # и быть подтверждённой.
+    note = body.rubric.source_note.replace(DRAFT_NOTE, "").strip()
+    stamp = f"Подтверждено: {body.confirmed_by}, {datetime.now(tz=UTC).date().isoformat()}."
     rubric = body.rubric.model_copy(
-        update={
-            "source_note": (
-                f"{body.rubric.source_note} Подтверждено: {body.confirmed_by}, "
-                f"{datetime.now(tz=UTC).date().isoformat()}."
-            ).strip()
-        }
+        update={"source_note": f"{note} {stamp}".strip()}
     )
     try:
         path = store.save(rubric, overwrite=body.overwrite)
