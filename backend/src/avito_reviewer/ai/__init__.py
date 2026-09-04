@@ -6,6 +6,7 @@
 `ai.llm` запрещены архитектурно и проверяются тестом.
 """
 
+from .compiler import CompilerError, RubricCompiler, RubricDraft
 from .content import ArtifactText, ContentResolver, build_texts, solution_texts
 from .detection import DetectionReport, DetectionService, SignalKind, SignalStatus, Span
 from .llm import PrivacyGateway, fake_gateway, gateway_from_config
@@ -24,6 +25,7 @@ __all__ = [
     "AIService",
     "ArtifactText",
     "ContentResolver",
+    "CompilerError",
     "Criterion",
     "CriterionVerdict",
     "DetectionReport",
@@ -34,6 +36,8 @@ __all__ = [
     "ReviewDraft",
     "ReviewService",
     "Rubric",
+    "RubricCompiler",
+    "RubricDraft",
     "RubricStore",
     "SignalKind",
     "SignalStatus",
