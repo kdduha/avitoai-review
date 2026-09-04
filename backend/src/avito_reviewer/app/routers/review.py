@@ -7,9 +7,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 
 from avito_reviewer.ai import AIService, Rubric
+from avito_reviewer.ai.compiler import CompilerError, RubricCompiler
 from avito_reviewer.ai.rubric import RubricStore
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
+    CompileRubricRequest,
+    CompileRubricResponse,
     CostSummary,
     DetectRequest,
     DetectResponse,
@@ -70,6 +73,41 @@ async def list_rubrics(request: Request) -> list[RubricSummary]:
 async def get_rubric(assignment_id: str, request: Request) -> Rubric:
     """Критерии, якоря и шкала — то, против чего ставился каждый вердикт."""
     return _rubric(request, assignment_id, None)
+
+
+@router.post("/rubrics/compile", summary="Turn an assignment condition into a rubric draft")
+async def compile_rubric(body: CompileRubricRequest, request: Request) -> CompileRubricResponse:
+    """Разобрать условие задания и предложить рубрику.
+
+    Результат — черновик, а не рубрика: он не сохраняется в каталог и не
+    участвует в проверках, пока методист его не подтвердит. Это единственное
+    место конвейера, где ошибка модели тиражируется на весь поток, поэтому
+    человек в цикле обязателен по устройству, а не по настройке.
+
+    Каждый критерий несёт цитату из условия, сверенную с текстом программно;
+    `grounded_share` показывает, какая доля критериев подтверждена дословно.
+    Всё, чего в условии нет — шкала, порог, штрафы, — не выдумывается, а
+    выносится в `open_questions`.
+
+    ``502`` — модель не ответила или вернула неразбираемое.
+    """
+    ai: AIService = request.app.state.ai
+    compiler = RubricCompiler(ai.gateway)
+    try:
+        draft = await run_in_threadpool(
+            partial(
+                compiler.compile,
+                body.condition_text,
+                assignment_id=body.assignment_id,
+                course=body.course,
+                hint=body.hint,
+            )
+        )
+    except CompilerError as exc:
+        _log.warning("рубрика %s не собрана: %s", body.assignment_id, exc)
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return CompileRubricResponse(draft=draft, grounded_share=draft.grounded_share)
 
 
 @router.post("/review", summary="Draft a review of a submission against a rubric")

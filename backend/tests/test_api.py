@@ -293,3 +293,82 @@ def test_gate_facts_are_returned_with_the_draft(make_client):
     # Каждая проверка приходит с местом, чтобы ревьюер мог кликнуть.
     found = [o for o in gate["outcomes"] if o["passed"] and o["locations"]]
     assert found and ":" in found[0]["locations"][0]
+
+
+# --------------------------------------------------------------------------- #
+# Rubric Compiler
+# --------------------------------------------------------------------------- #
+
+CONDITION = """# Лаба 1
+
+Максимальный балл — 6, зачёт с 4.
+
+## Что нужно сделать
+
+Выполнить декомпозицию системы по двум и более признакам.
+"""
+
+COMPILED = json.dumps(
+    {
+        "title": "Лаба 1",
+        "total_max": 6,
+        "pass_threshold": 4,
+        "criteria": [
+            {"id": "c1", "title": "Декомпозиция", "max_score": 6,
+             "source_quote": "Выполнить декомпозицию системы по двум и более признакам."}
+        ],
+        "open_questions": [],
+    },
+    ensure_ascii=False,
+)
+
+
+def test_compile_returns_a_draft_not_a_saved_rubric(make_client):
+    """Черновик подтверждает методист: в каталог он попасть не должен."""
+    client, _ = make_client(responses=[COMPILED])
+    body = client.post(
+        "/rubrics/compile",
+        json={"assignment_id": "lab1", "condition_text": CONDITION},
+    ).json()
+
+    assert body["grounded_share"] == 1.0
+    assert body["draft"]["rubric"]["criteria"][0]["title"] == "Декомпозиция"
+    assert "подтверждению методистом" in body["draft"]["rubric"]["source_note"]
+    # В каталоге его нет: сохранение — отдельное решение человека.
+    assert "lab1" not in client.get("/rubrics").json()[0]["assignment_id"]
+
+
+def test_compile_exposes_criteria_the_condition_does_not_support(make_client):
+    """Придуманный критерий — главная опасность шага, и он обязан быть виден."""
+    invented = json.dumps(
+        {
+            "total_max": 6, "pass_threshold": 4,
+            "criteria": [{"id": "c1", "title": "Покрытие тестами 80%", "max_score": 6,
+                          "source_quote": "Покрытие тестами должно быть не ниже 80 процентов."}],
+        },
+        ensure_ascii=False,
+    )
+    client, _ = make_client(responses=[invented])
+    body = client.post(
+        "/rubrics/compile",
+        json={"assignment_id": "lab1", "condition_text": CONDITION},
+    ).json()
+
+    assert body["grounded_share"] == 0.0
+    assert body["draft"]["sources"][0]["status"] == "paraphrased"
+
+
+def test_compile_rejects_a_condition_too_short_to_be_one(make_client):
+    client, _ = make_client()
+    response = client.post(
+        "/rubrics/compile", json={"assignment_id": "lab1", "condition_text": "короче некуда"}
+    )
+    assert response.status_code == 422
+
+
+def test_model_failure_on_compile_is_502(make_client):
+    client, _ = make_client(responses=["не json", "снова не json", "и ещё раз"])
+    response = client.post(
+        "/rubrics/compile", json={"assignment_id": "lab1", "condition_text": CONDITION}
+    )
+    assert response.status_code == 502

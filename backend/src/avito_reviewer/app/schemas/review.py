@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from avito_reviewer.ai.compiler import RubricDraft
 from avito_reviewer.ai.content import ArtifactText
 from avito_reviewer.ai.detection import DetectionReport
 from avito_reviewer.ai.review import ReviewDraft
@@ -148,3 +149,24 @@ class CostSummary(BaseModel):
     tokens_out: int
     redactions: int
     cost_rub: float
+
+
+class CompileRubricRequest(BaseModel):
+    """Условие задания, из которого нужно собрать черновик рубрики."""
+
+    assignment_id: str
+    condition_text: str = Field(min_length=40, description="текст условия целиком")
+    course: str = ""
+    hint: str = Field(default="", description="пожелание методиста: шкала, акценты, что учесть")
+
+
+class CompileRubricResponse(BaseModel):
+    """Черновик рубрики. Не установлен и не сохранён — это предложение методисту.
+
+    `grounded_share` — доля критериев, подтверждённых дословной цитатой из
+    условия. Всё, что ниже единицы, требует прочтения человеком в первую
+    очередь: там модель пересказала, а не процитировала.
+    """
+
+    draft: RubricDraft
+    grounded_share: float
