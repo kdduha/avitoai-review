@@ -25,6 +25,8 @@ export type RubricSummary = S['RubricSummary']
 export type CostSummary = S['CostSummary']
 export type RubricDraft = S['RubricDraft']
 export type CompileRubricRequest = S['CompileRubricRequest']
+export type ConfirmRubricRequest = S['ConfirmRubricRequest']
+export type ConfirmRubricResponse = S['ConfirmRubricResponse']
 export type InitResponse = S['InitResponse']
 export type ReviewResponse = S['ReviewResponse']
 export type DetectResponse = S['DetectResponse']
@@ -86,6 +88,10 @@ export const backend = {
    *  несёт не только критерии, но и оговорки с открытыми вопросами. */
   compileRubric: (body: CompileRubricRequest) =>
     request<RubricDraft>('/rubrics/compile', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Подтверждение методистом: черновик становится рубрикой потока. */
+  confirmRubric: (body: ConfirmRubricRequest) =>
+    request<ConfirmRubricResponse>('/rubrics', { method: 'POST', body: JSON.stringify(body) }),
 
   review: (body: ReviewRequest) =>
     request<ReviewResponse>('/review', { method: 'POST', body: JSON.stringify(body) }),

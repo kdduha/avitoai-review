@@ -82,7 +82,21 @@ export interface paths {
          */
         get: operations["list_rubrics_rubrics_get"];
         put?: never;
-        post?: never;
+        /**
+         * Confirm a rubric and put it into the catalogue
+         * @description Принять рубрику: с этого момента по ней проверяются работы потока.
+         *
+         *     Это тот самый шаг, ради которого компилятор ничего не сохраняет сам. Здесь
+         *     же — единственная проверка, которую нельзя доверить модели: код смотрит, что
+         *     рубрика вообще считается. Недостижимый порог зачёта, обязательный минимум
+         *     выше максимума критерия, повторяющиеся идентификаторы — всё это ломает
+         *     подсчёт балла не на одной работе, а на каждой до конца курса.
+         *
+         *     ``409`` — рубрика с таким идентификатором уже есть; перезапись только явным
+         *     `overwrite`, потому что по старой уже могли быть выставлены баллы.
+         *     ``422`` — рубрика не считается, в ответе список поломок.
+         */
+        post: operations["confirm_rubric_rubrics_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -369,6 +383,30 @@ export interface components {
             draft: components["schemas"]["RubricDraft"];
             /** Grounded Share */
             grounded_share: number;
+        };
+        /**
+         * ConfirmRubricRequest
+         * @description Подтверждение рубрики методистом: она вступает в силу для всего потока.
+         */
+        ConfirmRubricRequest: {
+            rubric: components["schemas"]["Rubric"];
+            /**
+             * Confirmed By
+             * @description кто подтверждает — попадёт в рубрику
+             */
+            confirmed_by: string;
+            /**
+             * Overwrite
+             * @description Переписать существующую рубрику. По умолчанию нельзя: по ней могли быть проверены работы, и подмена задним числом делает их баллы необъяснимыми.
+             * @default false
+             */
+            overwrite: boolean;
+        };
+        /** ConfirmRubricResponse */
+        ConfirmRubricResponse: {
+            rubric: components["schemas"]["Rubric"];
+            /** Path */
+            path: string;
         };
         /**
          * CostSummary
@@ -1297,6 +1335,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RubricSummary"][];
+                };
+            };
+        };
+    };
+    confirm_rubric_rubrics_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRubricRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmRubricResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
