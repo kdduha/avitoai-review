@@ -420,3 +420,229 @@ export const DEMO_RUBRIC_SYSDESIGN = {
     }
   ]
 } as unknown as Rubric
+
+/** Снимок `backend/rubrics/backend-task1.json` — третья программа с разбором. */
+export const DEMO_RUBRIC_BACKEND = {
+  "assignment_id": "backend-task1",
+  "title": "Основы веб-разработки: обработчик predict и тесты",
+  "course": "Основы backend-разработки",
+  "stage": "task1",
+  "source_note": "Скомпилировано из условия «ДЗ 1. Основы веб-разработки» курса «Основы backend-разработки». Баллы, веса и градации взяты из условия дословно: семь критериев, сумма 10, у критерия «Прохождение тестов» есть промежуточная градация 0.5.",
+  "ai_policy": "not_specified",
+  "scale": {
+    "total_max": 10,
+    "pass_threshold": 6,
+    "step": 0.5
+  },
+  "late_policy": {
+    "grace_days": 1,
+    "penalty_per_grace_day": 1,
+    "after_grace": "zero"
+  },
+  "format_gate": [
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "def predict|async def predict|\"/predict\"|'/predict'",
+        "label": "Обработчик predict",
+        "expected": "единственный обработчик predict",
+        "in": [
+          ".py"
+        ]
+      },
+      "note": "«Сервис должен иметь один обработчик predict»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "from fastapi import|import fastapi",
+        "label": "Сервис на FastAPI",
+        "expected": "импорт fastapi",
+        "in": [
+          ".py"
+        ]
+      },
+      "note": "«Сервис разрабатываем на Python с использованием фреймворка FastAPI»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "is_verified_seller",
+        "label": "Поле is_verified_seller во входной модели",
+        "expected": "поле is_verified_seller",
+        "in": [
+          ".py"
+        ]
+      },
+      "note": "Условие перечисляет семь входных полей поимённо"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "images_qty",
+        "label": "Поле images_qty во входной модели",
+        "expected": "поле images_qty",
+        "in": [
+          ".py"
+        ]
+      },
+      "note": "От него зависит вся заданная бизнес-логика"
+    },
+    {
+      "check": "required_paths",
+      "level": "warning",
+      "params": {
+        "paths": [
+          "tests/"
+        ]
+      },
+      "note": "Условие требует четыре тест-сценария; без каталога тестов проверять нечего"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "parametrize",
+        "label": "Параметризация в тестах",
+        "expected": "pytest.mark.parametrize",
+        "in": [
+          ".py"
+        ]
+      },
+      "note": "Третий балл за тесты условие даёт именно за параметризацию"
+    },
+    {
+      "check": "code_absent",
+      "level": "warning",
+      "params": {
+        "pattern": "__pycache__|\\.pyc$",
+        "label": "Скомпилированные файлы не закоммичены"
+      },
+      "note": "Гигиена репозитория: .pyc в индексе — след отсутствующего .gitignore"
+    },
+    {
+      "check": "token_budget",
+      "level": "info",
+      "params": {
+        "max_tokens": 40000
+      }
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c1",
+      "title": "Корректный обработчик",
+      "max_score": 2,
+      "min_score_for_pass": 1,
+      "auto_verifiable": true,
+      "checks": [
+        "обработчик соответствует заданному API",
+        "входящие аргументы валидируются",
+        "возвращается значение заданного типа"
+      ],
+      "anchors": {
+        "0": "обработчик не соответствует заданному API",
+        "1": "обработчик соответствует заданному API",
+        "2": "обработчик имеет валидацию входящих аргументов и возвращает значение заданного типа"
+      }
+    },
+    {
+      "id": "c2",
+      "title": "Правильная логика валидации объявления",
+      "max_score": 1,
+      "min_score_for_pass": null,
+      "auto_verifiable": true,
+      "checks": [
+        "подтверждённый продавец публикует без нарушений всегда",
+        "неподтверждённый — только при наличии изображений"
+      ],
+      "anchors": {
+        "0": "логика не соответствует условию или инвертирована",
+        "1": "логика в точности как в условии"
+      }
+    },
+    {
+      "id": "c3",
+      "title": "Соответствие принципам чистой архитектуры",
+      "max_score": 1,
+      "min_score_for_pass": null,
+      "auto_verifiable": true,
+      "checks": [
+        "выделены уровни routes и services",
+        "бизнес-логика не смешана с роутами"
+      ],
+      "anchors": {
+        "0": "код монолитный, бизнес-логика смешана с роутами",
+        "1": "выделены уровни routes и services"
+      }
+    },
+    {
+      "id": "c4",
+      "title": "Локальный запуск без ошибок",
+      "max_score": 1,
+      "min_score_for_pass": null,
+      "auto_verifiable": true,
+      "checks": [
+        "проект разворачивается и запускается через fastapi dev"
+      ],
+      "anchors": {
+        "0": "запуск падает или требует ручных правок",
+        "1": "проект запускается локально без ошибок через fastapi dev"
+      }
+    },
+    {
+      "id": "c5",
+      "title": "Тесты",
+      "max_score": 3,
+      "min_score_for_pass": 1,
+      "auto_verifiable": false,
+      "checks": [
+        "есть тесты на позитивные и негативные сценарии",
+        "покрыты corner-cases",
+        "для corner-cases использована параметризация"
+      ],
+      "anchors": {
+        "0": "тестов нет",
+        "1": "есть тесты на позитивные и негативные сценарии, но нет обработки corner-cases",
+        "2": "тесты покрывают все возможные corner-cases",
+        "3": "в тестах используется параметризация, чтобы уменьшить дублирование кода"
+      }
+    },
+    {
+      "id": "c6",
+      "title": "Прохождение тестов",
+      "max_score": 1,
+      "min_score_for_pass": null,
+      "auto_verifiable": true,
+      "checks": [
+        "тесты запускаются",
+        "все тесты проходят"
+      ],
+      "anchors": {
+        "0": "часть тестов падает или не запускается",
+        "0.5": "тесты запускаются, но не все проходят",
+        "1": "все тесты проходят успешно"
+      }
+    },
+    {
+      "id": "c7",
+      "title": "Предсказуемые статусы ответа",
+      "max_score": 1,
+      "min_score_for_pass": null,
+      "auto_verifiable": true,
+      "checks": [
+        "ошибка валидации отдаёт 400",
+        "неизвестная ошибка бизнес-логики отдаёт 500",
+        "сообщения об ошибках понятны"
+      ],
+      "anchors": {
+        "0": "статусы произвольные или ошибки не обрабатываются",
+        "1": "ошибка валидации — 400, неизвестная ошибка бизнес-логики — 500, сообщения понятны"
+      }
+    }
+  ]
+} as unknown as Rubric

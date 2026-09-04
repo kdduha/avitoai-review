@@ -1,12 +1,16 @@
 /** Учебные программы Авито — по материалам организаторов.
  *
  *  Источник: репозиторий ai-talent-hub-avito/homework_examples. Названия
- *  заданий, шкалы, дедлайны и каналы сдачи взяты из условий, а не придуманы:
- *  на одной программе баллов в условии нет вовсе (Go — шкалу задаёт методист),
- *  на другой их 20 (Tech QA), у третьей две лабы на 6 и 10 баллов.
+ *  заданий, шкалы, дедлайны и каналы сдачи взяты из условий, а не придуманы.
+ *
+ *  В репозитории организаторов девять направлений; здесь оставлены пять,
+ *  подобранных на разнообразие, а не на полноту: три канала сдачи
+ *  (pull request, документ, таблица), три шкалы (6, 10 и 20 баллов) и разное
+ *  число заданий — от одного до пяти. У трёх программ есть рубрика, а значит и
+ *  разбор работы; у двух её ещё предстоит собрать, и в ведомости это видно.
  *
  *  Размеры групп там, где они видны в Stepik («верно решили N учащихся»),
- *  проставлены настоящие: 22 у фрода, 38 у бизнес-моделей, 49 у Tech QA.
+ *  проставлены настоящие: 49 у Tech QA.
  */
 
 export type Channel = 'github_pr' | 'github_commit' | 'doc' | 'sheet' | 'notebook' | 'board'
@@ -83,62 +87,6 @@ export const PROGRAMS: Program[] = [
     ],
   },
   {
-    id: 'analytics',
-    short: 'Аналитика данных',
-    title: 'Аналитика данных',
-    subtitle: 'Два блока: метрики и продуктовые кейсы',
-    cohort: 31,
-    graceDays: 1,
-    penaltyPerDay: 1,
-    reviewWindowDays: 7,
-    tasks: [
-      { code: 'ДЗ 1', title: 'Разбор воронки и метрик нового продукта', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'doc', reviewMinutes: 25, declareAi: false },
-      { code: 'ДЗ 2', title: 'Целевые, прокси и контр-метрики новой фичи', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'doc', reviewMinutes: 20, declareAi: false },
-      { code: 'ДЗ 3', title: 'Кейс: падение ROMI во вторичном жилье', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'board', reviewMinutes: 45, declareAi: false },
-      { code: 'ДЗ 4', title: 'Кейс: take-rate вертикали Авто', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'board', reviewMinutes: 45, declareAi: false },
-      { code: 'ДЗ 5', title: 'Кейс: запуск конкурентной аналитики', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'board', reviewMinutes: 50, declareAi: false },
-    ],
-  },
-  {
-    id: 'mlsd',
-    short: 'Трекинг экспериментов',
-    title: 'МЛСД: трекинг экспериментов',
-    subtitle: 'MLflow, двадцать прогонов и воспроизводимость лучшего',
-    cohort: 19,
-    graceDays: 1,
-    penaltyPerDay: 1,
-    reviewWindowDays: 7,
-    tasks: [
-      { code: 'ДЗ 1', title: 'Серия экспериментов с логированием в MLflow', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'notebook', reviewMinutes: 55, declareAi: false },
-    ],
-  },
-  {
-    id: 'gpu',
-    short: 'GPU и распредвычисления',
-    title: 'GPU и распределённые вычисления',
-    subtitle: 'Расчётный кейс: экономика ML-платформы на Kubernetes',
-    cohort: 17,
-    graceDays: 1,
-    penaltyPerDay: 1,
-    reviewWindowDays: 7,
-    tasks: [
-      { code: 'Кейс', title: 'Эволюция ML-платформы: стоимость, эффективность, окупаемость', maxScore: 10, passThreshold: 6, step: 1, deadline: null, channel: 'doc', reviewMinutes: 40, declareAi: false },
-    ],
-  },
-  {
-    id: 'llm',
-    short: 'LLM',
-    title: 'LLM-инженерия',
-    subtitle: 'Мини-претрейн: чем ниже итоговый loss, тем выше балл',
-    cohort: 21,
-    graceDays: 3,
-    penaltyPerDay: 1,
-    reviewWindowDays: 7,
-    tasks: [
-      { code: 'ДЗ 1', title: 'Pretrain: датасет, обучение и исследовательский отчёт', maxScore: 10, passThreshold: 6, step: 1, deadline: '10-20', channel: 'github_pr', reviewMinutes: 50, declareAi: false },
-    ],
-  },
-  {
     id: 'backend',
     short: 'Основы backend',
     title: 'Основы backend-разработки',
@@ -166,32 +114,6 @@ export const PROGRAMS: Program[] = [
       { code: 'ДЗ 3', title: 'План и проведение количественного исследования', maxScore: 10, passThreshold: 6, step: 0.5, deadline: '10-23', channel: 'doc', reviewMinutes: 45, declareAi: false },
       { code: 'ДЗ 4', title: 'Оценка затрат на реализацию: PnL до EBITDA', maxScore: 10, passThreshold: 6, step: 0.5, deadline: '05-24', channel: 'sheet', reviewMinutes: 50, declareAi: true },
       { code: 'ДЗ 5', title: 'Проверка гипотез, метрики и критерии успеха', maxScore: 10, passThreshold: 6, step: 0.5, deadline: '10-14', channel: 'doc', reviewMinutes: 35, declareAi: false },
-    ],
-  },
-  {
-    id: 'business-models',
-    short: 'Бизнес-модели',
-    title: 'Продуктовые бизнес-модели',
-    subtitle: 'Трекшн-модель и расчёт baseline на пять лет',
-    cohort: 38,
-    graceDays: 1,
-    penaltyPerDay: 1,
-    reviewWindowDays: 7,
-    tasks: [
-      { code: 'ДЗ 1', title: 'Расчёт baseline', maxScore: 10, passThreshold: 6, step: 0.5, deadline: '02-19', channel: 'sheet', reviewMinutes: 40, declareAi: true },
-    ],
-  },
-  {
-    id: 'fraud',
-    short: 'Борьба с мошенничеством',
-    title: 'Технологии борьбы с мошенничеством',
-    subtitle: 'Карта рисков продукта и ROI митигации',
-    cohort: 22,
-    graceDays: 1,
-    penaltyPerDay: 1,
-    reviewWindowDays: 7,
-    tasks: [
-      { code: 'ДЗ 1', title: 'Карта рисков продукта', maxScore: 10, passThreshold: 6, step: 0.5, deadline: '02-09', channel: 'doc', reviewMinutes: 30, declareAi: true },
     ],
   },
   {

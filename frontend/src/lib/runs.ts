@@ -11,8 +11,9 @@ import { buildWorkspace, withScore, type Workspace } from './workspace'
 import { DEMO_DETECT, DEMO_REVIEW, DEMO_RUN_ID } from '@/mocks/demoRun'
 
 export { DEMO_RUN_ID }
+import { DEMO_BACKEND_DETECT, DEMO_BACKEND_ID, DEMO_BACKEND_REVIEW } from '@/mocks/demoBackend'
 import { DEMO_SYSDESIGN_DETECT, DEMO_SYSDESIGN_ID, DEMO_SYSDESIGN_REVIEW } from '@/mocks/demoSysdesign'
-import { DEMO_RUBRIC, DEMO_RUBRIC_SYSDESIGN } from '@/mocks/rubric'
+import { DEMO_RUBRIC, DEMO_RUBRIC_BACKEND, DEMO_RUBRIC_SYSDESIGN } from '@/mocks/rubric'
 
 const runs = new Map<string, Workspace>()
 
@@ -27,14 +28,23 @@ function demoSysdesign(): Workspace {
   }
 }
 
+function demoBackend(): Workspace {
+  return {
+    ...buildWorkspace(DEMO_BACKEND_ID, DEMO_BACKEND_REVIEW, DEMO_BACKEND_DETECT, DEMO_RUBRIC_BACKEND),
+    live: false,
+  }
+}
+
 runs.set(DEMO_RUN_ID, demo())
 runs.set(DEMO_SYSDESIGN_ID, demoSysdesign())
+runs.set(DEMO_BACKEND_ID, demoBackend())
 
 /** Демо-разбор есть только там, где есть рубрика: показывать разбор работы по
  *  Tech QA против рубрики по Go — хуже, чем не показывать ничего. */
 const DEMO_BY_COURSE: Record<string, string> = {
   go: DEMO_RUN_ID,
   'system-design': DEMO_SYSDESIGN_ID,
+  backend: DEMO_BACKEND_ID,
 }
 
 /** Записанные ветки разговора — свои у каждого демо-прогона. */
@@ -46,6 +56,19 @@ const DEMO_THREADS: Record<string, { id: string; author: 'human' | 'ai'; text: s
       author: 'ai',
       text:
         'В README описано чтение .env, которого в коде нет: config.Load ходит только в os.Getenv. Плюс ошибка w.Write не обработана в обоих хендлерах. Оба замечания по одному критерию, поэтому 1 из 2 выглядит справедливо; поднимать не предлагаю.',
+    },
+  ],
+  [DEMO_BACKEND_ID]: [
+    {
+      id: 'm1',
+      author: 'human',
+      text: 'После штрафа не хватает половины балла. Есть за что добавить?',
+    },
+    {
+      id: 'm2',
+      author: 'ai',
+      text:
+        'Ближайший кандидат — «Прохождение тестов»: там 0.5 из-за одного упавшего теста, где ожидание 400 разошлось с 422 от pydantic. Это ошибка в тесте, а не в сервисе. По букве рубрики градация 0.5 стоит верно; поднимать до 1 — уже решение куратора о том, считать ли расхождение существенным.',
     },
   ],
   [DEMO_SYSDESIGN_ID]: [
@@ -67,6 +90,7 @@ const DEMO_THREADS: Record<string, { id: string; author: 'human' | 'ai'; text: s
 const DEMO_BY_RUBRIC: Record<string, string> = {
   'go-task1': DEMO_RUN_ID,
   'sysdesign-lab1': DEMO_SYSDESIGN_ID,
+  'backend-task1': DEMO_BACKEND_ID,
 }
 
 export function demoRunForRubric(rubricId: string | undefined): string {
