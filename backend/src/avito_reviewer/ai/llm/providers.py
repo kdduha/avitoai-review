@@ -17,6 +17,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -173,6 +174,13 @@ class FakeProvider:
 
 # --------------------------------------------------------------------------- #
 
+def _host_name(base_url: str) -> str:
+    """Короткое имя эндпоинта для журнала: `api.aitunnel.ru` → `aitunnel`."""
+    host = urlsplit(base_url).hostname or "external"
+    parts = [p for p in host.split(".") if p not in ("api", "www")]
+    return parts[0] if parts else host
+
+
 def provider_from_config(config: LLMConfig) -> Provider:
     """Build the single provider this process talks to.
 
@@ -193,17 +201,17 @@ def provider_from_config(config: LLMConfig) -> Provider:
             max_retries=config.max_retries,
         )
 
-    if config.provider == "openrouter":
+    if config.provider == "external":
         # `AI_LLM__API_KEY=` в compose приезжает пустой строкой, а не None:
         # пустой ключ должен падать здесь, а не 401-м на первом же ревью.
         key = config.api_key.get_secret_value() if config.api_key else ""
         if not key:
-            raise LLMError("AI_LLM__PROVIDER=openrouter, но AI_LLM__API_KEY не задан")
+            raise LLMError("AI_LLM__PROVIDER=external, но AI_LLM__API_KEY не задан")
         return OpenAICompatibleProvider(
             base_url=config.base_url,
             model=config.model,
             api_key=key,
-            name="openrouter",
+            name=_host_name(config.base_url),
             is_local=False,
             timeout=config.timeout,
             max_retries=config.max_retries,

@@ -258,3 +258,45 @@ def test_cost_is_reported_per_review_not_per_process():
     assert first.tokens_in > 0 and first.cost_rub > 0
     assert second.tokens_in == first.tokens_in
     assert gateway.audit.summary()["tokens_in"] == first.tokens_in + second.tokens_in
+
+
+def test_overlapping_reviews_report_their_own_cost():
+    """`/review` уходит в поток, и шлюз с журналом — общий на приложение.
+
+    Пока счёт брался срезом по длине журнала, первый прогон записывал себе
+    токены второго. Проверяем на настоящем перекрытии, а не на последовательных
+    вызовах: провайдер держит паузу, чтобы прогоны заведомо шли внахлёст.
+    """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    from avito_reviewer.ai.llm import PrivacyGateway
+    from avito_reviewer.ai.llm.providers import LLMResponse
+
+    spans: list[tuple[float, float]] = []
+
+    class SlowProvider:
+        name, model, is_local = "slow", "slow-model", True
+
+        def complete(self, messages, *, temperature=0.0, max_tokens=2000, json_mode=False):
+            started = time.monotonic()
+            time.sleep(0.05)
+            spans.append((started, time.monotonic()))
+            return LLMResponse(
+                text=batch_response(["c1", "c2", "c3"]),
+                model=self.model,
+                tokens_in=100,
+                tokens_out=50,
+            )
+
+    gateway = PrivacyGateway(external=SlowProvider(), local=SlowProvider())
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        drafts = [f.result() for f in [pool.submit(run, gateway) for _ in range(2)]]
+
+    # Без реального перекрытия тест ничего не доказывает.
+    (a_start, a_end), (b_start, b_end) = sorted(spans)
+    assert b_start < a_end, "прогоны не пересеклись — проверка вырождена"
+
+    assert [d.tokens_in for d in drafts] == [100, 100]
+    assert gateway.audit.summary()["tokens_in"] == 200

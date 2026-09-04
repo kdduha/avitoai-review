@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _DEFAULT_EXCLUDES: tuple[str, ...] = (
@@ -56,10 +56,12 @@ class LLMConfig(BaseModel):
     demonstrable rather than aspirational.
     """
 
-    provider: Literal["fake", "local", "openrouter"] = "fake"
+    provider: Literal["fake", "local", "external"] = "fake"
 
-    model: str = "openai/gpt-4o-mini"
-    base_url: str = "https://openrouter.ai/api/v1"
+    # Любой OpenAI-совместимый эндпоинт: aitunnel, OpenRouter, прокси команды.
+    # Меняются только эти три поля, клиент один и тот же.
+    model: str = "deepseek-v4-flash"
+    base_url: str = "https://api.aitunnel.ru/v1"
     api_key: SecretStr | None = None
 
     local_model: str = "qwen2.5-7b-instruct"
@@ -69,6 +71,12 @@ class LLMConfig(BaseModel):
     force_local: bool = False
     timeout: int = 120
     max_retries: int = 2
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def _accept_legacy_names(cls, value: object) -> object:
+        """`openrouter` из старых конфигов означает то же, что `external`."""
+        return "external" if value == "openrouter" else value
 
 
 class ContentConfig(BaseModel):

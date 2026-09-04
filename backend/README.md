@@ -22,11 +22,22 @@ docker compose up --build                             # из корня репо
 При `AI_LLM__PROVIDER=local` внешнего провайдера нет вовсе: задачи с маршрутом
 «наружу после скраба» считаются локально, и понижение маршрута видно в аудите.
 
+Живой прогон — через `.env` (`cp .env.example .env`, файл под gitignore):
+
 ```bash
-AI_LLM__PROVIDER=openrouter AI_LLM__API_KEY=...   # внешняя модель
-AI_LLM__PROVIDER=local AI_LLM__LOCAL_BASE_URL=... # локальный контур целиком
-AI_LLM__FORCE_LOCAL=true                          # аварийный тумблер
+AI_LLM__PROVIDER=external                      # любой OpenAI-совместимый эндпоинт
+AI_LLM__BASE_URL=https://api.aitunnel.ru/v1
+AI_LLM__MODEL=deepseek-v4-flash
+AI_LLM__API_KEY=...
+
+AI_LLM__PROVIDER=local                         # локальный контур целиком
+AI_LLM__FORCE_LOCAL=true                       # аварийный тумблер
 ```
+
+Смена провайдера — три поля, а не новый код: локальный сервинг, aitunnel и
+OpenRouter говорят на одном протоколе, и клиент у них общий. В журнале шлюза
+эндпоинт подписан по хосту, иначе в отчёте о стоимости все внешние вызовы
+выглядят одинаково.
 
 ## Эндпоинты
 

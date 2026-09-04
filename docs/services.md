@@ -85,13 +85,18 @@ uv run python scripts/demo.py --repo "homework_examples/GO/Хорошее реш
 ## Конфигурация
 
 ```bash
-export AI_LLM__PROVIDER=openrouter        # local | openrouter | fake
-export AI_LLM__API_KEY=...                # для openrouter
-export AI_LLM__MODEL=openai/gpt-4o-mini
+export AI_LLM__PROVIDER=external          # fake | local | external
+export AI_LLM__BASE_URL=https://api.aitunnel.ru/v1
+export AI_LLM__MODEL=deepseek-v4-flash
+export AI_LLM__API_KEY=...
 export AI_LLM__LOCAL_BASE_URL=http://localhost:11434/v1   # vLLM или Ollama
 export AI_LLM__FORCE_LOCAL=true           # аварийный тумблер: наружу не ходим вовсе
 ```
 
+Удобнее — `backend/.env` (шаблон в `.env.example`, файл под gitignore). Тесты
+его намеренно не читают: прогон не должен зависеть от того, что лежит в рабочей
+копии.
+
 Локальный и внешний маршруты — один и тот же OpenAI-совместимый клиент, отличаются
-только `base_url`. Переключение целиком на локальный контур — одна переменная
+только `base_url`, моделью и ключом. Переключение целиком на локальный контур — одна переменная
 окружения, и это можно показать на демо, не трогая код.

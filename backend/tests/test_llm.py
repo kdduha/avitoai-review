@@ -163,6 +163,31 @@ def test_local_provider_is_marked_local():
     assert provider.is_local is True
 
 
+def test_any_openai_compatible_endpoint_is_one_config():
+    """Смена провайдера — три поля, а не новый код: клиент у всех один."""
+    from pydantic import SecretStr
+
+    provider = provider_from_config(
+        LLMConfig(
+            provider="external",
+            base_url="https://api.aitunnel.ru/v1",
+            model="deepseek-v4-flash",
+            api_key=SecretStr("k"),
+        )
+    )
+    assert provider.base_url == "https://api.aitunnel.ru/v1"
+    assert provider.model == "deepseek-v4-flash"
+    assert provider.is_local is False
+    # Имя в журнале — по хосту, иначе в отчёте о стоимости все внешние
+    # вызовы выглядят одинаково.
+    assert provider.name == "aitunnel"
+
+
+def test_legacy_provider_name_still_resolves():
+    """`openrouter` из старых .env не должен ронять старт."""
+    assert LLMConfig(provider="openrouter").provider == "external"
+
+
 def test_openrouter_without_a_key_fails_at_startup_not_mid_run():
     with pytest.raises(LLMError, match="API_KEY"):
         provider_from_config(LLMConfig(provider="openrouter"))
@@ -216,19 +241,23 @@ def test_overlapping_runs_do_not_bill_each_other():
     assert gateway.audit.summary(first)["calls"] == 3
 
 
-def test_collect_is_thread_safe():
-    """Шлюз один на приложение, а запросы приходят из разных потоков."""
+def test_concurrent_runs_each_see_only_their_own_calls():
+    """Шлюз один на приложение, а `/review` уходит в поток: счета не должны смешиваться."""
     import threading
 
     gateway, provider = fake_gateway([])
     provider.default = "ok"
     per_thread: list[int] = []
+    failures: list[BaseException] = []
 
     def run() -> None:
-        with gateway.audit.collect() as spend:
-            for _ in range(20):
-                gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
-            per_thread.append(len(spend))
+        try:
+            with gateway.audit.collect() as spend:
+                for _ in range(20):
+                    gateway.complete([{"role": "user", "content": "x"}], task=TaskKind.REVIEW)
+                per_thread.append(len(spend))
+        except BaseException as exc:  # noqa: BLE001 — падение потока должно быть видно
+            failures.append(exc)
 
     threads = [threading.Thread(target=run) for _ in range(8)]
     for thread in threads:
@@ -236,9 +265,10 @@ def test_collect_is_thread_safe():
     for thread in threads:
         thread.join()
 
+    assert not failures
     assert len(gateway.audit.records) == 160
-    # Каждый прогон видит минимум свои 20 записей и никогда не теряет их.
-    assert all(count >= 20 for count in per_thread)
+    # Ровно свои: ни одной чужой записи не подмешалось.
+    assert per_thread == [20] * 8
 
 
 def test_audit_records_failures():

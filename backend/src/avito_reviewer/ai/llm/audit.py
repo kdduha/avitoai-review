@@ -12,6 +12,7 @@ import json
 import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,16 +47,24 @@ class AuditRecord:
         )
 
 
+# Прогоны, открытые в текущем контексте выполнения: пары (журнал, приёмник).
+# Именно контекст, а не глобальный список: два запроса идут в разных потоках,
+# и каждый должен видеть свои записи, а не записи соседа.
+_open_runs: ContextVar[tuple[tuple[int, list["AuditRecord"]], ...]] = ContextVar(
+    "avito_audit_runs", default=()
+)
+
+
 @dataclass
 class AuditLog:
     records: list[AuditRecord] = field(default_factory=list)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
-    _sinks: list[list[AuditRecord]] = field(default_factory=list, repr=False, compare=False)
 
     def add(self, record: AuditRecord) -> None:
         with self._lock:
             self.records.append(record)
-            for sink in self._sinks:
+        for owner, sink in _open_runs.get():
+            if owner == id(self):
                 sink.append(record)
 
     # ------------------------------------------------------------------ #
@@ -65,19 +74,21 @@ class AuditLog:
         """Записи одного прогона, отдельно от общего журнала.
 
         Журнал один на приложение — иначе не сложить стоимость прогона курса.
-        Но черновик обязан отчитаться о своих токенах, а не о чужих, и срезом по
-        длине это не решается: `/review` уходит в поток, два запроса идут
-        внахлёст, и «хвост журнала» первого включит записи второго. Поэтому
-        подписка, а не индекс.
+        Но черновик обязан отчитаться о своих токенах, а не о чужих, и срезом
+        по длине это не решается: `/review` уходит в поток, два запроса идут
+        внахлёст, и «хвост журнала» первого включит записи второго.
+
+        Приёмник живёт в контексте выполнения, а не в общем списке: подписка на
+        всё подряд имела бы ровно тот же изъян, что и срез, — соседний прогон
+        писал бы в чужой счёт. Вложенные прогоны считаются включительно: внешний
+        видит и то, что сделал внутренний.
         """
         sink: list[AuditRecord] = []
-        with self._lock:
-            self._sinks.append(sink)
+        token = _open_runs.set((*_open_runs.get(), (id(self), sink)))
         try:
             yield sink
         finally:
-            with self._lock:
-                self._sinks.remove(sink)
+            _open_runs.reset(token)
 
     @property
     def total_cost_rub(self) -> float:
