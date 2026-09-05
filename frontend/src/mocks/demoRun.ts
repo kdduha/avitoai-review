@@ -224,7 +224,7 @@ export const DEMO_DETECT: DetectResponse = {
         start: null,
         end: null,
         start_line: 1,
-        end_line: 68,
+        end_line: 54,
         score: 0.61,
         signals: ['forensics'],
         reason: 'Весь проект добавлен одним коммитом «init» за 4 минуты, промежуточных правок нет.',

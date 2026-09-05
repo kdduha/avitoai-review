@@ -143,20 +143,20 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
           </ResponsiveContainer>
         </Panel>
 
-        <Panel title="Средний балл по критериям" hint="доля от максимума критерия: где поток проседает целиком">
+        <Panel title="Средний балл по заданиям" hint="доля от максимума задания: где поток проседает целиком">
           <ResponsiveContainer width="100%" height={190}>
             <BarChart
-              data={stats.criterionAverages}
+              data={stats.assignmentAverages}
               layout="vertical"
               margin={{ left: 0, right: 28, top: 4, bottom: 4 }}
             >
               <CartesianGrid {...GRID} horizontal={false} vertical />
               <XAxis type="number" domain={[0, 100]} unit="%" {...AXIS} />
-              <YAxis type="category" dataKey="criterion" width={148} {...AXIS} />
+              <YAxis type="category" dataKey="assignment" width={92} {...AXIS} />
               <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f1f2f0' }} />
               <Bar
                 dataKey="avg"
-                name="средний балл"
+                name="доля от максимума"
                 fill={SERIES.primary}
                 barSize={16}
                 radius={[0, 4, 4, 0]}
