@@ -200,6 +200,110 @@ def test_detect_spans_are_addressable(make_client):
 
 
 # --------------------------------------------------------------------------- #
+# ревью с детектором
+# --------------------------------------------------------------------------- #
+
+def test_detection_rides_along_on_a_single_ingest(make_client):
+    """Один поход за сдачей на оба разбора — ради этого всё и затевалось.
+
+    Два похода означали бы не только двойной расход лимита GitHub: пушни студент
+    между вызовами, и спаны детектора описывали бы другую ревизию, чем цитаты
+    черновика, — а ревьюер видит их рядом как один разбор.
+    """
+    ingest = StubIngest()
+    client, _ = make_client(ingest=ingest, responses=[VERDICTS] * 4)
+    body = client.post(
+        "/review",
+        json={"link": LINK, "rubric_id": "go-task1", "with_detection": True},
+    ).json()
+
+    assert ingest.calls == 1
+    assert body["draft"]["score"] > 0
+    assert body["detection"]["advisory"] is True
+
+
+def test_review_without_the_flag_says_nothing_about_detection(make_client):
+    """Путь по умолчанию стоит ровно столько же, сколько стоил: разница — один вызов."""
+    plain, plain_provider = make_client(responses=[VERDICTS] * 4)
+    flagged, flagged_provider = make_client(responses=[VERDICTS] * 4)
+
+    body = plain.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).json()
+    flagged.post(
+        "/review", json={"link": LINK, "rubric_id": "go-task1", "with_detection": True}
+    )
+
+    assert body["detection"] is None
+    assert len(flagged_provider.calls) == len(plain_provider.calls) + 1
+
+
+def test_blocked_submission_costs_no_detection_either(make_client):
+    """Непринятая по формату работа не стоит ни рубля — и детектору тоже."""
+    bundle = go_bundle(artifacts=[artifact("cmd/main.go", text="package main\nfunc main() {}\n")])
+    client, provider = make_client(ingest=StubIngest(bundle))
+    body = client.post(
+        "/review",
+        json={"link": LINK, "rubric_id": "go-task1", "with_detection": True},
+    ).json()
+
+    assert body["draft"]["gate"]["status"] == "blocked"
+    assert provider.calls == []
+    assert body["detection"]["cost_rub"] == 0
+    assert any("не принята по формату" in line for line in body["detection"]["limitations"])
+
+
+def test_a_broken_detector_does_not_sink_the_review(make_client, monkeypatch):
+    """Детектор — довесок: его сбой стоит отчёта, а не ревью."""
+    client, _ = make_client(responses=[VERDICTS] * 4)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("сигнал не собрался")
+
+    monkeypatch.setattr(client.app.state.ai.detection_service, "analyse", boom)
+    response = client.post(
+        "/review", json={"link": LINK, "rubric_id": "go-task1", "with_detection": True}
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["draft"]["score"] > 0
+    assert any("сигнал не собрался" in line for line in body["detection"]["limitations"])
+
+
+def test_review_and_detection_report_their_costs_apart(make_client):
+    """Чекпойнты аудита соседние, а не вложенные: сумма сходится с журналом."""
+    client, _ = make_client(responses=[VERDICTS] * 4)
+    body = client.post(
+        "/review",
+        json={"link": LINK, "rubric_id": "go-task1", "with_detection": True},
+    ).json()
+    total = client.get("/cost").json()["cost_rub"]
+
+    assert body["draft"]["cost_rub"] > 0
+    assert body["detection"]["cost_rub"] > 0
+    assert body["draft"]["cost_rub"] + body["detection"]["cost_rub"] == pytest.approx(
+        total, abs=1e-3
+    )
+
+
+def test_detection_spans_point_into_the_files_of_this_response(make_client):
+    """Человекочитаемая форма «та же ревизия»: спан адресует файл из этого же ответа."""
+    bundle = go_bundle(artifacts=[
+        artifact("cmd/main.go", text=GO_MAIN),
+        artifact("internal/service/order.go", text="x\n" * 900),
+    ])
+    client, _ = make_client(ingest=StubIngest(bundle), responses=[VERDICTS] * 4)
+    body = client.post(
+        "/review",
+        json={"link": LINK, "rubric_id": "go-task1", "with_detection": True},
+    ).json()
+
+    paths = {f["path"] for f in body["files"]}
+    assert body["detection"]["spans"]
+    for span in body["detection"]["spans"]:
+        assert span["artifact"] in paths
+
+
+# --------------------------------------------------------------------------- #
 # ошибки источника
 # --------------------------------------------------------------------------- #
 

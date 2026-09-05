@@ -46,6 +46,14 @@ class ReviewRequest(SubmissionRequest):
         default_factory=list,
         description="Факты Format Gate: проверены кодом, модель их не пересчитывает",
     )
+    with_detection: bool = Field(
+        default=False,
+        description=(
+            "Вернуть рядом с черновиком отчёт детектора ГенИИ. Это один прогон: "
+            "бандл и тексты общие, поэтому спаны детектора описывают ту же "
+            "ревизию, что и цитаты черновика, а источник опрашивается один раз."
+        ),
+    )
 
     @model_validator(mode="after")
     def _one_rubric(self) -> ReviewRequest:
@@ -109,6 +117,14 @@ class ReviewResponse(BaseModel):
     bundle: SubmissionBundle
     files: list[ArtifactTextOut]
     draft: ReviewDraft
+    detection: DetectionReport | None = Field(
+        default=None,
+        description=(
+            "Отчёт детектора ГенИИ, если его просили через `with_detection`. "
+            "`null` значит «не просили»; если просили, но сказать нечего, "
+            "приходит отчёт с причиной в `limitations`."
+        ),
+    )
 
 
 class DetectResponse(BaseModel):

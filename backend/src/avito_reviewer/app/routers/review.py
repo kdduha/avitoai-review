@@ -9,6 +9,9 @@ from fastapi.concurrency import run_in_threadpool
 
 from avito_reviewer.ai import AIService, Rubric
 from avito_reviewer.ai.compiler import DRAFT_NOTE, CompilerError, RubricCompiler
+from avito_reviewer.ai.content import ArtifactText
+from avito_reviewer.ai.detection import DetectionReport
+from avito_reviewer.ai.review import ReviewDraft
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
@@ -50,6 +53,39 @@ async def _ingest(request: Request, body: DetectRequest | ReviewRequest) -> Subm
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except ProviderFetchError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+async def _detection(
+    ai: AIService,
+    bundle: SubmissionBundle,
+    texts: list[ArtifactText],
+    rubric: Rubric,
+    draft: ReviewDraft,
+    *,
+    student_name: str | None,
+) -> DetectionReport:
+    """Детектор довеском к ревью: он не имеет права уронить черновик.
+
+    Сигналы деградируют внутри себя — недоступный приходит с пометкой, а не с
+    нулём, — но неожиданный сбой остаётся возможным, и цена ему здесь потерянный
+    отчёт, а не потерянное ревью. Отсюда единственный в сервисе широкий перехват:
+    он ограничен необязательной половиной ответа.
+
+    Работу, не принятую по формату, детектор не смотрит: она и так уходит
+    ревьюеру, а judge стоит денег — то же правило, по которому при
+    заблокированном гейте не запускается и ревью.
+    """
+    if draft.gate is not None and draft.gate.blocked:
+        return DetectionReport.unavailable(
+            "Детектор не запускался: работа не принята по формату."
+        )
+    try:
+        return await run_in_threadpool(
+            partial(ai.detect, bundle, texts, rubric, student_name=student_name)
+        )
+    except Exception as exc:
+        _log.warning("детектор не отработал: %s", exc, exc_info=True)
+        return DetectionReport.unavailable(f"Детектор не отработал: {exc}")
 
 
 def _rubric(request: Request, rubric_id: str | None, inline: Rubric | None) -> Rubric:
@@ -156,6 +192,10 @@ async def review(body: ReviewRequest, request: Request) -> ReviewResponse:
     обязана приложить цитату, которая затем сверяется с текстом файла.
     Вердикты без подтверждённой цитаты помечены `needs_human_attention`.
 
+    `with_detection` добавляет к черновику отчёт о признаках ГенИИ, не сходив за
+    сдачей второй раз: спаны детектора и цитаты черновика описывают одну и ту же
+    ревизию. Отчёт рекомендательный и на балл не влияет.
+
     ``404`` — рубрика не найдена. ``422`` — ссылка или источник неверны.
     ``502`` — источник сдачи не ответил.
     """
@@ -176,10 +216,16 @@ async def review(body: ReviewRequest, request: Request) -> ReviewResponse:
         condition_text=body.condition_text,
         student_name=body.student_name,
     )
+    detection = (
+        await _detection(ai, bundle, texts, rubric, draft, student_name=body.student_name)
+        if body.with_detection
+        else None
+    )
     return ReviewResponse(
         bundle=bundle,
         files=[ArtifactTextOut.of(text) for text in texts],
         draft=draft,
+        detection=detection,
     )
 
 

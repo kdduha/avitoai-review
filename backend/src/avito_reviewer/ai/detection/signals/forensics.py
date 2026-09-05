@@ -178,7 +178,10 @@ def _span_weight(artifact: Artifact) -> int:
 def _minutes_since_previous(revisions: list[Revision], index: int) -> float | None:
     if index == 0:
         return None
-    delta = revisions[index].authored_at - revisions[index - 1].authored_at
+    try:
+        delta = revisions[index].authored_at - revisions[index - 1].authored_at
+    except (AttributeError, TypeError):
+        return None
     return max(delta.total_seconds() / 60, 0.0)
 
 
@@ -192,7 +195,10 @@ def _minutes_between(first: Revision, last: Revision) -> float | None:
 def _gaps_minutes(revisions: list[Revision]) -> list[float]:
     gaps: list[float] = []
     for previous, current in zip(revisions, revisions[1:]):
-        delta = current.authored_at - previous.authored_at
+        try:
+            delta = current.authored_at - previous.authored_at
+        except (AttributeError, TypeError):
+            continue
         if timedelta(0) < delta < timedelta(days=1):
             gaps.append(delta.total_seconds() / 60)
     return gaps
