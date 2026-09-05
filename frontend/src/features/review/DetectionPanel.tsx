@@ -14,7 +14,6 @@ type Verdict = 'pending' | 'confirmed' | 'rejected'
 
 interface Props {
   report: DetectionReport | null
-  error: string | null
   onSpan: (span: DetectionSpan) => void
   onVerdict: (spanId: string, verdict: Verdict) => void
   activeSpanId: string | null
@@ -141,7 +140,14 @@ function SpanCard({
   )
 }
 
-export function DetectionPanel({ report, error, onSpan, onVerdict, activeSpanId }: Props) {
+export function DetectionPanel({ report, onSpan, onVerdict, activeSpanId }: Props) {
+  /* Отчёт без единого сигнала — это `DetectionReport.unavailable`: детектор не
+     запускался или упал, и сервер прислал причину вместо отказа. Показать здесь
+     шкалу нельзя: `overall_score` в таком отчёте нулевой по умолчанию, и 0.00
+     прочиталось бы как «признаков нет». Это то же правило, по которому
+     недоступный сигнал — не ноль, а «не смотрели», только целиком про отчёт. */
+  const ran = Boolean(report?.signals?.length)
+
   return (
     <section className="flex max-h-[78vh] min-h-0 flex-col bg-surface lg:max-h-none">
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-line px-5">
@@ -152,7 +158,27 @@ export function DetectionPanel({ report, error, onSpan, onVerdict, activeSpanId 
       {!report ? (
         <div className="flex flex-1 items-start px-5 py-5">
           <p className="max-w-[38ch] text-[13px] leading-[1.55] text-muted">
-            {error ?? 'Детектор для этой работы не запускался.'}
+            Детектор для этой работы не запускался: галочку в форме проверки не ставили.
+          </p>
+        </div>
+      ) : !ran ? (
+        <div className="flex flex-1 flex-col px-5 py-5">
+          <div className="flex items-start gap-2">
+            <Info size={14} strokeWidth={1.7} className="mt-0.5 shrink-0 text-faint" />
+            <div>
+              <p className="text-[13px] font-medium text-ink">Проверки не было</p>
+              <ul className="mt-1.5 space-y-1">
+                {(report.limitations ?? []).map((limit) => (
+                  <li key={limit} className="max-w-[38ch] text-[12.5px] leading-[1.5] text-ink-soft">
+                    {limit}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          <p className="mt-3 max-w-[38ch] border-t border-line-soft pt-3 text-[12px] leading-[1.5] text-faint">
+            Это не «признаков не нашлось»: ни один сигнал не отработал, и сказать о самостоятельности
+            работы нечего. Пустой отчёт и чистая работа — разные события.
           </p>
         </div>
       ) : (

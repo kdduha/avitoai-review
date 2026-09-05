@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, FlaskConical } from 'lucide-react'
 import type { DetectionSpan, Evidence } from '@/lib/backend'
-import { demoThread, getRun, setScore, setSpanVerdict } from '@/lib/runs'
+import { demoRuns, demoThread, getRun, setScore, setSpanVerdict } from '@/lib/runs'
 import { formatDateTime, timeLeft } from '@/lib/format'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -46,7 +46,7 @@ export function ReviewPage() {
   if (!workspace) {
     return (
       <div className="grid min-h-screen place-items-center px-6">
-        <div className="max-w-[46ch] text-center">
+        <div className="max-w-[52ch] text-center">
           <h1 className="text-[17px] font-semibold text-ink">Прогон не найден</h1>
           <p className="mt-2 text-[13.5px] leading-[1.6] text-muted">
             Результаты проверки живут в памяти вкладки: у бэкенда пока нет хранилища сдач, поэтому
@@ -55,6 +55,27 @@ export function ReviewPage() {
           <Link to="/check" className="mt-4 inline-block">
             <Button variant="primary">Запустить проверку</Button>
           </Link>
+
+          {/* Записанные прогоны никуда не делись — и по одной рубрике их может
+              быть несколько, так что ссылка из ведомости ведёт не на все. */}
+          <div className="mt-7 border-t border-line pt-5 text-left">
+            <div className="text-[11.5px] uppercase tracking-wide text-faint">
+              Записанные прогоны
+            </div>
+            <ul className="mt-2 space-y-2">
+              {demoRuns().map((run) => (
+                <li key={run.id}>
+                  <Link
+                    to={`/review/${run.id}`}
+                    className="text-[13px] font-medium text-accent hover:text-accent-ink"
+                  >
+                    {run.title}
+                  </Link>
+                  <div className="text-[12px] leading-[1.5] text-muted">{run.note}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
     )
@@ -159,7 +180,6 @@ export function ReviewPage() {
         />
         <DetectionPanel
           report={workspace.detection}
-          error={workspace.detectionError}
           activeSpanId={activeSpanId}
           onSpan={openSpan}
           onVerdict={(spanId, verdict) => setWorkspace(setSpanVerdict(workspace.id, spanId, verdict))}

@@ -8,6 +8,20 @@ export interface DemoFile {
   origin: string
   changedLines: string
   text: string
+  /** Номер каждой строки `text` в полной версии файла.
+   *
+   *  Заполняется только там, где текст собран из ханков диффа: у такого
+   *  фрагмента нумерация идёт с пропусками (20–30, затем 63–78), и считать её
+   *  от `firstLine` нельзя — цитата уехала бы на чужую строку. У целого файла
+   *  поле опускается, и нумерация достраивается сплошным рядом. */
+  lineNumbers?: number[]
+}
+
+/** Номера строк файла в координатах его полной версии. */
+function numbersOf(file: DemoFile): number[] {
+  const lines = file.text.split('\n')
+  if (file.lineNumbers?.length === lines.length) return file.lineNumbers
+  return lines.map((_, index) => file.firstLine + index)
 }
 
 /** Цитаты ищутся по тексту файла, а не проставляются руками: так демо ведёт
@@ -19,11 +33,13 @@ export function locator(files: DemoFile[]) {
     const needle = quote.split('\n')[0].trim()
     const index = lines.findIndex((line) => line.trim() === needle)
     const found = file && index !== -1
+    const numbers = file ? numbersOf(file) : []
+    const height = quote.split('\n').length
 
     return {
       artifact,
-      start_line: found ? index + file.firstLine : null,
-      end_line: found ? index + file.firstLine + quote.split('\n').length - 1 : null,
+      start_line: found ? numbers[index] : null,
+      end_line: found ? (numbers[index + height - 1] ?? numbers[index] + height - 1) : null,
       quote,
       status: found ? ('valid' as const) : ('wrong_location' as const),
       char_start: null,
@@ -34,18 +50,21 @@ export function locator(files: DemoFile[]) {
 }
 
 export function toArtifacts(files: DemoFile[]): ReviewResponse['files'] {
-  return files.map((file) => ({
-    path: file.path,
-    role: 'solution',
-    lang: file.lang,
-    partial: file.partial,
-    origin: file.origin,
-    first_line: file.firstLine,
-    last_line: file.firstLine + file.text.split('\n').length - 1,
-    line_numbers: file.text.split('\n').map((_, index) => file.firstLine + index),
-    changed_lines: file.changedLines,
-    text: file.text,
-  }))
+  return files.map((file) => {
+    const numbers = numbersOf(file)
+    return {
+      path: file.path,
+      role: 'solution',
+      lang: file.lang,
+      partial: file.partial,
+      origin: file.origin,
+      first_line: numbers[0] ?? file.firstLine,
+      last_line: numbers[numbers.length - 1] ?? file.firstLine,
+      line_numbers: numbers,
+      changed_lines: file.changedLines,
+      text: file.text,
+    }
+  })
 }
 
 export type DemoRun = { review: ReviewResponse; detect: DetectResponse }

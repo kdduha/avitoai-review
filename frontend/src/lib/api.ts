@@ -75,9 +75,18 @@ export const api = {
   setCuratorStreams: (curatorId: string, streamIds: string[]): Promise<Curator[]> => {
     const curator = state.curators.find((item) => item.id === curatorId)
     if (curator) {
-      curator.streamIds = streamIds
+      /* Несуществующий поток не должен ронять экран: раньше здесь стоял
+         non-null assertion, и первая же правка куратора с чужим потоком в
+         `streamIds` падала. Такой поток просто отбрасывается. */
+      const known = streamIds.filter((id) => STREAMS.some((stream) => stream.id === id))
+      curator.streamIds = known
       curator.courseIds = [
-        ...new Set(streamIds.map((id) => STREAMS.find((stream) => stream.id === id)!.courseId)),
+        ...new Set(
+          known.flatMap((id) => {
+            const stream = STREAMS.find((item) => item.id === id)
+            return stream ? [stream.courseId] : []
+          }),
+        ),
       ]
     }
     return delay(state.curators.map((item) => ({ ...item })), 120)

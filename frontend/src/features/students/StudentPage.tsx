@@ -114,7 +114,11 @@ export function StudentPage() {
                       'num shrink-0 text-[15px] font-semibold',
                       grade.score === null
                         ? 'text-faint'
-                        : grade.score < (assignments.find((item) => item.id === grade.assignmentId)?.passThreshold ?? 0)
+                        : /* Порог зачёта назван в материалах только у системного
+                             дизайна; где его нет, балл ничем не «ниже порога». */
+                          grade.score <
+                            (assignments.find((item) => item.id === grade.assignmentId)?.passThreshold ??
+                              Number.NEGATIVE_INFINITY)
                           ? 'text-critical-ink'
                           : 'text-ink',
                     )}

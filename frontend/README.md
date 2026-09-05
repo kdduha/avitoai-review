@@ -8,6 +8,7 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build
 npm run typecheck
+npm test           # юнит-тесты (vitest)
 npm run gen:api    # типы из OpenAPI поднятого бэкенда
 ```
 
@@ -27,8 +28,11 @@ src/lib/backend.ts     клиент бэкенда; backend.d.ts генерир�
 src/lib/workspace.ts   три ответа сервера → один вид для панелей
 src/lib/runs.ts        прогоны проверки: живые и записанные
 src/lib/api.ts         данные админки, которых у бэкенда ещё нет
+src/lib/rubric.ts      зеркало серверных проверок рубрики и справочник гейта
+src/lib/*.test.ts      юнит-тесты: зеркало рубрики, сторож расхождения, адаптер
 src/mocks/             каталог программ и записанные прогоны
 src/features/review/   Review Workspace и запуск проверки
+src/features/rubrics/  каталог рубрик, компилятор и редактор
 src/features/courses/  ведомость, дашборд, кураторы
 src/styles/index.css   токены визуального языка
 ```

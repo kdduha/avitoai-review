@@ -30,7 +30,7 @@ function GradeCell({
   runId,
 }: {
   grade: Grade | undefined
-  passThreshold: number
+  passThreshold: number | null
   runId: string | null
 }) {
   if (!grade || grade.score === null) {
@@ -51,7 +51,9 @@ function GradeCell({
         <span
           className={cn(
             'num text-[13px]',
-            grade.score < passThreshold ? 'text-critical-ink' : 'text-ink',
+            /* Порог зачёта есть не у всех заданий: в материалах он назван
+               только у системного дизайна. Где порога нет — не красим. */
+            passThreshold !== null && grade.score < passThreshold ? 'text-critical-ink' : 'text-ink',
             pending ? 'font-normal text-muted' : 'font-medium',
           )}
         >
@@ -159,6 +161,12 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
                   </div>
                 </th>
               ))}
+              <th
+                className="px-3 py-2.5 text-center text-[12.5px] font-medium text-muted"
+                title="«Количество дз» из ведомости: сколько работ сдано"
+              >
+                ДЗ
+              </th>
               <th className="px-3 py-2.5 text-center">
                 <button
                   onClick={() => setSort('total')}
@@ -169,6 +177,12 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
                 </button>
               </th>
               <th className="px-3 py-2.5 text-center text-[12.5px] font-medium text-muted">Оценка</th>
+              <th
+                className="px-3 py-2.5 text-[12.5px] font-medium text-muted"
+                title="«Согласие на оценку» — свободный текст, как в ведомости"
+              >
+                Согласие
+              </th>
               <th className="px-4 py-2.5 text-[12.5px] font-medium text-muted">Куратор</th>
             </tr>
           </thead>
@@ -177,8 +191,11 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
               const row = byStudentTotals.get(student.id)
               const curator = curators.find((c) => c.id === student.curatorId)
               return (
-                <tr key={student.id} className="border-b border-line-soft last:border-b-0 hover:bg-[#f8f9f6]">
-                  <td className="sticky left-0 z-10 bg-inherit px-4 py-2">
+                /* Липкая колонка обязана быть непрозрачной: ведомость шире экрана
+                   почти всегда, и `bg-inherit` наследовал от `tr` пустоту — баллы
+                   проезжали под именем студента и читались как его собственные. */
+                <tr key={student.id} className="group border-b border-line-soft last:border-b-0 hover:bg-[#f8f9f6]">
+                  <td className="sticky left-0 z-10 bg-surface px-4 py-2 group-hover:bg-[#f8f9f6]">
                     <Link to={`/students/${student.id}`} className="group flex items-center gap-2">
                       <Avatar name={student.name} size={24} />
                       <span className="text-[13.5px] text-ink group-hover:text-accent-ink">{student.name}</span>
@@ -193,6 +210,9 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
                       grade={(byStudent.get(student.id) ?? []).find((g) => g.assignmentId === assignment.id)}
                     />
                   ))}
+                  <td className="num px-3 py-2 text-center text-[13px] text-muted">
+                    {row ? row.homeworkCount : '—'}
+                  </td>
                   <td className="num px-3 py-2 text-center text-[13.5px] text-ink-soft">
                     {row ? row.total : '—'}
                   </td>
@@ -206,6 +226,7 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
                       {row ? row.mark : '—'}
                     </span>
                   </td>
+                  <td className="px-3 py-2 text-[12.5px] text-muted">{row ? row.consent : '—'}</td>
                   <td className="px-4 py-2 text-[12.5px] text-muted">{curator?.name ?? '—'}</td>
                 </tr>
               )

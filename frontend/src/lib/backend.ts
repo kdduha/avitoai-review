@@ -24,6 +24,10 @@ export type LatePolicy = S['LatePolicy']
 export type RubricSummary = S['RubricSummary']
 export type CostSummary = S['CostSummary']
 export type RubricDraft = S['RubricDraft']
+export type CompileRubricResponse = S['CompileRubricResponse']
+export type CriterionSource = S['CriterionSource']
+export type SourceStatus = S['SourceStatus']
+export type Scale = S['Scale']
 export type CompileRubricRequest = S['CompileRubricRequest']
 export type ConfirmRubricRequest = S['ConfirmRubricRequest']
 export type ConfirmRubricResponse = S['ConfirmRubricResponse']
@@ -39,6 +43,10 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Список поломок целиком: `POST /rubrics` отвечает на 422 не одной строкой,
+     *  а перечнем того, что в рубрике не считается. Склеенный в предложение, он
+     *  читается хуже списка, поэтому доезжает до экрана обеими формами. */
+    readonly problems: string[] = [],
   ) {
     super(message)
   }
@@ -46,20 +54,19 @@ export class ApiError extends Error {
 
 /** Бэкенд отвечает `detail` строкой или списком ошибок валидации — и то, и
  *  другое должно доехать до экрана человеческим текстом, а не `[object Object]`. */
-function readDetail(payload: unknown, status: number): string {
-  if (typeof payload === 'string' && payload) return payload
+function readDetail(payload: unknown, status: number): { message: string; problems: string[] } {
+  if (typeof payload === 'string' && payload) return { message: payload, problems: [] }
   if (payload && typeof payload === 'object' && 'detail' in payload) {
     const detail = (payload as { detail: unknown }).detail
-    if (typeof detail === 'string') return detail
+    if (typeof detail === 'string') return { message: detail, problems: [] }
     if (Array.isArray(detail)) {
-      return detail
-        .map((item) =>
-          item && typeof item === 'object' && 'msg' in item ? String((item as { msg: unknown }).msg) : String(item),
-        )
-        .join('; ')
+      const problems = detail.map((item) =>
+        item && typeof item === 'object' && 'msg' in item ? String((item as { msg: unknown }).msg) : String(item),
+      )
+      return { message: problems.join('; '), problems }
     }
   }
-  return `Бэкенд ответил ${status}`
+  return { message: `Бэкенд ответил ${status}`, problems: [] }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -74,7 +81,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new ApiError(response.status, readDetail(payload, response.status))
+  if (!response.ok) {
+    const { message, problems } = readDetail(payload, response.status)
+    throw new ApiError(response.status, message, problems)
+  }
   return payload as T
 }
 
@@ -87,7 +97,7 @@ export const backend = {
   /** Условие задания → черновик рубрики. Утверждает методист, поэтому ответ
    *  несёт не только критерии, но и оговорки с открытыми вопросами. */
   compileRubric: (body: CompileRubricRequest) =>
-    request<RubricDraft>('/rubrics/compile', { method: 'POST', body: JSON.stringify(body) }),
+    request<CompileRubricResponse>('/rubrics/compile', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Подтверждение методистом: черновик становится рубрикой потока. */
   confirmRubric: (body: ConfirmRubricRequest) =>
@@ -96,6 +106,10 @@ export const backend = {
   review: (body: ReviewRequest) =>
     request<ReviewResponse>('/review', { method: 'POST', body: JSON.stringify(body) }),
 
+  /** Детектор сам по себе, без ревью. Рабочему месту он не нужен и не должен
+   *  быть нужен: разбор просит детекцию флагом `with_detection`, и тогда сдача
+   *  тянется из GitHub один раз. Отдельный вызов рядом с `/review` — это снова
+   *  двойной ingest и спаны от другой ревизии, чем цитаты черновика. */
   detect: (body: DetectRequest) =>
     request<DetectResponse>('/detect', { method: 'POST', body: JSON.stringify(body) }),
 }

@@ -7,33 +7,15 @@
  */
 
 import type { DetectResponse, ReviewResponse, SubmissionBundle } from '@/lib/backend'
+import { locator, toArtifacts } from './demoUtils'
 import { DEMO_FILES } from './files'
 
 export const DEMO_RUN_ID = 'demo'
 
-function locate(path: string, quote: string): { start: number; end: number } | null {
-  const file = DEMO_FILES.find((item) => item.path === path)
-  if (!file) return null
-  const lines = file.text.split('\n')
-  const needle = quote.split('\n')[0].trim()
-  const index = lines.findIndex((line) => line.trim() === needle)
-  if (index === -1) return null
-  return { start: index + file.firstLine, end: index + file.firstLine + quote.split('\n').length - 1 }
-}
-
-function evidence(artifact: string, quote: string) {
-  const at = locate(artifact, quote)
-  return {
-    artifact,
-    start_line: at?.start ?? null,
-    end_line: at?.end ?? null,
-    quote,
-    status: at ? ('valid' as const) : ('wrong_location' as const),
-    char_start: null,
-    char_end: null,
-    note: at ? '' : 'фрагмент не найден в указанных строках',
-  }
-}
+/** Поиск цитат и сборка `ArtifactTextOut` — общие с остальными прогонами
+ *  (`demoUtils`). Своя копия здесь была ровно до тех пор, пока прогон был
+ *  единственным. */
+const evidence = locator(DEMO_FILES)
 
 const BUNDLE: SubmissionBundle = {
   submission_id: 'demo-go-task1',
@@ -53,18 +35,7 @@ const BUNDLE: SubmissionBundle = {
 
 export const DEMO_REVIEW: ReviewResponse = {
   bundle: BUNDLE,
-  files: DEMO_FILES.map((file) => ({
-    path: file.path,
-    role: 'solution',
-    lang: file.lang,
-    partial: file.partial,
-    origin: file.origin,
-    first_line: file.firstLine,
-    last_line: file.firstLine + file.text.split('\n').length - 1,
-    line_numbers: file.text.split('\n').map((_, index) => file.firstLine + index),
-    changed_lines: file.changedLines,
-    text: file.text,
-  })),
+  files: toArtifacts(DEMO_FILES),
   draft: {
     assignment_id: 'go-task1',
     rubric_title: 'Создание boilerplate сервиса, поднятие веб-сервера',
@@ -223,7 +194,7 @@ export const DEMO_DETECT: DetectResponse = {
         start: null,
         end: null,
         start_line: 1,
-        end_line: 68,
+        end_line: 54,
         score: 0.61,
         signals: ['forensics'],
         reason: 'Весь проект добавлен одним коммитом «init» за 4 минуты, промежуточных правок нет.',

@@ -1,17 +1,15 @@
-/** Файлы демо-работы. Это настоящее решение первого задания курса Go:
- *  веб-сервер с /ping и /healthcheck, порт из .env с переопределением флагом,
- *  корректное завершение по сигналу. Формат текста тот же, что у
- *  `ArtifactTextOut`: строки нумеруются от `first_line`. */
+/** Файлы демо-работы прогона `demo`. Это не сдача настоящего студента: код
+ *  написан под условие первого задания курса Go — веб-сервер с /ping и
+ *  /healthcheck, порт из .env с переопределением флагом, корректное завершение
+ *  по сигналу — и показывает хорошее решение на 8 из 10. Настоящий код лежит в
+ *  соседнем прогоне `demo-go-weak` (`demoGoWeak.ts`).
+ *
+ *  Формат текста тот же, что у `ArtifactTextOut`: строки нумеруются от
+ *  `first_line`. */
 
-export interface DemoFile {
-  path: string
-  lang: string
-  firstLine: number
-  partial: boolean
-  origin: string
-  changedLines: string
-  text: string
-}
+import type { DemoFile } from './demoUtils'
+
+export type { DemoFile }
 
 const MAIN_GO = `package main
 

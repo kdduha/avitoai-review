@@ -1,32 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
-import { demoRunForRubric, startRun } from '@/lib/runs'
+import { DEMO_RUN_ID, demoRunForRubric, startRun } from '@/lib/runs'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
-
-function Field({
-  label,
-  hint,
-  children,
-}: {
-  label: string
-  hint?: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className="block">
-      <span className="text-[12.5px] font-medium text-ink">{label}</span>
-      {hint ? <span className="mt-0.5 block text-[12px] text-faint">{hint}</span> : null}
-      <span className="mt-1.5 block">{children}</span>
-    </label>
-  )
-}
-
-const inputClass =
-  'h-9 w-full rounded-lg border border-line bg-raised px-3 text-[13.5px] text-ink outline-none placeholder:text-faint focus:border-accent-line'
+import { Field, inputClass } from '@/components/ui/Field'
 
 export function CheckPage() {
   const navigate = useNavigate()
@@ -53,7 +33,7 @@ export function CheckPage() {
         studentName: studentName.trim() || undefined,
         withDetection,
       }),
-    onSuccess: ({ workspace }) => {
+    onSuccess: (workspace) => {
       // Прогон только что потратил токены — карточка экономики обязана это увидеть.
       client.invalidateQueries({ queryKey: ['cost'] })
       navigate(`/review/${workspace.id}`)
@@ -63,6 +43,19 @@ export function CheckPage() {
   const offline = status.isError
   const chosen = rubricId || rubrics.data?.[0]?.assignment_id || ''
   const rubric = rubrics.data?.find((item) => item.assignment_id === chosen)
+  /* Записанный разбор есть не у каждой рубрики. Показывать вместо него чужой —
+     хуже, чем не показывать ничего: чтобы это заметить, надо знать курс. */
+  const demoRun = demoRunForRubric(chosen)
+  /* Тринадцать заданий подряд в одном списке не читаются, и по названию не
+     видно, чьё оно. Группировка по курсу — та же, что на экране рубрик. */
+  const byCourse = useMemo(() => {
+    const groups = new Map<string, typeof rubrics.data & object>()
+    for (const item of rubrics.data ?? []) {
+      groups.set(item.course, [...(groups.get(item.course) ?? []), item])
+    }
+    return [...groups.entries()].sort((left, right) => left[0].localeCompare(right[0], 'ru'))
+  }, [rubrics.data])
+  const withDemo = (rubrics.data ?? []).filter((item) => demoRunForRubric(item.assignment_id)).length
 
   return (
     <div className="mx-auto max-w-[720px] px-6 py-7">
@@ -82,8 +75,12 @@ export function CheckPage() {
               <code className="font-mono text-[12px]">cd backend &amp;&amp; uv run uvicorn avito_reviewer.app.main:app</code>
               . Посмотреть интерфейс без бэкенда можно на демо-прогоне.
             </p>
-            <Button size="sm" className="mt-2.5" onClick={() => navigate(`/review/${demoRunForRubric(chosen)}`)}
-              icon={<FlaskConical size={13} strokeWidth={1.8} />}>
+            <Button
+              size="sm"
+              className="mt-2.5"
+              onClick={() => navigate(`/review/${demoRun ?? DEMO_RUN_ID}`)}
+              icon={<FlaskConical size={13} strokeWidth={1.8} />}
+            >
               Открыть демо-прогон
             </Button>
           </div>
@@ -107,11 +104,15 @@ export function CheckPage() {
             disabled={!rubrics.data?.length}
             className={cn(inputClass, 'appearance-none disabled:text-faint')}
           >
-            {rubrics.data?.length ? (
-              rubrics.data.map((item) => (
-                <option key={item.assignment_id} value={item.assignment_id}>
-                  {item.title}
-                </option>
+            {byCourse.length ? (
+              byCourse.map(([course, items]) => (
+                <optgroup key={course} label={course}>
+                  {items.map((item) => (
+                    <option key={item.assignment_id} value={item.assignment_id}>
+                      {item.title}
+                    </option>
+                  ))}
+                </optgroup>
               ))
             ) : (
               <option>Рубрики не загрузились</option>
@@ -172,7 +173,8 @@ export function CheckPage() {
           <span>
             <span className="block text-[13px] text-ink">Проверить на признаки ГенИИ</span>
             <span className="block text-[12px] text-faint">
-              Отдельный прогон: сигнал рекомендательный и на балл не влияет.
+              Тот же прогон: сдача разбирается один раз, поэтому спаны детектора описывают ту же
+              ревизию, что и цитаты черновика. Сигнал рекомендательный и на балл не влияет.
             </span>
           </span>
         </label>
@@ -192,9 +194,17 @@ export function CheckPage() {
           >
             {run.isPending ? 'Разбираю работу' : 'Запустить разбор'}
           </Button>
-          <Button variant="ghost" onClick={() => navigate(`/review/${demoRunForRubric(chosen)}`)}>
-            Открыть демо-прогон
-          </Button>
+          {demoRun ? (
+            <Button variant="ghost" onClick={() => navigate(`/review/${demoRun}`)}>
+              Открыть демо-прогон
+            </Button>
+          ) : (
+            <span className="max-w-[38ch] text-[12px] leading-[1.45] text-faint">
+              Записанного разбора по этой рубрике нет: он есть у {withDemo} из{' '}
+              {rubrics.data?.length ?? 0}. Показывать вместо него чужой — значит показать
+              правдоподобное и неверное.
+            </span>
+          )}
           {status.data ? (
             <span className="ml-auto text-[11.5px] text-faint">
               модель: {status.data.llm_provider}
@@ -205,6 +215,7 @@ export function CheckPage() {
         {run.isPending ? (
           <p className="text-[12px] text-faint">
             Сборка сдачи из GitHub и вызов модели занимают десятки секунд — вкладку лучше не закрывать.
+            {withDetection ? ' Детектор идёт следом за черновиком, в этом же прогоне.' : ''}
           </p>
         ) : null}
       </div>

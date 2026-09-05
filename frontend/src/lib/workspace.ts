@@ -1,15 +1,14 @@
 /** Вид работы для трёх панелей.
  *
- *  Собирается из ответов бэкенда, потому что ни один из них сам по себе не
- *  полон: вердикт знает балл, но не знает названия критерия и его максимума —
- *  это рубрика; текст файла может начинаться не с первой строки — это
- *  `first_line`; спаны детектора живут в отдельном ответе. Сведение в одном
- *  месте избавляет компоненты от знания о том, кто где хранится.
+ *  Собирается из ответа бэкенда и рубрики, потому что ни один из них сам по
+ *  себе не полон: вердикт знает балл, но не знает названия критерия и его
+ *  максимума — это рубрика; текст файла может начинаться не с первой строки —
+ *  это `first_line`. Сведение в одном месте избавляет компоненты от знания о
+ *  том, кто где хранится.
  */
 
 import type {
   ArtifactText,
-  DetectResponse,
   DetectionReport,
   Evidence,
   GateReport,
@@ -84,8 +83,6 @@ export interface Workspace {
   attentionReasons: string[]
   /** Куратор правил баллы: итог на экране больше не тот, что посчитал сервер. */
   edited: boolean
-  /** Детектор запускался, но не отработал. */
-  detectionError: string | null
   partialArtifacts: string[]
   evidenceCoverage: number
   tokensIn: number
@@ -115,14 +112,12 @@ function toFile(text: ArtifactText, marked: Set<string>): WorkspaceFile {
   }
 }
 
-export function buildWorkspace(
-  id: string,
-  review: ReviewResponse,
-  detect: DetectResponse | null,
-  rubric: Rubric,
-): Workspace {
+export function buildWorkspace(id: string, review: ReviewResponse, rubric: Rubric): Workspace {
   const criteria = new Map((rubric.criteria ?? []).map((criterion) => [criterion.id, criterion]))
-  const report = detect?.report ?? null
+  /* Детектор приезжает внутри ответа ревью: один ingest на оба разбора, и
+     спаны описывают ту же ревизию, что и цитаты черновика. `null` значит
+     «не просили» — сбой приходит отчётом с причиной, а не отсутствием отчёта. */
+  const report = review.detection ?? null
 
   const marked = new Set<string>()
   for (const verdict of review.draft.verdicts ?? []) {
@@ -177,7 +172,6 @@ export function buildWorkspace(
     needsHumanAttention: review.draft.needs_human_attention ?? false,
     attentionReasons: review.draft.attention_reasons ?? [],
     edited: false,
-    detectionError: null,
     partialArtifacts: review.draft.partial_artifacts ?? [],
     evidenceCoverage: review.draft.evidence_coverage ?? 0,
     tokensIn: (review.draft.tokens_in ?? 0) + (report?.tokens_in ?? 0),

@@ -1,0 +1,164 @@
+{
+  "assignment_id": "llm-task1",
+  "title": "ДЗ 1. Pretrain",
+  "course": "LLM",
+  "stage": "task1",
+  "source_note": "Форма перенесена дословно из data_science/Пример ДЗ. Курс _LLM_/ДЗ 1. Pretrain.docx, блок «Критерии оценивания». Три критерия с весами 4+4+2 = 10; строка «Максимальный балл – 10» в условии подтверждает сумму. Это единственное задание корпуса с автоматическим числовым порогом: балл за обучение считается по интервалам final eval_loss, и эти интервалы перенесены в anchors критерия c2 ровно так, как записаны в условии («6.0 < L <= 7 - 1 балл», «5.6 < L <= 6.0 - 2 балла», «5.3 < L <= 5.6 - 3 балла», «L <= 5.3 - 4 балла»), поэтому критерий помечен auto_verifiable. Решено самостоятельно: (1) уровня «0 баллов» условие не задаёт — он дописан как отрицание нижней границы (L > 7 либо значение не приведено) и это единственная выдуманная строка в рубрике; (2) название критерия c1 сохранено с опечаткой оригинала («протокенезирован»); (3) порог зачёта не назван — pass_threshold пустой; (4) дедлайнов, штрафов и упоминаний ИИ в условии нет; (5) жёсткие константы сетапа (датасет, VALIDATION_SIZE=5000, MAX_LENGTH=512, токенизатор, архитектура qwen3, 30 минут обучения) вынесены в format_gate: условие требует «убедиться, что: 1. Модель совпадает. 2. Датасет и разделение на train/test совпадает. 3 Обучение длится 30 минут» и говорит «Изменять архитектуру нельзя» — блокирующими сделаны именно эти три, остальные константы уровня warning.",
+  "ai_policy": "not_specified",
+
+  "scale": { "total_max": 10, "pass_threshold": null, "step": 1 },
+  "late_policy": { "grace_days": 0, "penalty_per_grace_day": 0, "after_grace": "zero" },
+
+  "format_gate": [
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "wikimedia/wikipedia",
+        "label": "Датасет из условия не заменён",
+        "expected": "load_dataset(\"wikimedia/wikipedia\", \"20231101.ru\", split=\"train\")"
+      },
+      "note": "«Загрузить через dataset = load_dataset(\"wikimedia/wikipedia\", \"20231101.ru\", split=\"train\")»; условие требует убедиться, что «Датасет и разделение на train/test совпадает»"
+    },
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "VALIDATION_SIZE\\s*=\\s*5000",
+        "label": "Разделение train/test не изменено",
+        "expected": "VALIDATION_SIZE=5000"
+      },
+      "note": "«ВАЖНО! Первые VALIDATION_SIZE=5000 семплов отходят в тестовый сет»"
+    },
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "(?i)qwen3",
+        "label": "Архитектура модели не изменена",
+        "expected": "архитектура qwen3 суммарно на 1b параметров"
+      },
+      "note": "«Используем архитектуру qwen3 суммарно на 1b параметров. Конфиг и функция для создания модели есть в скелете решения. Изменять архитектуру нельзя.»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "MAX_LENGTH\\s*=\\s*512",
+        "label": "Длина блоков токенизации фиксирована",
+        "expected": "MAX_LENGTH=512"
+      },
+      "note": "«Длина блоков токенизации фиксирована MAX_LENGTH=512»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "ai-forever/rugpt3small_based_on_gpt2",
+        "label": "Токенизатор из условия",
+        "expected": "ai-forever/rugpt3small_based_on_gpt2"
+      },
+      "note": "«Используйте токенизатор \"ai-forever/rugpt3small_based_on_gpt2\"»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "(?i)1800|60\\s*\\*\\s*30|30\\s*\\*\\s*60|30\\s*минут",
+        "label": "Обучение длится 30 минут",
+        "expected": "лимит времени обучения 30 минут"
+      },
+      "note": "«3 Обучение длится 30 минут (в шаблоне используется callback для этого)»; «Обучайте модель в течение 30 минут на 1GPU уровня A100»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "eval_loss",
+        "label": "Финальное значение eval_loss зафиксировано",
+        "expected": "финальный eval_loss в отчёте"
+      },
+      "note": "«Запустите evaluation и зафиксируйте финальный eval_loss»; «Важно! Главный критерий – финальный loss»"
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "(?m)^#{1,3}\\s",
+        "label": "Исследовательский репорт в папке решения",
+        "expected": "оформленный отчёт с кодом",
+        "in": [".md"]
+      },
+      "note": "«создайте папку в репозитории GitHub. Внутри этой папки должен быть исследовательский репорт с кодом»"
+    },
+    {
+      "check": "code_contains",
+      "level": "info",
+      "params": {
+        "pattern": "(?i)wandb",
+        "label": "Графики loss'а из wandb",
+        "expected": "логирование в wandb"
+      },
+      "note": "«Мы будем дополнительно оценивать: ... графики loss'а из wandb»"
+    },
+    {
+      "check": "token_budget",
+      "level": "info",
+      "params": { "max_tokens": 60000, "label": "Объём папки решения" }
+    }
+  ],
+
+  "criteria": [
+    {
+      "id": "c1",
+      "title": "Датасет скачан и протокенезирован",
+      "max_score": 4,
+      "evidence_required": true,
+      "auto_verifiable": true,
+      "checks": [
+        "Загрузить через dataset = load_dataset(\"wikimedia/wikipedia\", \"20231101.ru\", split=\"train\")",
+        "ВАЖНО! Первые VALIDATION_SIZE=5000 семплов отходят в тестовый сет",
+        "Используйте токенизатор \"ai-forever/rugpt3small_based_on_gpt2\"",
+        "Длина блоков токенизации фиксирована MAX_LENGTH=512",
+        "Используем архитектуру qwen3 суммарно на 1b параметров. Изменять архитектуру нельзя"
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Обучение запущено успешно (loss падает и проходит финальное значение по нашему порогу)",
+      "max_score": 4,
+      "evidence_required": true,
+      "auto_verifiable": true,
+      "description": "Главный критерий работы: балл определяется финальным значением eval_loss по интервалам из условия. «Важно! Главный критерий – финальный loss. Можно смотреть на графики лосса из отчета студентов, чтобы убедиться что они репортят честное значение.»",
+      "checks": [
+        "Запустите evaluation и зафиксируйте финальный eval_loss",
+        "loss падает на графике обучения",
+        "графики loss'а из wandb приложены и согласуются с заявленным eval_loss",
+        "Обучайте модель в течение 30 минут на 1GPU уровня A100"
+      ],
+      "anchors": {
+        "0": "final eval_loss L > 7 либо значение не приведено",
+        "1": "6.0 < L <= 7",
+        "2": "5.6 < L <= 6.0",
+        "3": "5.3 < L <= 5.6",
+        "4": "L <= 5.3"
+      }
+    },
+    {
+      "id": "c3",
+      "title": "Исследовательская часть: какие параметры попробовали изменить → расписать",
+      "max_score": 2,
+      "evidence_required": true,
+      "checks": [
+        "Описание проведенных экспериментов",
+        "Какие гиперпараметры вы пробовали",
+        "Графики loss'а из wandb",
+        "Финальное значение eval_loss",
+        "Примеры генераций модели",
+        "Выводы и наблюдения",
+        "Найти оптимальные batch_size (per_device_train_batch_size, gradient_accumulation_steps), learning_rate, lerning_rate_scheduler",
+        "torch_compile, оптимизаторы (optim), использование специальных dtype под gpu (bf16, tf32)"
+      ]
+    }
+  ]
+}
