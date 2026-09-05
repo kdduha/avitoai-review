@@ -288,3 +288,40 @@ def test_a_second_student_login_does_not_leak_into_the_stream_numbers(world):
     )
     stats = admin.get(f"/stats/streams/{world['stream']['id']}").json()
     assert stats["submissions"] == 0
+
+
+def test_a_roster_reviewer_brings_their_real_capacity_and_skills(world):
+    """Каталог — не украшение: на нём и держится демонстрация распределения.
+
+    Пока карточки не имели аккаунтов, на поток можно было поставить только
+    сеяного `reviewer` с ёмкостью по умолчанию, и разница между ревьюерами
+    нигде не проявлялась.
+    """
+    admin, stream_id = world["admin"], world["stream"]["id"]
+    rows = admin.post(
+        f"/streams/{stream_id}/reviewers", json={"usernames": ["c-bahtin"]}
+    ).json()
+
+    card = next(r for r in rows if r["username"] == "c-bahtin")
+    assert card["roster_id"] == "c-bahtin"
+    assert card["capacity_minutes"] == 360, "ёмкость из карточки, а не по умолчанию"
+    assert "системный дизайн" in card["skills"]
+
+
+def test_ten_roster_reviewers_share_the_load(world):
+    """Раскладка на настоящем каталоге: работы расходятся, а не липнут к одному."""
+    admin, stream_id = world["admin"], world["stream"]["id"]
+    roster = [
+        u["username"] for u in admin.get("/users").json() if u["username"].startswith("c-")
+    ]
+    assert len(roster) >= 5, "каталог ревьюеров доехал до аккаунтов"
+    admin.post(f"/streams/{stream_id}/reviewers", json={"usernames": roster[:3]})
+
+    for _ in range(3):
+        _submit(world)
+    result = admin.post(f"/streams/{stream_id}/distribute").json()
+    assert result["assigned"] == 3
+
+    stats = admin.get(f"/stats/streams/{stream_id}").json()
+    busy = [r for r in stats["by_reviewer"] if r["assigned"]]
+    assert len(busy) > 1, "три работы на трёх ревьюеров не должны достаться одному"

@@ -2743,8 +2743,18 @@ export interface components {
             id: string;
             /** Course Key */
             course_key: string;
+            /**
+             * Course Title
+             * @default
+             */
+            course_title: string;
             /** Stream Key */
             stream_key: string;
+            /**
+             * Stream Title
+             * @default
+             */
+            stream_title: string;
             /** Title */
             title: string;
             /** Description */
