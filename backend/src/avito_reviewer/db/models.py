@@ -154,7 +154,7 @@ class Submission(Base):
         back_populates="submission", cascade="all, delete-orphan", order_by="ReviewRevision.created_at"
     )
     chat_messages: Mapped[list[ChatMessage]] = relationship(
-        cascade="all, delete-orphan", order_by="ChatMessage.created_at"
+        cascade="all, delete-orphan", order_by="ChatMessage.seq"
     )
 
 
@@ -190,6 +190,17 @@ class ChatMessage(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
     submission_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("submissions.id"), index=True)
+    seq: Mapped[int] = mapped_column(default=0)
+    """Порядок реплики внутри сдачи. Сортировать по `created_at` нельзя.
+
+    Один ход пишет несколько строк — реплику ревьюера, вызовы тулов, ответ, —
+    и все они попадают в одну транзакцию. `server_default=now()` в Postgres
+    возвращает время *транзакции*, поэтому у всех строк хода метка совпадает
+    до микросекунды, а в SQLite гранулярность и вовсе секундная. Сортировка по
+    времени в обоих случаях вырождается в произвольную, и транскрипт
+    перемешивается ровно там, где порядок и есть смысл: «модель прочитала
+    файл, потом ответила» превращается в «ответила, потом прочитала».
+    """
     role: Mapped[ChatRole] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(default="")
     tool_name: Mapped[str | None] = mapped_column(String(64), nullable=True)

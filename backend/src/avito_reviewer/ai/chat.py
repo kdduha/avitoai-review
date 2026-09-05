@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from avito_reviewer.ai.content import ArtifactText
+from avito_reviewer.ai.detection import DetectionReport
 from avito_reviewer.ai.llm import (
     DataClass,
     Identity,
@@ -102,7 +103,7 @@ class ChatStep(BaseModel):
     proposed_patch: ProposedPatch | None = None
 
 
-def _render_criterion(rubric: Rubric, criterion_id: str) -> str:
+def _render_criterion(rubric: Rubric, criterion_id: str, draft: ReviewDraft) -> str:
     criterion = rubric.criterion(criterion_id)
     if criterion is None:
         return f"критерия {criterion_id!r} нет в рубрике"
@@ -113,7 +114,66 @@ def _render_criterion(rubric: Rubric, criterion_id: str) -> str:
         lines.append("проверочные пункты: " + "; ".join(criterion.checks))
     if criterion.anchors:
         lines.append("якоря: " + "; ".join(f"{k} — {v}" for k, v in criterion.anchors.items()))
+
+    # Цитаты вердикта — здесь, а не отдельным тулом: спросив про критерий,
+    # спрашивают и про то, на чём стоит балл. Отдельный тул означал бы лишний
+    # шаг цикла ради данных, которые уже лежат в этом же черновике.
+    verdict = next((v for v in draft.verdicts if v.criterion_id == criterion_id), None)
+    if verdict is not None:
+        lines.append(f"выставленный балл: {verdict.score:g} — {verdict.verdict}")
+        valid = verdict.valid_evidence
+        if valid:
+            lines.append("цитаты, на которых стоит балл:")
+            lines.extend(
+                f"  {e.artifact}"
+                + (f":{e.start_line}" if e.start_line is not None else "")
+                + f" — {e.quote}"
+                for e in valid
+            )
+        # Несошедшаяся цитата важнее сошедшейся: именно её ревьюер и проверяет.
+        unmatched = [e for e in verdict.evidence if not e.is_valid]
+        if unmatched:
+            lines.append(
+                "цитаты, которые не сошлись с текстом файла (вывод по ним ненадёжен): "
+                + "; ".join(f"{e.artifact} [{e.status.value}]" for e in unmatched)
+            )
     return "\n".join(lines)
+
+
+def _render_gate(draft: ReviewDraft) -> str:
+    """Формальные проверки — установленные факты, а не мнение модели.
+
+    Без них агент пересказывает по файлам то, что гейт уже проверил кодом, и
+    иногда расходится с ним: «тестов нет» при пройденной проверке на тесты
+    читается ревьюером как ошибка разбора, а это ошибка контекста.
+    """
+    if draft.gate is None and not draft.gate_facts:
+        return ""
+    lines = []
+    if draft.gate is not None:
+        lines.append(f"Format Gate: {draft.gate.status.value}.")
+        if draft.gate.status.value == "blocked":
+            lines.append("Работа не принята по формату — модель разбор не проводила.")
+    if draft.gate_facts:
+        lines.append("Установлено проверками (это факты, не переспрашивайте файлы):")
+        lines.extend(f"  {fact}" for fact in draft.gate_facts)
+    return "\n".join(lines)
+
+
+def _render_detection(report: DetectionReport | None) -> str:
+    """Сводка сигнала ГенИИ — рекомендательная, и так и подписана.
+
+    Агент обязан знать, что отчёт существует и что он значит: без этого на
+    вопрос «почему работа помечена» он отвечает догадкой. Спаны не
+    разворачиваются: их место в панели детектора, а не в реплике.
+    """
+    if report is None or not report.signals:
+        return ""
+    return (
+        f"Сигнал ГенИИ: {report.label} ({report.overall_score:.2f}). "
+        f"Вывод рекомендательный: на балл не влияет, решение принимает ревьюер. "
+        f"Подозрительных фрагментов: {len(report.spans)}."
+    )
 
 
 def _render_draft(draft: ReviewDraft) -> str:
@@ -131,6 +191,7 @@ def _call_tool(
     texts: dict[str, ArtifactText],
     rubric: Rubric,
     diffs: dict[str, str],
+    draft: ReviewDraft,
 ) -> str:
     if tool == "get_file":
         path = str(args.get("path", ""))
@@ -153,7 +214,7 @@ def _call_tool(
         return "\n\n".join(f"--- {p} ---\n{d}" for p, d in list(diffs.items())[:5])
 
     if tool == "get_criterion":
-        return _render_criterion(rubric, str(args.get("criterion_id", "")))
+        return _render_criterion(rubric, str(args.get("criterion_id", "")), draft)
 
     if tool == "search_submission":
         query = str(args.get("query", "")).lower().strip()
@@ -182,6 +243,7 @@ def run_chat(
     diffs: dict[str, str],
     history: list[dict[str, str]],
     message: str,
+    detection: DetectionReport | None = None,
     identities: Sequence[Identity] = (),
     max_steps: int = MAX_STEPS,
 ) -> list[ChatStep]:
@@ -192,9 +254,21 @@ def run_chat(
     промпта плюс сведённый контекст, а не тащит весь прошлый внутренний диалог.
     """
     texts_by_path = {text.path: text for text in texts}
-    context = (
-        f"Рубрика: {rubric.title or rubric.assignment_id}.\n{_render_draft(draft)}\n\n"
-        f"Файлы в разборе: {', '.join(sorted(texts_by_path)) or 'нет'}."
+    context = "\n\n".join(
+        part
+        for part in (
+            f"Рубрика: {rubric.title or rubric.assignment_id}.\n{_render_draft(draft)}",
+            _render_gate(draft),
+            _render_detection(detection),
+            f"Файлы в разборе: {', '.join(sorted(texts_by_path)) or 'нет'}."
+            + (
+                f"\nПоказаны фрагментом (вывод «этого в работе нет» по ним ненадёжен): "
+                f"{', '.join(draft.partial_artifacts)}."
+                if draft.partial_artifacts
+                else ""
+            ),
+        )
+        if part
     )
     messages: list[dict[str, str]] = (
         [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": context}, *history, {"role": "user", "content": message}]
@@ -242,7 +316,9 @@ def run_chat(
             steps.append(ChatStep(kind="reply", content=f"неизвестный тул {step.tool!r}"))
             return steps
 
-        result_text = _call_tool(step.tool, step.args, texts=texts_by_path, rubric=rubric, diffs=diffs)
+        result_text = _call_tool(
+            step.tool, step.args, texts=texts_by_path, rubric=rubric, diffs=diffs, draft=draft
+        )
         steps.append(ChatStep(kind="tool", tool_name=step.tool, content=result_text))
         messages.append({"role": "assistant", "content": step.model_dump_json(exclude_none=True)})
         messages.append({"role": "user", "content": f"[результат {step.tool}]\n{result_text}"})

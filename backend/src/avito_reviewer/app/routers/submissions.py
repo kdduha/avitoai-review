@@ -482,7 +482,7 @@ async def get_chat(submission_id: UUID, user: RequireReviewer, session: Session)
         await session.execute(
             select(ChatMessage)
             .where(ChatMessage.submission_id == submission_id)
-            .order_by(ChatMessage.created_at)
+            .order_by(ChatMessage.seq)
         )
     ).scalars().all()
     return [_out(row) for row in rows]
@@ -523,11 +523,30 @@ async def chat(
         await session.execute(
             select(ChatMessage)
             .where(ChatMessage.submission_id == submission_id)
-            .order_by(ChatMessage.created_at)
+            .order_by(ChatMessage.seq)
         )
     ).scalars().all()
 
+    # Реплика ревьюера сохраняется ДО обращения к модели. Раньше она писалась
+    # после, и любой неожиданный сбой в ходе уносил с собой набранный человеком
+    # текст: клиент показывал ошибку, а перезагрузка транскрипта не находила
+    # даже вопроса. Вопрос, оставшийся без ответа, — честная картина; вопрос,
+    # исчезнувший вместе с ответом, — потеря данных.
+    next_seq = len(history_rows)
+    session.add(
+        ChatMessage(
+            submission_id=submission.id,
+            seq=next_seq,
+            role=ChatRole.USER,
+            content=body.message,
+        )
+    )
+    await session.commit()
+
     ai: AIService = request.app.state.ai
+    detection = (
+        DetectionReport.model_validate(submission.detection) if submission.detection else None
+    )
     steps = await run_in_threadpool(
         run_chat,
         ai.gateway,
@@ -537,13 +556,19 @@ async def chat(
         diffs=diffs,
         history=_chat_history(list(history_rows)),
         message=body.message,
+        detection=detection,
+        # Логины студента лежат в бандле, и в `/review` шлюз вычищает их
+        # прицельно. Чат ходит в ту же модель по тому же тексту работы —
+        # оставлять его на общих детекторах ПДн значит защищать одну дверь
+        # из двух.
+        identities=AIService.identities(SubmissionBundle.model_validate(submission.bundle)),
     )
 
-    session.add(ChatMessage(submission_id=submission.id, role=ChatRole.USER, content=body.message))
     saved: list[ChatMessage] = []
-    for step in steps:
+    for offset, step in enumerate(steps, start=1):
         row = ChatMessage(
             submission_id=submission.id,
+            seq=next_seq + offset,
             role=ChatRole.TOOL if step.kind == "tool" else ChatRole.ASSISTANT,
             content=step.content,
             tool_name=step.tool_name,

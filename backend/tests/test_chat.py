@@ -12,8 +12,9 @@ import json
 from factories import atext, go_rubric
 
 from avito_reviewer.ai.chat import run_chat
+from avito_reviewer.ai.detection import DetectionReport, SignalKind, SignalResult
 from avito_reviewer.ai.llm import fake_gateway
-from avito_reviewer.ai.review import CriterionVerdict, ReviewDraft
+from avito_reviewer.ai.review import CriterionVerdict, Evidence, EvidenceStatus, ReviewDraft
 
 RUBRIC = go_rubric()
 DRAFT = ReviewDraft(
@@ -111,3 +112,79 @@ def test_too_many_tool_calls_stop_with_a_message_not_an_infinite_loop():
     )
     assert steps[-1].kind == "reply"
     assert len(provider.calls) == 3
+
+
+def test_the_criterion_tool_shows_the_quotes_the_score_stands_on():
+    """Спросив про критерий, спрашивают и про то, на чём стоит балл.
+
+    Отдельного тула для цитат нет намеренно: он стоил бы лишнего шага цикла
+    ради данных, которые уже лежат в том же черновике.
+    """
+    draft = ReviewDraft(
+        assignment_id=RUBRIC.assignment_id,
+        max_score=RUBRIC.scale.total_max,
+        verdicts=[
+            CriterionVerdict(
+                criterion_id="c1",
+                score=1,
+                verdict="структура есть, тестов нет",
+                evidence=[
+                    Evidence(
+                        artifact="cmd/main.go",
+                        start_line=1,
+                        quote="package main",
+                        status=EvidenceStatus.VALID,
+                    ),
+                    Evidence(
+                        artifact="cmd/main.go",
+                        start_line=99,
+                        quote="func TestPing",
+                        status=EvidenceStatus.WRONG_LOCATION,
+                    ),
+                ],
+            )
+        ],
+    )
+    tool_step = json.dumps(
+        {"action": "tool", "tool": "get_criterion", "args": {"criterion_id": "c1"}, "reply": "смотрю"}
+    )
+    gateway, _ = fake_gateway([tool_step, json.dumps({"action": "reply", "reply": "вот почему"})])
+
+    steps = run_chat(
+        gateway, rubric=RUBRIC, draft=draft, texts=TEXTS, diffs={}, history=[],
+        message="почему по c1 не максимум?",
+    )
+
+    shown = steps[0].content
+    assert "package main" in shown, "сошедшаяся цитата должна быть видна"
+    assert "не сошлись" in shown, "несошедшаяся важнее сошедшейся — её и проверяет ревьюер"
+
+
+def test_gate_facts_and_the_detection_summary_reach_the_context():
+    """Гейт установил факты кодом — агент не должен переспрашивать их у файлов.
+
+    Без этого он пересказывает по тексту то, что уже проверено, и иногда
+    расходится с гейтом; ревьюер читает расхождение как ошибку разбора.
+    """
+    draft = ReviewDraft(
+        assignment_id=RUBRIC.assignment_id,
+        max_score=RUBRIC.scale.total_max,
+        gate_facts=["в работе есть go.mod", "тесты найдены: 3 файла"],
+        verdicts=[CriterionVerdict(criterion_id="c1", score=2, verdict="ок")],
+    )
+    detection = DetectionReport(
+        label="слабые признаки",
+        overall_score=0.31,
+        signals=[SignalResult(kind=SignalKind.STYLOMETRY, weight=0.15)],
+    )
+    gateway, provider = fake_gateway([json.dumps({"action": "reply", "reply": "отвечаю"})])
+
+    run_chat(
+        gateway, rubric=RUBRIC, draft=draft, texts=TEXTS, diffs={}, history=[],
+        message="что с работой?", detection=detection,
+    )
+
+    prompt = provider.last_prompt
+    assert "тесты найдены: 3 файла" in prompt
+    assert "слабые признаки" in prompt
+    assert "решение принимает ревьюер" in prompt, "сигнал обязан приезжать подписанным"
