@@ -284,6 +284,9 @@ class ReviewerLoad(BaseModel):
     load_ratio_before: float
     load_ratio_after: float
     remaining_minutes: int
+    tight: bool = False
+    """Ревьюер у верхней границы ёмкости. Порог считает сервер: у клиента он
+    иначе оказывается размазан по экранам, и три копии расходятся молча."""
 
 
 class DistributionPlan(BaseModel):

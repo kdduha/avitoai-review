@@ -43,6 +43,8 @@ from .score import Ledger, ScoreContext, blocked, enabled_terms, score_terms, to
 log = logging.getLogger(__name__)
 
 COST_SCALE = 1000
+TIGHT_RATIO = 0.85
+"""Выше этой доли ёмкости ревьюер считается загруженным под завязку."""
 _IDLE = INFEASIBLE // 2
 """Стоимость простоя. Хуже любой настоящей пары и лучше запрещённой: ревьюер
 предпочтёт даже неудачную работу безделью, но не возьмёт ту, которую нельзя."""
@@ -112,6 +114,7 @@ def distribute(
     plan.allocations.sort(key=lambda a: a.item_id)
     plan.unassigned.sort(key=lambda u: u.item_id)
     plan.loads = [_load_of(ledgers[r.id]) for r in reviewers]
+    plan.limitations += _tight_note(plan.loads)
     log.info(
         "distribute: %d работ на %d ревьюеров — распределено %d за %d раундов, без ревьюера %d",
         plan.items,
@@ -354,7 +357,26 @@ def _load_of(ledger: Ledger) -> ReviewerLoad:
         else 0.0,
         load_ratio_after=round(ledger.ratio(), 4),
         remaining_minutes=max(ledger.remaining, 0),
+        tight=ledger.ratio() > TIGHT_RATIO,
     )
+
+
+def _tight_note(loads: Sequence[ReviewerLoad]) -> list[str]:
+    """Раунд отдаёт по работе каждому, у кого есть ёмкость.
+
+    Значит загруженный ревьюер получит работу, даже когда у соседа просторнее:
+    отказаться в пользу следующего раунда некому — состав пула тот же, и работа
+    просто осталась бы нераспределённой. Ёмкость при этом не превышается никогда,
+    но координатор должен увидеть, кто подошёл к границе.
+    """
+    tight = [load for load in loads if load.tight and load.items]
+    if not tight:
+        return []
+    named = ", ".join(f"{load.name} — {load.load_ratio_after:.0%}" for load in tight)
+    return [
+        f"У верхней границы недельной ёмкости: {named}. Отрицательный скор у таких "
+        "назначений значит «наименее плохая пара из возможных», а не хорошее совпадение."
+    ]
 
 
 def _salt_note(
