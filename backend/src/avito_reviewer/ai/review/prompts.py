@@ -236,3 +236,56 @@ def batch_criteria(criteria: list[Criterion], size: int = 3) -> list[list[Criter
     оказались рабочим компромиссом.
     """
     return [criteria[i : i + size] for i in range(0, len(criteria), size)]
+
+
+SUMMARY_SYSTEM = """Ты пишешь итоговый отзыв на учебную работу — тот, который \
+прочитает студент.
+
+Тебе дают уже готовые вердикты по критериям: они проставлены и подтверждены \
+цитатами из работы. Файлов работы у тебя нет, и это не упущение: твоя задача — \
+собрать из вердиктов связный отзыв, а не оценивать заново.
+
+Правила:
+1. Не утверждай ничего о работе сверх того, что сказано в вердиктах. Нечего \
+сказать по пункту — не пиши о нём.
+2. Не называй баллов и не рассуждай, зачёт это или нет: балл посчитан, он в \
+контексте, спорить с ним нельзя.
+3. Сильные стороны — из критериев, набравших своё; доработки — из недобравших. \
+Если недобравших нет, improvements оставь пустым, а не выдумывай придирку.
+4. Пиши студенту на «ты», по-человечески и без снисходительности. \
+Подбадривание — одно-два предложения, без восклицаний и без похвалы за то, \
+чего в вердиктах нет.
+5. Каждый пункт — одно предложение, конкретное: не «улучшить структуру», а что \
+именно и где.
+
+Ответ — JSON: {"strengths": [...], "improvements": [...], "encouragement": "..."}"""
+
+
+def summary_messages(draft, rubric) -> list[dict[str, str]]:
+    """Контекст резюме — только вердикты и итог, без файлов работы.
+
+    Это и есть защита от выдумки: соврать про код можно, только если его
+    видишь. Модель здесь пересказывает то, что уже подтверждено цитатами, и
+    физически не может добавить новое утверждение о работе.
+    """
+    rows = []
+    for verdict in draft.verdicts:
+        criterion = rubric.criterion(verdict.criterion_id)
+        title = criterion.title if criterion else verdict.criterion_id
+        maximum = criterion.max_score if criterion else 0
+        rows.append(
+            f"[{verdict.criterion_id}] {title} — {verdict.score:g} из {maximum:g}: "
+            f"{verdict.verdict}"
+        )
+
+    body = [
+        f"Задание: {rubric.title or rubric.assignment_id}.",
+        f"Итог: {draft.score:g} из {draft.max_score:g}"
+        + (", зачёт." if draft.passed else ", ниже порога зачёта."),
+        "Вердикты по критериям:",
+        "\n".join(rows) or "вердиктов нет",
+    ]
+    return [
+        {"role": "system", "content": SUMMARY_SYSTEM},
+        {"role": "user", "content": "\n\n".join(body)},
+    ]

@@ -152,13 +152,22 @@ def test_happy_path_produces_a_draft():
     assert draft.passed is True
     assert draft.evidence_coverage == 1.0
     assert draft.needs_human_attention is False
-    assert len(provider.calls) == 1
+    assert len(_criteria_calls(provider)) == 1
+
+
+def _criteria_calls(provider) -> list[list[dict[str, str]]]:
+    """Только запросы на оценку критериев.
+
+    После них идёт ещё один — итоговый отзыв; он не про батчи, и считать его
+    здесь значило бы мерить не то, что тест обещает измерить.
+    """
+    return [call for call in provider.calls if "Оцени каждый" in call[-1]["content"]]
 
 
 def test_criteria_are_batched():
     gateway, provider = fake_gateway([batch_response(["c1", "c2"]), batch_response(["c3"])])
     run(gateway, options=ReviewOptions(batch_size=2))
-    assert len(provider.calls) == 2
+    assert len(_criteria_calls(provider)) == 2
 
 
 def test_fabricated_evidence_flags_the_draft():
@@ -235,7 +244,9 @@ def test_model_cannot_invent_criteria():
 def test_gate_facts_reach_the_model():
     gateway, provider = fake_gateway([batch_response(["c1", "c2", "c3"])])
     run(gateway, gate_facts=["Количество тест-кейсов: ожидалось 21, фактически 18."])
-    assert "фактически 18" in provider.last_prompt
+    # Не `last_prompt`: последним теперь идёт итоговый отзыв, а факты гейта
+    # нужны там, где оценивают критерии.
+    assert any("фактически 18" in call[-1]["content"] for call in _criteria_calls(provider))
 
 
 def test_partial_files_are_named_in_the_draft():
@@ -251,7 +262,9 @@ def test_partial_files_are_named_in_the_draft():
 
 def test_cost_is_reported_per_review_not_per_process():
     """Журнал шлюза общий на приложение — иначе второй черновик покажет счёт первого."""
-    gateway, _ = fake_gateway([batch_response(["c1", "c2", "c3"])] * 2)
+    # На прогон уходит два вызова: батч критериев и следом итоговый отзыв.
+    # Пустой JSON на второй — валидное «резюме не собралось».
+    gateway, _ = fake_gateway([batch_response(["c1", "c2", "c3"]), "{}"] * 2)
     first = run(gateway)
     second = run(gateway)
 
@@ -294,9 +307,79 @@ def test_overlapping_reviews_report_their_own_cost():
     with ThreadPoolExecutor(max_workers=2) as pool:
         drafts = [f.result() for f in [pool.submit(run, gateway) for _ in range(2)]]
 
-    # Без реального перекрытия тест ничего не доказывает.
-    (_a_start, a_end), (b_start, _b_end) = sorted(spans)
-    assert b_start < a_end, "прогоны не пересеклись — проверка вырождена"
+    # Без реального перекрытия тест ничего не доказывает. Отрезков теперь
+    # четыре — на прогон приходится два вызова, — поэтому ищем любую пару,
+    # которая перекрылась, а не распаковываем ровно два.
+    from itertools import combinations
 
-    assert [d.tokens_in for d in drafts] == [100, 100]
-    assert gateway.audit.summary()["tokens_in"] == 200
+    assert any(
+        later_start < earlier_end
+        for (_, earlier_end), (later_start, _) in combinations(sorted(spans), 2)
+    ), "прогоны не пересеклись — проверка вырождена"
+
+    # По два вызова на прогон: критерии и итоговый отзыв, по 100 токенов.
+    assert [d.tokens_in for d in drafts] == [200, 200]
+    assert gateway.audit.summary()["tokens_in"] == 400
+
+
+# --------------------------------------------------------------------------- #
+# итоговый отзыв
+# --------------------------------------------------------------------------- #
+
+SUMMARY = json.dumps(
+    {
+        "strengths": ["Структура разложена по golang-standards."],
+        "improvements": ["Добавить тест на /healthcheck."],
+        "encouragement": "Основа собрана крепко, до полного балла осталось немного.",
+    },
+    ensure_ascii=False,
+)
+
+
+def test_the_draft_carries_a_summary_in_words():
+    gateway, _ = fake_gateway([batch_response(["c1", "c2", "c3"]), SUMMARY])
+    draft = run(gateway)
+
+    assert draft.summary is not None
+    assert draft.summary.strengths and draft.summary.improvements
+    assert "осталось немного" in draft.summary.encouragement
+
+
+def test_the_summary_never_sees_the_work_itself():
+    """Резюме пересказывает вердикты, а не работу.
+
+    Это и есть гарантия от выдумки: соврать про код можно, только если его
+    видишь. В запрос уходят названия критериев, баллы и тексты вердиктов —
+    ни строки исходников.
+    """
+    gateway, provider = fake_gateway([batch_response(["c1", "c2", "c3"]), SUMMARY])
+    run(gateway)
+
+    summary_call = provider.calls[-1][-1]["content"]
+    assert "разбор по c1" in summary_call, "вердикты в запрос попадают"
+    assert "package main" not in summary_call
+    assert "func " not in summary_call
+
+
+def test_a_failed_summary_leaves_the_draft_without_one():
+    """Пустое место честнее выдуманного абзаца — и дороже целого прогона."""
+    gateway, _ = fake_gateway([batch_response(["c1", "c2", "c3"]), "не json вовсе"])
+    draft = run(gateway)
+
+    assert draft.summary is None
+    assert len(draft.verdicts) == 3, "критерии уцелели: резюне последний шаг"
+    assert draft.score == 6.0
+
+
+def test_an_empty_summary_is_dropped_rather_than_shown_blank():
+    gateway, _ = fake_gateway([batch_response(["c1", "c2", "c3"]), "{}"])
+    assert run(gateway).summary is None
+
+
+def test_a_blocked_work_gets_no_summary():
+    """Гейт не пустил работу — модель не запускалась, и пересказывать нечего."""
+    gateway, provider = fake_gateway([])
+    draft = ReviewService(gateway).without_model(go_rubric(), "не принято по формату")
+
+    assert draft.summary is None
+    assert provider.calls == [], "ни одного обращения к модели"

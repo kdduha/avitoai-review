@@ -173,7 +173,45 @@ function SubmissionCard({ submission }: { submission: StudentSubmission }) {
             </p>
           ) : null}
 
+          {/* Отзыв словами — перед разбором по критериям: сначала человек
+              читает, что о работе думают в целом, потом сверяется по пунктам.
+              Нет отзыва — блока нет: пустых заголовков не рисуем. */}
+          {submission.summary ? (
+            <div className="mt-3 border-t border-line-soft pt-3">
+              {submission.summary.strengths?.length ? (
+                <>
+                  <h4 className="text-[12.5px] font-semibold text-ink">Что получилось</h4>
+                  <ul className="mt-1 space-y-1">
+                    {submission.summary.strengths.map((item) => (
+                      <li key={item} className="text-[13px] leading-[1.55] text-muted">
+                        — {item}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {submission.summary.improvements?.length ? (
+                <>
+                  <h4 className="mt-3 text-[12.5px] font-semibold text-ink">Что доработать</h4>
+                  <ul className="mt-1 space-y-1">
+                    {submission.summary.improvements.map((item) => (
+                      <li key={item} className="text-[13px] leading-[1.55] text-muted">
+                        — {item}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {submission.summary.encouragement ? (
+                <p className="mt-3 rounded-lg bg-accent-wash px-3 py-2 text-[13px] leading-[1.55] text-accent-ink">
+                  {submission.summary.encouragement}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <ul className="mt-3 space-y-2.5 border-t border-line-soft pt-3">
+            <li className="text-[12.5px] font-semibold text-ink">По критериям</li>
             {(submission.verdicts ?? []).map((verdict) => (
               <li key={verdict.criterion_id}>
                 <div className="flex items-baseline gap-2">

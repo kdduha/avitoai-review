@@ -2115,6 +2115,7 @@ export interface components {
              * @default
              */
             late_explanation: string;
+            summary?: components["schemas"]["ReviewSummary"] | null;
             /** Gate Facts */
             gate_facts?: string[];
             gate?: components["schemas"]["GateReport"] | null;
@@ -2224,6 +2225,36 @@ export interface components {
              * @description Карточка сдачи целиком — GET /submissions/{id}
              */
             submission_id: string;
+        };
+        /**
+         * ReviewSummary
+         * @description Связное слово о работе целиком: что удалось, что нет, и что дальше.
+         *
+         *     Отдельный шаг после того, как критерии уже оценены и цитаты сверены, —
+         *     и это главное ограничение: резюме пересказывает **уже подтверждённые
+         *     вердикты**, а не работу. Файлов ему не показывают вовсе, поэтому новых
+         *     утверждений о коде оно физически сделать не может: соврать можно только
+         *     про то, что видишь.
+         *
+         *     Балл резюме не трогает: его считает агрегатор, а модель здесь пишет текст.
+         */
+        ReviewSummary: {
+            /**
+             * Strengths
+             * @description что в работе сделано хорошо, по пунктам
+             */
+            strengths?: string[];
+            /**
+             * Improvements
+             * @description что именно доработать, по пунктам
+             */
+            improvements?: string[];
+            /**
+             * Encouragement
+             * @description одно-два предложения студенту: по-человечески и без снисходительности
+             * @default
+             */
+            encouragement: string;
         };
         /**
          * Reviewer
@@ -2788,6 +2819,26 @@ export interface components {
             };
         };
         /**
+         * StudentReviewSummary
+         * @description Отзыв о работе целиком, словами.
+         *
+         *     То, чего студенту не хватало больше всего: по критериям всё расписано, а
+         *     связного слова о работе не было. Приезжает только у утверждённых работ —
+         *     как и балл: пока ревьюер не подтвердил разбор, это ещё не отзыв, а
+         *     заготовка.
+         */
+        StudentReviewSummary: {
+            /** Strengths */
+            strengths?: string[];
+            /** Improvements */
+            improvements?: string[];
+            /**
+             * Encouragement
+             * @default
+             */
+            encouragement: string;
+        };
+        /**
          * StudentSubmission
          * @description Своя сдача глазами студента.
          */
@@ -2835,6 +2886,7 @@ export interface components {
              * @default
              */
             late_explanation: string;
+            summary?: components["schemas"]["StudentReviewSummary"] | null;
             /** Verdicts */
             verdicts?: components["schemas"]["StudentVerdict"][];
         };

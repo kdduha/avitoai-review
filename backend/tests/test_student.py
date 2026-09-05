@@ -40,6 +40,14 @@ VERDICTS = json.dumps(
     ensure_ascii=False,
 )
 LINK = "https://github.com/acme/courier/pull/7"
+SUMMARY = json.dumps(
+    {
+        "strengths": ["Структура читается."],
+        "improvements": ["Добавить тест на /healthcheck."],
+        "encouragement": "Хорошая основа, докрутить осталось немного.",
+    },
+    ensure_ascii=False,
+)
 
 
 class StubIngest:
@@ -73,7 +81,8 @@ def world(tmp_path):
     увидел» не проверить.
     """
     app = create_app()
-    gateway, _ = fake_gateway([VERDICTS] * 8)
+    # На разбор уходит два вызова: критерии и следом итоговый отзыв.
+    gateway, _ = fake_gateway([VERDICTS, SUMMARY] * 8)
 
     def client_as(role: str) -> TestClient:
         client = TestClient(app)
@@ -271,3 +280,25 @@ def test_the_best_approved_score_lands_on_the_assignment(world):
     item = student.get("/me/assignments").json()[0]
     assert item["submissions"] == 1
     assert item["best_score"] is not None
+
+
+def test_the_summary_reaches_the_student_only_after_approval(world):
+    """Отзыв словами — часть оценки, а не отдельная от неё сущность.
+
+    До утверждения его нет по той же причине, по которой нет балла: разбор
+    ещё не принят человеком.
+    """
+    student = _student(world)
+    submission_id = student.post(
+        "/me/submissions", json={"assignment_id": world["assignment"]["id"], "link": LINK}
+    ).json()["id"]
+
+    assert student.get(f"/me/submissions/{submission_id}").json()["summary"] is None
+
+    admin = world["admin"]
+    admin.post(f"/submissions/{submission_id}/reassign", json={"reviewer_username": "reviewer"})
+    world["client_as"]("reviewer").post(f"/submissions/{submission_id}/review/approve")
+
+    summary = student.get(f"/me/submissions/{submission_id}").json()["summary"]
+    assert summary["strengths"] and summary["improvements"]
+    assert "докрутить" in summary["encouragement"]

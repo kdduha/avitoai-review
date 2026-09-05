@@ -13,6 +13,7 @@ import type {
   DetectionReport,
   Evidence,
   GateReport,
+  ReviewSummary,
   ReviewDraft,
   ReviewResponse,
   Rubric,
@@ -64,6 +65,8 @@ export interface WorkspaceVerdict {
 }
 
 export interface Workspace {
+  /** Отзыв о работе словами. `null` — модель до него не дошла. */
+  summary: ReviewSummary | null
   id: string
   /** `null` для демо-прогонов и для офлайн-разбора — им нечего PATCH'ить. */
   submissionId: string | null
@@ -180,6 +183,7 @@ function assemble(
     deadlineAt: bundle.deadline_at ?? null,
     files: files.map((text) => toFile(text, marked)),
     verdicts: mapVerdicts(draft.verdicts, rubric),
+    summary: draft.summary ?? null,
     gate: draft.gate ?? null,
     rawScore: draft.raw_score ?? 0,
     score: draft.score ?? 0,

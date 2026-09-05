@@ -63,6 +63,20 @@ class StudentVerdict(BaseModel):
     improvement_hint: str
 
 
+class StudentReviewSummary(BaseModel):
+    """Отзыв о работе целиком, словами.
+
+    То, чего студенту не хватало больше всего: по критериям всё расписано, а
+    связного слова о работе не было. Приезжает только у утверждённых работ —
+    как и балл: пока ревьюер не подтвердил разбор, это ещё не отзыв, а
+    заготовка.
+    """
+
+    strengths: list[str] = Field(default_factory=list)
+    improvements: list[str] = Field(default_factory=list)
+    encouragement: str = ""
+
+
 class StudentSubmission(BaseModel):
     """Своя сдача глазами студента."""
 
@@ -82,4 +96,5 @@ class StudentSubmission(BaseModel):
     passed: bool | None = None
     pass_explanation: str = ""
     late_explanation: str = ""
+    summary: StudentReviewSummary | None = None
     verdicts: list[StudentVerdict] = Field(default_factory=list)

@@ -26,6 +26,7 @@ from avito_reviewer.app.deps import ingest_submission
 from avito_reviewer.app.schemas.review import ArtifactTextOut, ReviewRequest
 from avito_reviewer.app.schemas.student import (
     StudentAssignment,
+    StudentReviewSummary,
     StudentSubmission,
     StudentSubmitRequest,
     StudentVerdict,
@@ -133,6 +134,12 @@ async def _as_student_submission(
     card.pass_explanation = draft.pass_explanation
     card.late_explanation = draft.late_explanation
     card.verdicts = _student_verdicts(draft, rubric)
+    if draft.summary is not None:
+        card.summary = StudentReviewSummary(
+            strengths=draft.summary.strengths,
+            improvements=draft.summary.improvements,
+            encouragement=draft.summary.encouragement,
+        )
     return card
 
 
