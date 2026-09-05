@@ -8,11 +8,9 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
 
 import pytest
 from factories import (
-    NOW,
     artifact,
     go_bundle,
     partial_artifact,
@@ -32,7 +30,7 @@ from avito_reviewer.ai.detection.schema import SignalResult, Span
 from avito_reviewer.ai.detection.signals import forensics, judge, stylometry
 from avito_reviewer.ai.llm import LLMUnavailable, fake_gateway
 from avito_reviewer.config import DetectionOptions
-from avito_reviewer.ingest import ArtifactRole, ChangeStatus
+from avito_reviewer.ingest import ArtifactRole
 
 
 def text_of(path: str, body: str, **kwargs):

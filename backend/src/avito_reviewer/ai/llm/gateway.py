@@ -16,12 +16,11 @@ import json
 import time
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from .audit import AuditLog, AuditRecord
 from avito_reviewer.config import LLMConfig
 
+from .audit import AuditLog, AuditRecord
 from .providers import (
     FakeProvider,
     LLMError,
@@ -77,6 +76,7 @@ class PrivacyGateway:
         *,
         task: TaskKind,
         data_class: DataClass = DataClass.CONTAINS_PD,
+        route: RoutePolicy | None = None,
         temperature: float = 0.0,
         max_tokens: int = 2000,
         json_mode: bool = False,
@@ -87,9 +87,17 @@ class PrivacyGateway:
         Скрабер вычищает их точно, а не по совпадению шаблона: логин студента
         стоит в каждой строке импорта, и угадывать его было бы странно, когда
         он лежит в бандле.
+
+        `route` — требование вызывающего, а не пожелание: `LOCAL_ONLY` наружу
+        не уйдёт ни при каких настройках. Обратного действия у него нет —
+        задачу из `FORCED_LOCAL` наружу им не вытолкнуть, и понижение по
+        остаточному риску он не отменяет. Маршрут можно только ужесточить.
         """
         request_id = uuid.uuid4().hex[:12]
-        route = resolve_policy(task, data_class)
+        resolved = resolve_policy(task, data_class)
+        if route is RoutePolicy.LOCAL_ONLY:
+            resolved = RoutePolicy.LOCAL_ONLY
+        route = resolved
         downgraded = False
 
         scrubber = Scrubber(identities)

@@ -27,7 +27,6 @@ from avito_reviewer.ai.llm import (
 from avito_reviewer.ai.llm.structured import extract_json
 from avito_reviewer.config import AIConfig, LLMConfig
 
-
 # --------------------------------------------------------------------------- #
 # обезличивание
 # --------------------------------------------------------------------------- #
@@ -586,3 +585,43 @@ def test_the_ai_layer_does_not_import_the_provider_stack():
         if "githubkit" in path.read_text(encoding="utf-8")
     ]
     assert not offenders, "AI-слой знает о провайдере ingest: " + ", ".join(offenders)
+
+
+def test_a_caller_can_demand_the_local_route():
+    """§8.1: маршрут — аргумент вызова, а не только следствие вида задачи."""
+    gateway, provider = fake_gateway(["ответ"])
+    external = provider
+
+    result = gateway.complete(
+        [{"role": "user", "content": "текст"}],
+        task=TaskKind.REVIEW,
+        route=RoutePolicy.LOCAL_ONLY,
+    )
+
+    assert result.route is RoutePolicy.LOCAL_ONLY
+    assert external.is_local
+
+
+def test_the_route_argument_only_tightens_never_loosens():
+    """Иначе им можно было бы вытолкнуть наружу поиск ПДн."""
+    gateway, _ = fake_gateway(["ответ"])
+
+    result = gateway.complete(
+        [{"role": "user", "content": "текст"}],
+        task=TaskKind.NER,
+        route=RoutePolicy.EXTERNAL_AFTER_SCRUB,
+    )
+
+    assert result.route is RoutePolicy.LOCAL_ONLY
+
+
+def test_the_data_class_reaches_the_audit_even_though_it_does_not_route():
+    """Ярлык не меняет маршрут, но по журналу видно, что уходило наружу."""
+    gateway, _ = fake_gateway(["ответ"])
+    gateway.complete(
+        [{"role": "user", "content": "текст"}],
+        task=TaskKind.REVIEW,
+        data_class=DataClass.PUBLIC,
+    )
+
+    assert gateway.audit.records[-1].data_class == "public"

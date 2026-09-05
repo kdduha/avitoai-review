@@ -295,7 +295,7 @@ def test_overlapping_reviews_report_their_own_cost():
         drafts = [f.result() for f in [pool.submit(run, gateway) for _ in range(2)]]
 
     # Без реального перекрытия тест ничего не доказывает.
-    (a_start, a_end), (b_start, b_end) = sorted(spans)
+    (_a_start, a_end), (b_start, _b_end) = sorted(spans)
     assert b_start < a_end, "прогоны не пересеклись — проверка вырождена"
 
     assert [d.tokens_in for d in drafts] == [100, 100]

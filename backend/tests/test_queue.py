@@ -16,7 +16,13 @@ from factories import go_bundle, go_rubric
 from avito_reviewer.ai import AIService
 from avito_reviewer.ai.llm import fake_gateway
 from avito_reviewer.config import AIConfig
-from avito_reviewer.db import Submission, SubmissionStatus, init_models, make_engine, make_sessionmaker
+from avito_reviewer.db import (
+    Submission,
+    SubmissionStatus,
+    init_models,
+    make_engine,
+    make_sessionmaker,
+)
 from avito_reviewer.queue import rerun_review
 
 VERDICTS = json.dumps(

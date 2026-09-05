@@ -148,18 +148,7 @@ def complete_json(
         repairs -= 1
 
         # Ремонтный запрос: показываем модели её собственный вывод и ошибку.
-        conversation = conversation + [
-            {"role": "assistant", "content": result.text},
-            {
-                "role": "user",
-                "content": (
-                    "Ответ не прошёл разбор по схеме.\n"
-                    f"Ошибка: {last_error}\n\n"
-                    "Верни только валидный JSON по той же схеме, без пояснений "
-                    "и без markdown-обрамления."
-                ),
-            },
-        ]
+        conversation = [*conversation, {"role": "assistant", "content": result.text}, {"role": "user", "content": "Ответ не прошёл разбор по схеме.\n" f"Ошибка: {last_error}\n\n" "Верни только валидный JSON по той же схеме, без пояснений " "и без markdown-обрамления."}]
 
     raise StructuredError(
         f"Модель не вернула валидный ответ по схеме {model_cls.__name__}: {last_error}",

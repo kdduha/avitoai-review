@@ -18,11 +18,11 @@ from pydantic import ValidationError
 
 from avito_reviewer.distribution import (
     DistributionItem,
-    Weights,
     ReviewerStore,
     TermName,
     Tov,
     UnassignedReason,
+    Weights,
     distribute,
     validate_reviewer,
 )
@@ -293,7 +293,7 @@ def test_nobody_hoovers_the_batch():
 
     assert per_reviewer == {"c-strong": 3, "c-weak": 3}
     assert plan.rounds == 3
-    assert next(l for l in plan.loads if l.reviewer_id == "c-strong").load_ratio_after == 0.5
+    assert next(load for load in plan.loads if load.reviewer_id == "c-strong").load_ratio_after == 0.5
 
 
 def test_the_batch_beats_first_come_first_served():

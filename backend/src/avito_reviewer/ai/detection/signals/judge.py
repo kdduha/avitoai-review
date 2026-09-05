@@ -34,6 +34,8 @@ from avito_reviewer.ai.llm import (
     TaskKind,
     complete_json,
 )
+from avito_reviewer.ingest import ArtifactRole
+from avito_reviewer.ingest.classify import classify
 
 from ..schema import SignalKind, SignalResult, SignalStatus, Span
 
@@ -42,20 +44,15 @@ log = logging.getLogger(__name__)
 MAX_CHARS_PER_ARTIFACT = 12_000
 
 # Файлы, где генерация ожидаема и ничего не говорит о студенте.
-TEMPLATE_PATTERNS = [
-    re.compile(r"go\.(sum|mod)$"),
-    re.compile(r".*\.pb\.go$"),
-    re.compile(r"_pb2\.py$"),
-    re.compile(r"(^|/)migrations?/"),
-    re.compile(r"package-lock\.json$|yarn\.lock$|poetry\.lock$"),
-    re.compile(r"(^|/)vendor/"),
-    re.compile(r"Dockerfile$|docker-compose\.ya?ml$"),
-    re.compile(r"\.gitignore$|\.env\.example$"),
-]
-
-
 def is_template(path: str) -> bool:
-    return any(pattern.search(path) for pattern in TEMPLATE_PATTERNS)
+    """Шаблонный код, который детектор обязан пропустить.
+
+    Определение одно на систему и живёт в `ingest.classify`: спрашивать «чья
+    это работа» двумя разными списками значит завести два разных ответа.
+    Страховка для бандлов, собранных без классификации, — размеченные
+    артефакты сюда и так не доходят, `solution_texts` отсекает их раньше.
+    """
+    return classify(path) in (ArtifactRole.TOOLING, ArtifactRole.NOISE)
 
 
 SYSTEM = """Ты анализируешь студенческую работу на признаки того, что фрагменты \

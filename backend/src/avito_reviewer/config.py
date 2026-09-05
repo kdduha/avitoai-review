@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, SecretStr, field_validator, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 _DEFAULT_EXCLUDES: tuple[str, ...] = (

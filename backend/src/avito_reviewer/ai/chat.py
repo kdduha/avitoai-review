@@ -161,7 +161,7 @@ def _call_tool(
             return "пустой запрос"
         hits: list[str] = []
         for path, text in texts.items():
-            for line, number in zip(text.lines, text.line_numbers):
+            for line, number in zip(text.lines, text.line_numbers, strict=True):
                 if query in line.lower():
                     hits.append(f"{path}:{number}: {line.strip()}")
                     if len(hits) >= SEARCH_HITS:
@@ -197,9 +197,7 @@ def run_chat(
         f"Файлы в разборе: {', '.join(sorted(texts_by_path)) or 'нет'}."
     )
     messages: list[dict[str, str]] = (
-        [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": context}]
-        + history
-        + [{"role": "user", "content": message}]
+        [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "system", "content": context}, *history, {"role": "user", "content": message}]
     )
 
     steps: list[ChatStep] = []

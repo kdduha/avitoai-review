@@ -17,9 +17,9 @@ import json
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlsplit
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+from urllib.parse import urlsplit
 
 from avito_reviewer.config import LLMConfig
 

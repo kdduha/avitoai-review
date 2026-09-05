@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 from avito_reviewer.config import AIConfig
 from avito_reviewer.ingest import SubmissionBundle

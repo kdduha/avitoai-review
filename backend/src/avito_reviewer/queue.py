@@ -24,14 +24,20 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Any
+from typing import Any, ClassVar
 
 from arq.connections import RedisSettings
 from fastapi.concurrency import run_in_threadpool
 
 from avito_reviewer.ai import AIService, Rubric
 from avito_reviewer.config import AppConfig, QueueConfig
-from avito_reviewer.db import Submission, SubmissionStatus, make_engine, make_sessionmaker, run_migrations
+from avito_reviewer.db import (
+    Submission,
+    SubmissionStatus,
+    make_engine,
+    make_sessionmaker,
+    run_migrations,
+)
 from avito_reviewer.ingest import IngestService, SubmissionBundle
 
 log = logging.getLogger(__name__)
@@ -107,7 +113,7 @@ class WorkerSettings:
     # arq's CLI reads this class's `__dict__` directly (`arq.worker.get_kwargs`)
     # and forwards matching keys straight into `Worker(**kwargs)` — `redis_settings`
     # has to already be a `RedisSettings` instance here, not a method to call.
-    functions = [rerun_review]
+    functions: ClassVar = [rerun_review]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(QueueConfig().redis_dsn)

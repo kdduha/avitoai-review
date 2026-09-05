@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import ClassVar
 
 import pytest
 
@@ -18,8 +19,8 @@ from avito_reviewer.ai.llm.providers import LLMError, LLMUnavailable, OpenAIComp
 
 
 class Handler(BaseHTTPRequestHandler):
-    script: list = []
-    received: list = []
+    script: ClassVar[list] = []
+    received: ClassVar[list] = []
 
     def do_POST(self):  # noqa: N802
         length = int(self.headers.get("Content-Length", 0))

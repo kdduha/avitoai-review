@@ -14,7 +14,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Порядок цены для дешёвой модели через OpenRouter, ₽ за миллион токенов.
@@ -38,7 +38,7 @@ class AuditRecord:
     reported_cost_rub: float | None = None
     """Цена от провайдера, если он её назвал: точнее любой нашей оценки."""
     error: str | None = None
-    at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @property
     def cost_rub(self) -> float:
@@ -54,7 +54,7 @@ class AuditRecord:
 # Прогоны, открытые в текущем контексте выполнения: пары (журнал, приёмник).
 # Именно контекст, а не глобальный список: два запроса идут в разных потоках,
 # и каждый должен видеть свои записи, а не записи соседа.
-_open_runs: ContextVar[tuple[tuple[int, list["AuditRecord"]], ...]] = ContextVar(
+_open_runs: ContextVar[tuple[tuple[int, list[AuditRecord]], ...]] = ContextVar(
     "avito_audit_runs", default=()
 )
 

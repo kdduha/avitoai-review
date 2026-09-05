@@ -44,7 +44,7 @@ def analyse(
     texts: list[ArtifactText],
     *,
     weight: float = 0.25,
-    scorer: "LogprobScorer | None" = None,
+    scorer: LogprobScorer | None = None,
 ) -> SignalResult:
     result = SignalResult(kind=SignalKind.PERPLEXITY, weight=weight)
 
@@ -73,7 +73,7 @@ def analyse(
             result.note = f"локальная модель не ответила: {exc}"
             return result
 
-        usable = [(w, nll) for w, nll in zip(windows, nlls) if nll is not None]
+        usable = [(w, nll) for w, nll in zip(windows, nlls, strict=False) if nll is not None]
         if len(usable) < 2:
             continue
 
@@ -87,7 +87,7 @@ def analyse(
 
         scores.append(score)
         worst = min(usable, key=lambda item: item[1])
-        (start, end, excerpt), nll = worst
+        (start, end, excerpt), _nll = worst
         result.spans.append(
             Span(
                 artifact=artifact.path,

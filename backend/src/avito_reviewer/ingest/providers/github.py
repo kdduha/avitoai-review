@@ -24,6 +24,7 @@ from githubkit_schemas.latest.models import (
 )
 
 from avito_reviewer.config import GitHubConfig
+from avito_reviewer.ingest.classify import classify
 from avito_reviewer.ingest.content import github_ref, parse_github_locator
 from avito_reviewer.ingest.diff import added_line_ranges
 from avito_reviewer.ingest.errors import InvalidLinkError, ProviderFetchError
@@ -347,7 +348,7 @@ class GitHubProvider(SubmissionProvider):
                 entry.previous_filename if isinstance(entry.previous_filename, str) else None
             ),
             status=_STATUS.get(entry.status, ChangeStatus.MODIFIED),
-            role=ArtifactRole.NOISE if self._excluded(path) else ArtifactRole.SOLUTION,
+            role=ArtifactRole.NOISE if self._excluded(path) else classify(path),
             lang=_guess_lang(path),
             is_binary=bool(blob and blob.is_binary),
             size_bytes=sizes.get(path, 0),

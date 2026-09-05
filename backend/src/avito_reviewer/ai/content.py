@@ -96,7 +96,7 @@ class ArtifactText:
         """Доступные строки в диапазоне номеров полной версии файла."""
         return "\n".join(
             line
-            for line, number in zip(self.lines, self.line_numbers)
+            for line, number in zip(self.lines, self.line_numbers, strict=True)
             if start <= number <= end
         )
 
@@ -306,7 +306,7 @@ async def _fetch_bodies(
     )
 
     bodies: dict[str, str] = {}
-    for artifact, result in zip(wanted, results):
+    for artifact, result in zip(wanted, results, strict=False):
         if isinstance(result, BaseException):
             log.warning("content: fetch failed for %s: %s", artifact.path, result)
             continue
