@@ -8,6 +8,7 @@ import { CuratorsPage } from '@/features/courses/CuratorsPage'
 import { RubricEditPage } from '@/features/rubrics/RubricEditPage'
 import { RubricNewPage } from '@/features/rubrics/RubricNewPage'
 import { AssignmentsPage } from '@/features/teaching/AssignmentsPage'
+import { StudentHomePage } from '@/features/student/StudentHomePage'
 import { RubricsPage } from '@/features/rubrics/RubricsPage'
 import { StudentPage } from '@/features/students/StudentPage'
 import { useSession } from './session'
@@ -31,12 +32,19 @@ export function App() {
       <Route path="/review/:runId" element={<ReviewPage />} />
 
       <Route element={<AppShell />}>
-        <Route index element={<Navigate to={role === 'admin' ? '/courses/go' : role === 'methodist' ? '/assignments' : '/queue'} replace />} />
+        <Route index element={<Navigate to={role === 'student'
+              ? '/my-work'
+              : role === 'admin'
+                ? '/courses/go'
+                : role === 'methodist'
+                  ? '/assignments'
+                  : '/queue'} replace />} />
         <Route path="/queue" element={<QueuePage />} />
         <Route path="/check" element={<CheckPage />} />
         <Route path="/courses/:courseId" element={<CoursePage />} />
         <Route path="/students/:studentId" element={<StudentPage />} />
         <Route path="/curators" element={<CuratorsPage />} />
+        <Route path="/my-work" element={<StudentHomePage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
         <Route path="/rubrics" element={<RubricsPage />} />
         <Route path="/rubrics/new" element={<RubricNewPage />} />

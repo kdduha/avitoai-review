@@ -28,10 +28,18 @@ export function Sidebar() {
   return (
     <nav className="flex w-[228px] shrink-0 flex-col border-r border-line bg-surface px-2.5 pb-4">
       <Section>Работа</Section>
+      {role === 'student' ? (
+        <NavLink to="/my-work" className={linkClass}>
+          <GraduationCap size={15} strokeWidth={1.7} className="text-faint" />
+          Мои работы
+        </NavLink>
+      ) : null}
+      {role === 'student' ? null : (
       <NavLink to="/check" className={linkClass}>
         <Play size={15} strokeWidth={1.7} className="text-faint" />
         Проверить работу
       </NavLink>
+      )}
       {atLeast(role, 'reviewer') && role !== 'admin' ? (
         <NavLink to="/queue" className={linkClass}>
           <ClipboardCheck size={15} strokeWidth={1.7} className="text-faint" />

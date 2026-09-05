@@ -32,6 +32,10 @@ export type ReviewResponse = S['ReviewResponse']
 export type DetectResponse = S['DetectResponse']
 export type ReviewRequest = S['ReviewRequest']
 export type CourseOut = S['CourseOut']
+export type StudentAssignment = S['StudentAssignment']
+export type StudentSubmission = S['StudentSubmission']
+export type StudentVerdict = S['StudentVerdict']
+export type StudentSubmitRequest = S['StudentSubmitRequest']
 export type StreamOut = S['StreamOut']
 export type AssignmentOut = S['AssignmentOut']
 export type AssignmentIn = S['AssignmentIn']
@@ -132,6 +136,16 @@ export const backend = {
   /* Учебный каталог: курс → поток → задание. Задание — это рубрика, выданная
      потоку в срок; читать может ревьюер, менять — методист. */
   courses: () => request<CourseOut[]>('/courses'),
+
+  /* Кабинет студента. Балл приезжает только у утверждённых работ: до этого
+     оценки нет — её ставит человек, а не модель. */
+  myAssignments: () => request<StudentAssignment[]>('/me/assignments'),
+  mySubmissions: () => request<StudentSubmission[]>('/me/submissions'),
+  submitWork: (body: StudentSubmitRequest) =>
+    request<StudentSubmission>('/me/submissions', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   createCourse: (body: CourseIn) =>
     request<CourseOut>('/courses', { method: 'POST', body: JSON.stringify(body) }),
   streams: (courseId?: string) =>

@@ -719,6 +719,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Задания моих потоков
+         * @description Только потоки, на которые студент зачислен.
+         *
+         *     Не зачислен никуда — пустой список, а не ошибка: это штатное состояние
+         *     аккаунта, который завели, но ещё не добавили в поток.
+         */
+        get: operations["my_assignments_me_assignments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Мои сданные работы и оценки */
+        get: operations["my_submissions_me_submissions_get"];
+        put?: never;
+        /**
+         * Сдать работу по ссылке
+         * @description Сдать работу: ссылка превращается в разбор, разбор ждёт ревьюера.
+         *
+         *     Ревьюер сдаче не назначается — она уходит в общий пул, откуда её раздаёт
+         *     руководитель (`POST /submissions/{id}/reassign`). Назначить себе первого
+         *     попавшегося значило бы раздавать работы по порядку прихода, а не по
+         *     нагрузке и темам, — для этого есть `POST /distribute`.
+         *
+         *     ``403`` — студент не зачислен на поток этого задания.
+         *     ``404`` — нет такого задания или его рубрики в каталоге.
+         *     ``409`` — задание ещё не открыто.
+         */
+        post: operations["submit_me_submissions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/submissions/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Своя работа целиком
+         * @description ``404`` — чужая работа. Не 403: существование чужой сдачи — тоже сведение.
+         */
+        get: operations["my_submission_me_submissions__submission_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -2360,6 +2433,40 @@ export interface components {
             students: number;
         };
         /**
+         * StudentAssignment
+         * @description Задание, которое студенту предстоит сдать.
+         */
+        StudentAssignment: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Course Key */
+            course_key: string;
+            /** Stream Key */
+            stream_key: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Max Score */
+            max_score: number;
+            /** Criteria */
+            criteria: number;
+            /** Opens At */
+            opens_at: string | null;
+            /** Deadline At */
+            deadline_at: string | null;
+            /**
+             * Submissions
+             * @default 0
+             */
+            submissions: number;
+            /** Best Score */
+            best_score?: number | null;
+        };
+        /**
          * StudentRef
          * @description Pseudonymous author identity. Holds no real name and is safe to send to an LLM.
          */
@@ -2370,6 +2477,90 @@ export interface components {
             external_handles?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * StudentSubmission
+         * @description Своя сдача глазами студента.
+         */
+        StudentSubmission: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Assignment Title */
+            assignment_title: string;
+            /** Course Key */
+            course_key: string;
+            /** Stream Key */
+            stream_key: string;
+            /** Origin Url */
+            origin_url: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Deadline At */
+            deadline_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Approved */
+            approved: boolean;
+            /** Score */
+            score?: number | null;
+            /**
+             * Max Score
+             * @default 0
+             */
+            max_score: number;
+            /** Passed */
+            passed?: boolean | null;
+            /**
+             * Pass Explanation
+             * @default
+             */
+            pass_explanation: string;
+            /**
+             * Late Explanation
+             * @default
+             */
+            late_explanation: string;
+            /** Verdicts */
+            verdicts?: components["schemas"]["StudentVerdict"][];
+        };
+        /** StudentSubmitRequest */
+        StudentSubmitRequest: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /** Link */
+            link: string;
+            /** @default github_pr */
+            source: components["schemas"]["SubmissionSource"];
+        };
+        /**
+         * StudentVerdict
+         * @description Разбор одного критерия в том виде, в котором его читает студент.
+         *
+         *     Ни цитат, ни уверенности модели, ни отметок «нужен человек»: это кухня
+         *     проверки, а не обратная связь. Остаётся балл, объяснение и что докрутить.
+         */
+        StudentVerdict: {
+            /** Criterion Id */
+            criterion_id: string;
+            /** Title */
+            title: string;
+            /** Score */
+            score: number;
+            /** Max Score */
+            max_score: number;
+            /** Feedback */
+            feedback: string;
+            /** Improvement Hint */
+            improvement_hint: string;
         };
         /**
          * SubmissionBundle
@@ -3916,6 +4107,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_assignments_me_assignments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentAssignment"][];
+                };
+            };
+        };
+    };
+    my_submissions_me_submissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentSubmission"][];
+                };
+            };
+        };
+    };
+    submit_me_submissions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudentSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentSubmission"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_submission_me_submissions__submission_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentSubmission"];
                 };
             };
             /** @description Validation Error */
