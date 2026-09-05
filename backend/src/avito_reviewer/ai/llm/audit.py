@@ -16,6 +16,7 @@ from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypedDict
 
 # Порядок цены для дешёвой модели через OpenRouter, ₽ за миллион токенов.
 RUB_PER_MTOK_IN = 14.0
@@ -57,6 +58,23 @@ class AuditRecord:
 _open_runs: ContextVar[tuple[tuple[int, list[AuditRecord]], ...]] = ContextVar(
     "avito_audit_runs", default=()
 )
+
+
+class Spend(TypedDict):
+    """Счётчики по окну журнала.
+
+    Точный тип, а не `dict[str, object]`: вызывающие складывают эти числа в
+    стоимость прогона, и приведение каждого поля к int на месте прятало бы
+    опечатку в имени ключа до самого рантайма.
+    """
+
+    calls: int
+    external_calls: int
+    errors: int
+    tokens_in: int
+    tokens_out: int
+    redactions: int
+    cost_rub: float
 
 
 @dataclass
@@ -111,7 +129,7 @@ class AuditLog:
     def external_calls(self) -> list[AuditRecord]:
         return [r for r in self.records if r.route != "local_only"]
 
-    def summary(self, records: Sequence[AuditRecord] | None = None) -> dict[str, object]:
+    def summary(self, records: Sequence[AuditRecord] | None = None) -> Spend:
         """Counters over ``records``, or over the whole journal when omitted."""
         window = list(self.records if records is None else records)
         return {

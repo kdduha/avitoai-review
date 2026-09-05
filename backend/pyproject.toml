@@ -26,6 +26,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.14",
+    "mypy>=1.14",
     "aiosqlite>=0.20",
     "pytest>=8.0",
 ]
@@ -61,3 +62,14 @@ ignore = [
 # Тесты и скрипты правят sys.path до импортов — иначе фабрики рядом не видны.
 "tests/*" = ["E402"]
 "scripts/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+ignore_missing_imports = true
+# Строгость наращивается по мере готовности: сейчас проверяются тела функций,
+# которые уже типизированы, а требовать аннотации на каждую (`disallow_untyped_defs`)
+# рано — тесты и скрипты в files не входят вовсе.
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unreachable = true

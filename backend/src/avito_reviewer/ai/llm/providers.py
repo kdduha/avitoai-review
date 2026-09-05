@@ -177,7 +177,9 @@ class FakeProvider:
     валидацию цитат, арифметику — а не поведение чужой модели.
     """
 
-    responses: list[str] = field(default_factory=list)
+    responses: list[str | Exception] = field(default_factory=list)
+    """Очередь ответов. Исключение в списке — способ проверить обработку сбоя:
+    провайдер его бросит вместо ответа, и тип обязан это допускать."""
     name: str = "fake"
     model: str = "fake-model"
     is_local: bool = True

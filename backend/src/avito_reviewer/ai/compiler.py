@@ -30,6 +30,7 @@ import logging
 import re
 from collections.abc import Sequence
 from enum import StrEnum
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -254,9 +255,9 @@ class RubricCompiler:
             summary = self.gateway.audit.summary(spend)
 
         draft = _assemble(output, condition_text, assignment_id=assignment_id, course=course)
-        draft.tokens_in = int(summary["tokens_in"])
-        draft.tokens_out = int(summary["tokens_out"])
-        draft.cost_rub = float(summary["cost_rub"])
+        draft.tokens_in = summary["tokens_in"]
+        draft.tokens_out = summary["tokens_out"]
+        draft.cost_rub = summary["cost_rub"]
         log.info(
             "рубрика %s собрана: %d критериев, цитатами подтверждено %.0f%%, вопросов %d",
             assignment_id,
@@ -350,7 +351,7 @@ def _assemble(
         format_gate=[
             FormatCheck(
                 check=check.check,
-                level=check.level if check.level in ("blocking", "warning", "info") else "warning",
+                level=_gate_level(check.level),
                 params=check.params,
                 note=check.note,
             )
@@ -364,6 +365,17 @@ def _assemble(
         warnings=_unique(warnings),
         open_questions=_unique(questions),
     )
+
+
+def _gate_level(value: str) -> Literal["blocking", "warning", "info"]:
+    """Уровень проверки от модели. Незнакомое слово — предупреждение.
+
+    Блокирующий уровень по ошибке модели остановил бы разбор всего потока,
+    поэтому неизвестное значение опускается до предупреждения, а не поднимается.
+    """
+    if value in ("blocking", "warning", "info"):
+        return cast(Literal["blocking", "warning", "info"], value)
+    return "warning"
 
 
 def _unique(items: list[str]) -> list[str]:

@@ -19,6 +19,7 @@ from avito_reviewer.ingest import SubmissionBundle
 from .ensemble import combine
 from .schema import DetectionReport
 from .signals import forensics, judge, perplexity, stylometry
+from .signals.perplexity import LogprobScorer
 
 # Как студенты обычно оформляют декларацию об использовании ИИ. Условие
 # product_fraud требует её прямо: «Если вы использовали ИИ — укажите это в
@@ -37,7 +38,7 @@ class DetectionService:
         gateway: PrivacyGateway | None = None,
         options: DetectionOptions | None = None,
         *,
-        scorer: object | None = None,
+        scorer: LogprobScorer | None = None,
         ai_sensitive_paths: set[str] | None = None,
     ) -> None:
         self.gateway = gateway
@@ -84,9 +85,9 @@ class DetectionService:
 
         if spend is not None and self.gateway is not None:
             summary = self.gateway.audit.summary(spend)
-            report.tokens_in = int(summary["tokens_in"])
-            report.tokens_out = int(summary["tokens_out"])
-            report.cost_rub = float(summary["cost_rub"])
+            report.tokens_in = summary["tokens_in"]
+            report.tokens_out = summary["tokens_out"]
+            report.cost_rub = summary["cost_rub"]
         return report
 
     # ------------------------------------------------------------------ #

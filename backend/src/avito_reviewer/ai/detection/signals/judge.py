@@ -208,11 +208,12 @@ def _locate(artifact: ArtifactText, finding: JudgeFinding) -> Span | None:
         return None
 
     text = artifact.text
-    start = text.find(quote)
-    if start == -1:
-        start = _fuzzy_find(text, quote)
-    if start is None or start == -1:
+    found: int | None = text.find(quote)
+    if found == -1:
+        found = _fuzzy_find(text, quote)
+    if found is None or found == -1:
         return None
+    start = found
 
     end = start + len(quote)
     # Позиция в доступном тексте — не позиция в файле: у фрагмента нумерация

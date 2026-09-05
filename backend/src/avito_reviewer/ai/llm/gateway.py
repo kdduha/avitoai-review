@@ -222,7 +222,9 @@ def gateway_from_config(config: LLMConfig) -> PrivacyGateway:
     )
 
 
-def fake_gateway(responses: list[str] | None = None) -> tuple[PrivacyGateway, FakeProvider]:
+def fake_gateway(
+    responses: list[str | Exception] | None = None,
+) -> tuple[PrivacyGateway, FakeProvider]:
     """Шлюз на фейковом провайдере: тесты и демо без ключа."""
     provider = FakeProvider(responses=list(responses or []))
     return PrivacyGateway(external=provider, local=provider), provider
