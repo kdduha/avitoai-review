@@ -185,19 +185,22 @@ export function DetectionPanel({ report, error, onSpan, onVerdict, activeSpanId 
             )}
           </div>
 
-          <footer className="shrink-0 border-t border-line px-5 py-3.5">
-            <div className="flex gap-2 text-[11.5px] leading-[1.5] text-faint">
-              <Info size={13} strokeWidth={1.7} className="mt-0.5 shrink-0" />
-              <div>
-                <p>{report.advisory_note}</p>
-                <ul className="mt-1.5 space-y-0.5">
-                  {(report.limitations ?? []).map((limit) => (
+          {/* Ограничения приезжают только про этот прогон — недоступный сигнал,
+              файл, доступный фрагментом. Постоянной сноски здесь больше нет,
+              поэтому список бывает пустым, и тогда футера быть не должно:
+              рамка с иконкой и без текста читается как потерянный текст. */}
+          {report.limitations?.length ? (
+            <footer className="shrink-0 border-t border-line px-5 py-3.5">
+              <div className="flex gap-2 text-[11.5px] leading-[1.5] text-faint">
+                <Info size={13} strokeWidth={1.7} className="mt-0.5 shrink-0" />
+                <ul className="space-y-0.5">
+                  {report.limitations.map((limit) => (
                     <li key={limit}>{limit}</li>
                   ))}
                 </ul>
               </div>
-            </div>
-          </footer>
+            </footer>
+          ) : null}
         </>
       )}
     </section>

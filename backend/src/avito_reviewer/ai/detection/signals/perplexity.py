@@ -50,10 +50,7 @@ def analyse(
 
     if scorer is None:
         result.status = SignalStatus.UNAVAILABLE
-        result.note = (
-            "Перплексия требует локальной модели с logprobs "
-            "(AI_LLM__PROVIDER=local). Сигнал не участвует, вес перераспределён."
-        )
+        result.note = "сигнал не настроен на этом сервисе"
         return result
 
     skipped = [text.path for text in texts if text.partial]

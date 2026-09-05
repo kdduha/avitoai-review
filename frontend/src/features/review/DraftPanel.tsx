@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Check, ChevronDown, CircleCheck, CircleHelp, TriangleAlert } from 'lucide-react'
 import type { CheckOutcome, Evidence } from '@/lib/backend'
 import type { Workspace } from '@/lib/workspace'
-import { percent } from '@/lib/format'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 import { CriterionRow } from './CriterionRow'
@@ -110,9 +109,6 @@ export function DraftPanel({
     <section className="flex min-h-0 flex-col border-b border-line bg-surface lg:border-b-0 lg:border-r">
       <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-5">
         <h2 className="text-[13px] font-semibold text-ink">Черновик оценки</h2>
-        <span className="text-[12px] text-faint">
-          цитаты подтверждены у {percent(workspace.evidenceCoverage)} вердиктов
-        </span>
       </header>
 
       <Gate workspace={workspace} />

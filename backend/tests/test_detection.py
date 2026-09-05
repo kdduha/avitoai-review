@@ -380,7 +380,6 @@ def test_report_is_advisory_and_carries_limitations():
     report = _analyse(_bundle(), gateway)
 
     assert report.advisory is True
-    assert "не влияет на балл автоматически" in report.advisory_note
     assert report.limitations
     assert 0.0 <= report.confidence_low <= report.overall_score <= report.confidence_high <= 1.0
 
