@@ -43,9 +43,18 @@ FORCED_LOCAL: frozenset[TaskKind] = frozenset(
 
 
 def resolve_policy(task: TaskKind, data_class: DataClass) -> RoutePolicy:
-    """Куда можно отправить этот вызов."""
+    """Куда можно отправить этот вызов.
+
+    Класс данных маршрут не меняет, и это не упущение. Персональные данные
+    защищает не ярлык, а безусловный скраб на каждом вызове и принудительное
+    понижение маршрута, когда после скраба что-то осталось (`gateway.complete`).
+    `CONTAINS_PD` означает «обезличить и отправить», а не «не отправлять»: на
+    этом стоит вся §8.2, иначе ревью работ было бы невозможно в принципе.
+
+    Ярлык при этом не декоративен — он пишется в журнал аудита, и по нему
+    видно, какого класса данные уходили наружу. А запретить конкретному вызову
+    выходить наружу можно явно: `complete(..., route=RoutePolicy.LOCAL_ONLY)`.
+    """
     if task in FORCED_LOCAL:
         return RoutePolicy.LOCAL_ONLY
-    if data_class is DataClass.CONTAINS_PD:
-        return RoutePolicy.EXTERNAL_AFTER_SCRUB
     return RoutePolicy.EXTERNAL_AFTER_SCRUB
