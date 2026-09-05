@@ -8,6 +8,7 @@ import { CuratorsPage } from '@/features/courses/CuratorsPage'
 import { RubricEditPage } from '@/features/rubrics/RubricEditPage'
 import { RubricNewPage } from '@/features/rubrics/RubricNewPage'
 import { AssignmentsPage } from '@/features/teaching/AssignmentsPage'
+import { StreamsPage } from '@/features/teaching/StreamsPage'
 import { StudentHomePage } from '@/features/student/StudentHomePage'
 import { RubricsPage } from '@/features/rubrics/RubricsPage'
 import { StudentPage } from '@/features/students/StudentPage'
@@ -35,7 +36,7 @@ export function App() {
         <Route index element={<Navigate to={role === 'student'
               ? '/my-work'
               : role === 'admin'
-                ? '/courses/go'
+                ? '/streams'
                 : role === 'methodist'
                   ? '/assignments'
                   : '/queue'} replace />} />
@@ -46,6 +47,7 @@ export function App() {
         <Route path="/curators" element={<CuratorsPage />} />
         <Route path="/my-work" element={<StudentHomePage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
+        <Route path="/streams" element={<StreamsPage />} />
         <Route path="/rubrics" element={<RubricsPage />} />
         <Route path="/rubrics/new" element={<RubricNewPage />} />
         <Route path="/rubrics/:assignmentId/edit" element={<RubricEditPage />} />

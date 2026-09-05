@@ -792,6 +792,123 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/stats/streams/{stream_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Статистика потока
+         * @description Что происходит на потоке: сдачи, очередь, просрочка, баллы.
+         *
+         *     Доступно ревьюеру: он должен видеть, как идёт поток, который проверяет, —
+         *     и это же требуется методисту и руководителю. Ограничивать чтение статистики
+         *     ролью выше значило бы прятать от человека результат его же работы.
+         */
+        get: operations["stream_stats_stats_streams__stream_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/assignments/{assignment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Статистика задания */
+        get: operations["assignment_stats_stats_assignments__assignment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams/{stream_id}/reviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ревьюеры потока */
+        get: operations["stream_reviewers_streams__stream_id__reviewers_get"];
+        put?: never;
+        /**
+         * Назначить ревьюеров на поток
+         * @description ``422`` — среди названных есть студент: проверять работы он не может.
+         */
+        post: operations["assign_reviewers_streams__stream_id__reviewers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams/{stream_id}/reviewers/{username}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Снять ревьюера с потока
+         * @description Уже выданные этому ревьюеру работы остаются за ним.
+         *
+         *     Снятие с потока значит «больше не давать новых», а не «отобрать начатое»:
+         *     переброс конкретной работы — это `POST /submissions/{id}/reassign`, и он
+         *     должен оставаться видимым действием, а не побочным эффектом.
+         */
+        delete: operations["unassign_reviewer_streams__stream_id__reviewers__username__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams/{stream_id}/distribute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Разложить нераспределённые работы
+         * @description Раздать работы потока его ревьюерам — и записать результат в базу.
+         *
+         *     Раньше `POST /distribute` считал план по пулу из тела запроса и возвращал
+         *     его наружу; план никуда не сохранялся, и назначение оставалось на совести
+         *     того, кто его прочитал. Здесь тот же солвер, но вход берётся из базы, а
+         *     выход в неё же и ложится: у сдачи появляется `reviewer_id`.
+         *
+         *     Трогаются только работы **без ревьюера**. Уже назначенные не
+         *     перекладываются: ревьюер мог начать разбор, и молча отобрать у него работу
+         *     хуже, чем оставить перекос в нагрузке.
+         *
+         *     ``409`` — на потоке нет ни одного ревьюера.
+         */
+        post: operations["distribute_stream_streams__stream_id__distribute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users": {
         parameters: {
             query?: never;
@@ -969,6 +1086,11 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** AssignReviewersRequest */
+        AssignReviewersRequest: {
+            /** Usernames */
+            usernames: string[];
+        };
         /**
          * AssignmentIn
          * @description Рубрика, выданная потоку в срок.
@@ -1064,6 +1186,57 @@ export interface components {
              * @default false
              */
             clear_deadline: boolean;
+        };
+        /** AssignmentStats */
+        AssignmentStats: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Rubric Key */
+            rubric_key: string;
+            /** Title */
+            title: string;
+            /** Course Key */
+            course_key: string;
+            /** Stream Key */
+            stream_key: string;
+            /** Deadline At */
+            deadline_at: string | null;
+            /** Max Score */
+            max_score: number;
+            /**
+             * Submissions
+             * @default 0
+             */
+            submissions: number;
+            /**
+             * Awaiting
+             * @default 0
+             */
+            awaiting: number;
+            /**
+             * Approved
+             * @default 0
+             */
+            approved: number;
+            /**
+             * Late
+             * @default 0
+             */
+            late: number;
+            /** Average Score */
+            average_score?: number | null;
+            /** Pass Rate */
+            pass_rate?: number | null;
+            /**
+             * Needs Attention
+             * @default 0
+             */
+            needs_attention: number;
+            /** Histogram */
+            histogram?: components["schemas"]["ScoreBucket"][];
         };
         /** AuditRecordOut */
         AuditRecordOut: {
@@ -1563,6 +1736,18 @@ export interface components {
             weights?: components["schemas"]["Weights"] | null;
             /** Max Items Per Reviewer */
             max_items_per_reviewer?: number | null;
+        };
+        /**
+         * DistributeResult
+         * @description Что изменилось в базе, а не что посчитал солвер.
+         */
+        DistributeResult: {
+            /** Assigned */
+            assigned: number;
+            /** Unassigned */
+            unassigned: number;
+            /** Reasons */
+            reasons?: string[];
         };
         /**
          * DistributionItem
@@ -2140,6 +2325,28 @@ export interface components {
              */
             tight: boolean;
         };
+        /** ReviewerLoadRow */
+        ReviewerLoadRow: {
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
+            /**
+             * Assigned
+             * @default 0
+             */
+            assigned: number;
+            /**
+             * Approved
+             * @default 0
+             */
+            approved: number;
+            /**
+             * Awaiting
+             * @default 0
+             */
+            awaiting: number;
+        };
         /**
          * ReviewerVerdict
          * @enum {string}
@@ -2282,6 +2489,18 @@ export interface components {
              * @default 1
              */
             step: number;
+        };
+        /**
+         * ScoreBucket
+         * @description Столбец гистограммы: доля максимума от `lo` до `hi`.
+         */
+        ScoreBucket: {
+            /** Lo */
+            lo: number;
+            /** Hi */
+            hi: number;
+            /** Count */
+            count: number;
         };
         /**
          * ScoreTerm
@@ -2431,6 +2650,86 @@ export interface components {
              * @default 0
              */
             students: number;
+        };
+        /** StreamReviewerRow */
+        StreamReviewerRow: {
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
+            /** Role */
+            role: string;
+            /** Roster Id */
+            roster_id?: string | null;
+            /**
+             * Capacity Minutes
+             * @default 0
+             */
+            capacity_minutes: number;
+            /** Skills */
+            skills?: string[];
+        };
+        /** StreamStats */
+        StreamStats: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Course Key */
+            course_key: string;
+            /** Stream Key */
+            stream_key: string;
+            /** Title */
+            title: string;
+            /**
+             * Students
+             * @default 0
+             */
+            students: number;
+            /**
+             * Reviewers
+             * @default 0
+             */
+            reviewers: number;
+            /**
+             * Assignments
+             * @default 0
+             */
+            assignments: number;
+            /**
+             * Submissions
+             * @default 0
+             */
+            submissions: number;
+            /**
+             * Awaiting
+             * @default 0
+             */
+            awaiting: number;
+            /**
+             * Approved
+             * @default 0
+             */
+            approved: number;
+            /**
+             * Unassigned
+             * @default 0
+             */
+            unassigned: number;
+            /**
+             * Overdue
+             * @default 0
+             */
+            overdue: number;
+            /** Average Score */
+            average_score?: number | null;
+            /** Pass Rate */
+            pass_rate?: number | null;
+            /** By Assignment */
+            by_assignment?: components["schemas"]["AssignmentStats"][];
+            /** By Reviewer */
+            by_reviewer?: components["schemas"]["ReviewerLoadRow"][];
         };
         /**
          * StudentAssignment
@@ -4211,6 +4510,195 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StudentSubmission"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_stats_stats_streams__stream_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assignment_stats_stats_assignments__assignment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stream_reviewers_streams__stream_id__reviewers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamReviewerRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_reviewers_streams__stream_id__reviewers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignReviewersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamReviewerRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unassign_reviewer_streams__stream_id__reviewers__username__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distribute_stream_streams__stream_id__distribute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DistributeResult"];
                 };
             };
             /** @description Validation Error */

@@ -17,6 +17,7 @@ from avito_reviewer.app.routers import (
     distribution_router,
     ingest_router,
     review_router,
+    stats_router,
     student_router,
     submissions_router,
     teaching_router,
@@ -148,6 +149,7 @@ def create_app() -> FastAPI:
     app.include_router(distribution_router)
     app.include_router(submissions_router)
     app.include_router(student_router)
+    app.include_router(stats_router)
     app.include_router(users_router)
     return app
 

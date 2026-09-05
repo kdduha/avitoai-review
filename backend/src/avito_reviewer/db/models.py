@@ -212,6 +212,30 @@ class Enrollment(Base):
     )
 
 
+class StreamReviewer(Base):
+    """Кто проверяет работы этого потока.
+
+    Пара, а не поле у пользователя: один ревьюер ведёт несколько потоков, и
+    один поток держат несколько ревьюеров. Назначает руководитель.
+
+    Связь не дублирует `Submission.reviewer_id`: там — кому досталась
+    конкретная работа, здесь — кто вообще имеет право её получить. Без этого
+    списка распределять было не из кого: `POST /distribute` считал план по
+    пулу, который присылал клиент, и план никуда не сохранялся.
+    """
+
+    __tablename__ = "stream_reviewers"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    stream_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("streams.id"), index=True)
+    reviewer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(_TZ_DATETIME, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("stream_id", "reviewer_id", name="uq_stream_reviewers_stream_reviewer"),
+    )
+
+
 class Submission(Base):
     """One run of the pipeline the reviewer can come back to.
 
