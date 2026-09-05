@@ -99,9 +99,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # has to leave this one, or "asyncio.run() cannot be called from a
     # running event loop". `create_all` is gone: the schema now has exactly
     # one source of truth, `migrations/versions/`.
-    await run_in_threadpool(run_migrations)
-    async with sessionmaker() as session:
-        await seed_users(session, config.auth)
+    try:
+        await run_in_threadpool(run_migrations)
+        async with sessionmaker() as session:
+            await seed_users(session, config.auth)
+    except OSError as exc:
+        # Первая команда в документе запуска — `uvicorn`, а база к этому моменту
+        # обычно не поднята. Сырое «Connect call failed» не подсказывает ни
+        # переменную, ни что базу вообще ждут: ответ лежит абзацем ниже в
+        # документе, до которого доходят не все.
+        raise RuntimeError(
+            f"база недоступна по DB_DSN={config.db.dsn}: {exc}. "
+            "Поднимите её (`docker compose up postgres`) или возьмите файловую: "
+            "DB_DSN=sqlite+aiosqlite:///./dev.db"
+        ) from exc
 
     _log.info(
         "startup: ingest sources=%s, llm=%s, rubrics=%s, reviewers=%s",

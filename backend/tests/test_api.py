@@ -318,6 +318,25 @@ def test_the_app_produces_a_draft_on_its_default_config():
     assert cost["calls"] > 0, "обращения к модели обязаны попадать в журнал"
 
 
+def test_an_unreachable_database_says_which_variable_to_set(monkeypatch):
+    """Первая команда в документе запуска — uvicorn, а базы к этому моменту обычно нет.
+
+    Сырое «Connect call failed» не подсказывает ни переменную, ни что базу вообще
+    ждут, — а ответ лежит абзацем ниже, до которого доходят не все.
+    """
+    def refuse() -> None:
+        raise OSError("Connect call failed ('127.0.0.1', 5432)")
+
+    monkeypatch.setattr("avito_reviewer.app.main.run_migrations", refuse)
+
+    with pytest.raises(RuntimeError) as caught, TestClient(create_app()):
+        pass
+
+    message = str(caught.value)
+    assert "DB_DSN" in message
+    assert "sqlite+aiosqlite" in message
+
+
 def test_init_reports_the_model_route_and_rubrics(make_client):
     client, _ = make_client()
     body = client.get("/init").json()
