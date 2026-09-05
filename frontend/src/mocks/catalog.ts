@@ -82,21 +82,29 @@ const CURATOR_SEED: Omit<Curator, 'courseIds' | 'streamIds' | 'committedMinutes'
   { id: 'c-grinev', name: 'Лев Гринёв', initials: 'ЛГ', email: 'l.grinev@avito.ru', skills: ['GPU', 'инфраструктура'], capacityMinutes: 300, medianMinutesPerWork: 36, onboarding: false },
 ]
 
-/** Кто какие программы ведёт. Все id здесь — из `PROGRAMS`: раньше половина
- *  карты ссылалась на курсы, которых в каталоге не было (`llm`, `mlsd`, `gpu`,
- *  `analytics`, `fraud`, `business-models`), и четыре ревьюера из десяти
- *  висели «без потоков» с нулевой загрузкой. Лев Гринёв оставлен без
- *  назначений намеренно — руководителю есть кого распределять. */
+/** Кто какие программы ведёт. Все id здесь — из `PROGRAMS`, и это условие
+ *  приходилось восстанавливать дважды. Сначала половина карты ссылалась на
+ *  курсы, которых в каталоге не было; потом каталог сократился до пяти
+ *  направлений — тех, у которых есть записанный разбор, — и четверо
+ *  назначенных на ушедшие курсы снова остались бы без потоков с нулевой
+ *  загрузкой. `KNOWN_COURSES` ниже такие ссылки молча отфильтровывает,
+ *  поэтому дефект и не падает, а просто выглядит как незанятые люди.
+ *
+ *  Переназначены по навыкам из карточек `backend/reviewers/`: у Штейн
+ *  «оценка качества» и Тарасенко «эксперименты» ближе всего к Tech QA,
+ *  у Заславского «метрики» и Прохоровой «А/Б» — к антифроду, где разбирают
+ *  карту рисков. Лев Гринёв оставлен без назначений намеренно —
+ *  руководителю есть кого распределять. */
 const ASSIGNED: Record<string, string[]> = {
   'c-kruglov': ['go', 'backend'],
   'c-eremina': ['go', 'backend'],
   'c-bahtin': ['system-design', 'go'],
-  'c-shtein': ['llm', 'mlsd'],
-  'c-tarasenko': ['mlsd', 'gpu'],
-  'c-zaslavsky': ['product', 'business-models'],
-  'c-prohorova': ['analytics', 'product'],
-  'c-nogovitsyn': ['qa', 'analytics'],
-  'c-mustafina': ['fraud', 'business-models'],
+  'c-shtein': ['qa', 'backend'],
+  'c-tarasenko': ['qa', 'system-design'],
+  'c-zaslavsky': ['fraud', 'qa'],
+  'c-prohorova': ['fraud', 'system-design'],
+  'c-nogovitsyn': ['qa', 'fraud'],
+  'c-mustafina': ['fraud', 'backend'],
   'c-grinev': [],
 }
 
