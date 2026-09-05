@@ -118,41 +118,6 @@ class ReviewService:
         draft.cost_rub = summary["cost_rub"]
         return draft
 
-    def without_model(
-        self,
-        rubric: Rubric,
-        reason: str,
-        *,
-        submitted_at: datetime | None = None,
-        deadline_at: datetime | None = None,
-    ) -> ReviewDraft:
-        """Черновик, собранный без единого обращения к модели.
-
-        Работа, не принимаемая по формату, не должна стоить ни рубля токенов:
-        ревьюер получает список формальных провалов и пустые вердикты, которые
-        честно помечены как невыставленные.
-        """
-        draft = ReviewDraft(
-            assignment_id=rubric.assignment_id,
-            rubric_title=rubric.title,
-            max_score=rubric.scale.total_max,
-        )
-        self._fill_missing(draft, rubric.criteria)
-        for verdict in draft.verdicts:
-            verdict.verdict = reason
-            verdict.attention_reason = reason
-        draft.failed_criteria = [c.id for c in rubric.criteria]
-
-        _apply(
-            draft,
-            aggregate(draft.verdicts, rubric, submitted_at=submitted_at, deadline_at=deadline_at),
-        )
-        draft.needs_human_attention = True
-        draft.attention_reasons = [reason]
-        return draft
-
-    # ------------------------------------------------------------------ #
-
     def _review_batch(
         self,
         batch: list[Criterion],

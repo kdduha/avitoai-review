@@ -80,32 +80,23 @@ class AIService:
         condition_text: str = "",
         student_name: str | None = None,
     ) -> ReviewDraft:
-        # Формальные проверки идут первыми и не стоят токенов. Если работа не
-        # принимается по формату, модель не запускается вовсе — ревьюер и так
-        # вернёт её студенту.
+        # Формальные проверки идут первыми и не стоят токенов. Их результат —
+        # факты для модели и строки для ревьюера, но не приговор: работа с
+        # непройденным дословным требованием всё равно разбирается. Иначе
+        # студент за одну недостающую строку в логе не получал ни слова о том,
+        # что у него сделано хорошо.
         checks = gate.run(bundle, texts, rubric)
         facts = list(gate_facts or []) + checks.facts
 
-        if checks.blocked:
-            reason = "не пройдены формальные требования: " + "; ".join(
-                outcome.label for outcome in checks.failures if outcome.level == "blocking"
-            )
-            draft = self.review_service.without_model(
-                rubric,
-                reason,
-                submitted_at=bundle.submitted_at,
-                deadline_at=bundle.deadline_at,
-            )
-        else:
-            draft = self.review_service.review(
-                texts,
-                rubric,
-                submitted_at=bundle.submitted_at,
-                deadline_at=bundle.deadline_at,
-                gate_facts=facts,
-                condition_text=condition_text,
-                identities=self.identities(bundle, student_name),
-            )
+        draft = self.review_service.review(
+            texts,
+            rubric,
+            submitted_at=bundle.submitted_at,
+            deadline_at=bundle.deadline_at,
+            gate_facts=facts,
+            condition_text=condition_text,
+            identities=self.identities(bundle, student_name),
+        )
 
         draft.gate = checks
         draft.gate_facts = facts
