@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef } from 'react'
 import { FileCode2, FileText, Scissors } from 'lucide-react'
 import type { WorkspaceFile } from '@/lib/workspace'
 import { cn } from '@/lib/cn'
@@ -38,11 +38,33 @@ export function WorkPanel({ files, activePath, onSelect, highlight, link, prLabe
 
   const marked = highlight?.path === file?.path ? highlight : null
 
-  useEffect(() => {
-    if (!marked?.startLine || !codeRef.current) return
-    codeRef.current.querySelector(`[data-line="${marked.startLine}"]`)?.scrollIntoView({
-      block: 'center',
-      behavior: 'smooth',
+  /* Прокрутка к процитированной строке.
+   *
+   *  `useLayoutEffect`, а не `useEffect`: на узком экране панель работы в момент
+   *  перехода по цитате только что показалась вместо черновика, и мерить её
+   *  нужно уже с новыми стилями. Слой раскладки React выполняет после правки
+   *  DOM и до отрисовки, а `getBoundingClientRect` заставляет браузер посчитать
+   *  раскладку синхронно — то есть замер честный, и ждать кадра не нужно. Через
+   *  `requestAnimationFrame` это делать нельзя: в фоновом окне кадры не идут, и
+   *  прокрутка не случилась бы вовсе.
+   *
+   *  Смещение считается вручную, а не через `scrollIntoView`: тот прокручивает
+   *  всю цепочку контейнеров вверх, а нужен ровно один — вьювер кода. */
+  useLayoutEffect(() => {
+    const line = marked?.startLine
+    if (!line) return
+
+    const container = codeRef.current
+    const row = container?.querySelector(`[data-line="${line}"]`)
+    if (!container || !row || container.clientHeight === 0) return
+
+    const offset = row.getBoundingClientRect().top - container.getBoundingClientRect().top
+    container.scrollTo({
+      top: container.scrollTop + offset - container.clientHeight / 2,
+      /* `scrollTo` не смотрит на CSS, поэтому системную настройку «меньше
+         движения» приходится спрашивать самим — иначе переход по цитате
+         останется единственной анимацией, которую она не выключает. */
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
     })
   }, [marked])
 
@@ -57,7 +79,7 @@ export function WorkPanel({ files, activePath, onSelect, highlight, link, prLabe
   }
 
   return (
-    <section className="flex max-h-[78vh] min-h-0 flex-col border-b border-line bg-surface lg:max-h-none lg:border-b-0 lg:border-r">
+    <section className="flex min-h-0 flex-col border-b border-line bg-surface lg:border-b-0 lg:border-r">
       <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
         <h2 className="text-[13px] font-semibold text-ink">Работа</h2>
         <a
