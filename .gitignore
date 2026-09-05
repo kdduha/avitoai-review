@@ -19,6 +19,10 @@ env/
 .env
 .env.*
 !.env.example
+
+# Local SQLite (DB_DSN=sqlite+aiosqlite:///./dev.db for dev without docker-compose)
+*.db
+*.db-journal
 # Node / frontend
 node_modules/
 .pnp.*
@@ -30,6 +34,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 dist-ssr/
+# Playwright
+/frontend/playwright-report/
+/frontend/test-results/
+/frontend/blob-report/
 # Editors / OS
 .idea/
 .vscode/

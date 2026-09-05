@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, FlaskConical } from 'lucide-react'
-import type { DetectionSpan, Evidence } from '@/lib/backend'
-import { demoThread, getRun, setScore, setSpanVerdict } from '@/lib/runs'
+import { ApiError, type DetectionSpan, type Evidence } from '@/lib/backend'
+import { approveRun, demoThread, getRun, loadSubmission, setScore, setSpanVerdict } from '@/lib/runs'
 import { formatDateTime, timeLeft } from '@/lib/format'
+import { withPatchedDraft } from '@/lib/workspace'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ChatDock } from './ChatDock'
@@ -28,29 +30,65 @@ export function ReviewPage() {
   const [highlight, setHighlight] = useState<Highlight | null>(null)
   const [activeQuote, setActiveQuote] = useState<string | null>(null)
   const [activeSpanId, setActiveSpanId] = useState<string | null>(null)
-  const [approved, setApproved] = useState(false)
+  const [approved, setApproved] = useState(() => workspace?.status === 'approved')
+  const [actionError, setActionError] = useState<string | null>(null)
   const [shownRunId, setShownRunId] = useState(runId)
 
   /* Роутер переиспользует компонент между прогонами: без сброса на экране
      остались бы баллы предыдущей работы. */
   if (shownRunId !== runId) {
     setShownRunId(runId)
-    setWorkspace(getRun(runId))
+    const next = getRun(runId)
+    setWorkspace(next)
     setActivePath(null)
     setHighlight(null)
     setActiveQuote(null)
     setActiveSpanId(null)
-    setApproved(false)
+    setApproved(next?.status === 'approved')
+    setActionError(null)
+  }
+
+  // Открытие по прямой ссылке или из очереди: эта вкладка сама ничего не
+  // запускала, локального кэша нет — тянем карточку с сервера по настоящему
+  // submission_id (в отличие от `run-...` из свежего /check, тут id в URL —
+  // это UUID сдачи).
+  const remote = useQuery({
+    queryKey: ['submission', runId],
+    queryFn: () => loadSubmission(runId),
+    enabled: !workspace,
+    retry: false,
+  })
+
+  useEffect(() => {
+    if (remote.data) {
+      setWorkspace(remote.data)
+      setApproved(remote.data.status === 'approved')
+    }
+  }, [remote.data])
+
+  function describeError(error: unknown, fallback: string): string {
+    return error instanceof ApiError ? error.message : fallback
   }
 
   if (!workspace) {
+    if (remote.isLoading) {
+      return (
+        <div className="grid min-h-screen place-items-center px-6">
+          <p className="text-[13.5px] text-muted">Загружаю сдачу…</p>
+        </div>
+      )
+    }
+
     return (
       <div className="grid min-h-screen place-items-center px-6">
         <div className="max-w-[46ch] text-center">
-          <h1 className="text-[17px] font-semibold text-ink">Прогон не найден</h1>
+          <h1 className="text-[17px] font-semibold text-ink">
+            {remote.isError ? 'Сдача не найдена' : 'Прогон не найден'}
+          </h1>
           <p className="mt-2 text-[13.5px] leading-[1.6] text-muted">
-            Результаты проверки живут в памяти вкладки: у бэкенда пока нет хранилища сдач, поэтому
-            после перезагрузки прогон нужно запустить заново.
+            {remote.isError
+              ? describeError(remote.error, 'Не удалось загрузить сдачу — возможно, у вас нет к ней доступа.')
+              : 'Результаты проверки живут в памяти вкладки: без бэкенда прогон нужно запустить заново.'}
           </p>
           <Link to="/check" className="mt-4 inline-block">
             <Button variant="primary">Запустить проверку</Button>
@@ -153,20 +191,49 @@ export function ReviewPage() {
           approved={approved}
           scoreStep={workspace.scoreStep}
           activeQuote={activeQuote}
-          onScore={(criterionId, score) => setWorkspace(setScore(workspace.id, criterionId, score))}
+          actionError={actionError}
+          onScore={async (criterionId, score) => {
+            setActionError(null)
+            try {
+              const next = await setScore(workspace.id, criterionId, score)
+              if (next) setWorkspace(next)
+            } catch (error) {
+              setActionError(describeError(error, 'Правка не сохранилась'))
+            }
+          }}
           onEvidence={openEvidence}
-          onApprove={() => setApproved(true)}
+          onApprove={async () => {
+            setActionError(null)
+            try {
+              await approveRun(workspace.id)
+              setApproved(true)
+            } catch (error) {
+              setActionError(describeError(error, 'Утвердить не удалось'))
+            }
+          }}
         />
         <DetectionPanel
           report={workspace.detection}
           error={workspace.detectionError}
           activeSpanId={activeSpanId}
           onSpan={openSpan}
-          onVerdict={(spanId, verdict) => setWorkspace(setSpanVerdict(workspace.id, spanId, verdict))}
+          onVerdict={async (spanId, verdict) => {
+            try {
+              const next = await setSpanVerdict(workspace.id, spanId, verdict)
+              if (next) setWorkspace(next)
+            } catch (error) {
+              setActionError(describeError(error, 'Вердикт по спану не сохранился'))
+            }
+          }}
         />
       </div>
 
-      <ChatDock live={workspace.live} thread={demoThread(workspace.id)} />
+      <ChatDock
+        live={workspace.live}
+        submissionId={workspace.submissionId}
+        demoThread={demoThread(workspace.id)}
+        onPatchApplied={(draft) => setWorkspace((prev) => (prev ? withPatchedDraft(prev, draft) : prev))}
+      />
     </div>
   )
 }

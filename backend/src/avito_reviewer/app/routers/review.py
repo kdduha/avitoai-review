@@ -3,13 +3,17 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime
 from functools import partial
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from avito_reviewer.ai import AIService, Rubric
 from avito_reviewer.ai.compiler import DRAFT_NOTE, CompilerError, RubricCompiler
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
+from avito_reviewer.app.auth import RequireAdmin, RequireReviewer
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
     CompileRubricRequest,
@@ -23,6 +27,7 @@ from avito_reviewer.app.schemas.review import (
     ReviewResponse,
     RubricSummary,
 )
+from avito_reviewer.db import Role, Submission, User, session_dependency
 from avito_reviewer.ingest import (
     IngestContext,
     IngestService,
@@ -35,6 +40,8 @@ from avito_reviewer.ingest import (
 _log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["review"])
+
+Session = Annotated[AsyncSession, Depends(session_dependency)]
 
 
 async def _ingest(request: Request, body: DetectRequest | ReviewRequest) -> SubmissionBundle:
@@ -66,20 +73,22 @@ def _rubric(request: Request, rubric_id: str | None, inline: Rubric | None) -> R
 
 
 @router.get("/rubrics", summary="Rubrics available to review against")
-async def list_rubrics(request: Request) -> list[RubricSummary]:
+async def list_rubrics(request: Request, user: RequireReviewer) -> list[RubricSummary]:
     """Каталог рубрик. Добавить курс — значит положить рядом ещё один JSON."""
     store: RubricStore = request.app.state.rubrics
     return [RubricSummary.of(store.get(rubric_id)) for rubric_id in store.ids]  # type: ignore[arg-type]
 
 
 @router.get("/rubrics/{assignment_id}", summary="One rubric in full")
-async def get_rubric(assignment_id: str, request: Request) -> Rubric:
+async def get_rubric(assignment_id: str, request: Request, user: RequireReviewer) -> Rubric:
     """Критерии, якоря и шкала — то, против чего ставился каждый вердикт."""
     return _rubric(request, assignment_id, None)
 
 
 @router.post("/rubrics/compile", summary="Turn an assignment condition into a rubric draft")
-async def compile_rubric(body: CompileRubricRequest, request: Request) -> CompileRubricResponse:
+async def compile_rubric(
+    body: CompileRubricRequest, request: Request, user: RequireAdmin
+) -> CompileRubricResponse:
     """Разобрать условие задания и предложить рубрику.
 
     Результат — черновик, а не рубрика: он не сохраняется в каталог и не
@@ -114,7 +123,9 @@ async def compile_rubric(body: CompileRubricRequest, request: Request) -> Compil
 
 
 @router.post("/rubrics", summary="Confirm a rubric and put it into the catalogue")
-async def confirm_rubric(body: ConfirmRubricRequest, request: Request) -> ConfirmRubricResponse:
+async def confirm_rubric(
+    body: ConfirmRubricRequest, request: Request, user: RequireAdmin
+) -> ConfirmRubricResponse:
     """Принять рубрику: с этого момента по ней проверяются работы потока.
 
     Это тот самый шаг, ради которого компилятор ничего не сохраняет сам. Здесь
@@ -148,18 +159,64 @@ async def confirm_rubric(body: ConfirmRubricRequest, request: Request) -> Confir
     return ConfirmRubricResponse(rubric=rubric, path=str(path))
 
 
+@router.delete("/rubrics/{assignment_id}", summary="Remove a rubric from the catalogue", status_code=204)
+async def delete_rubric(assignment_id: str, request: Request, user: RequireAdmin) -> None:
+    """Submissions already scored against this rubric keep meaning what they
+    meant — `Submission.rubric_snapshot` froze it at scoring time — so this
+    only takes it out of future `POST /review` calls.
+
+    ``404`` — no such rubric.
+    """
+    store: RubricStore = request.app.state.rubrics
+    try:
+        store.delete(assignment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"рубрика {assignment_id!r} не найдена") from exc
+
+
+async def _resolve_reviewer(session: AsyncSession, user: User, reviewer_username: str | None) -> User:
+    """Who a persisted submission is assigned to.
+
+    Defaults to whoever called the endpoint — running `/review` is how a
+    reviewer claims a submission. Handing it to someone else on creation is
+    an admin privilege, same as `POST /submissions/{id}/reassign`.
+    """
+    if reviewer_username is None:
+        return user
+    if Role(user.role) is not Role.ADMIN:
+        raise HTTPException(
+            status_code=403, detail="назначать сдачу другому ревьюеру может только admin"
+        )
+    target = (
+        await session.execute(select(User).where(User.username == reviewer_username))
+    ).scalar_one_or_none()
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"пользователь {reviewer_username!r} не найден")
+    return target
+
+
 @router.post("/review", summary="Draft a review of a submission against a rubric")
-async def review(body: ReviewRequest, request: Request) -> ReviewResponse:
+async def review(
+    body: ReviewRequest, request: Request, user: RequireReviewer, session: Session
+) -> ReviewResponse:
     """Собрать сдачу по ссылке и вернуть черновик ревью с проверенными цитатами.
 
     Балл считает код, а не модель: она отвечает по каждому критерию отдельно и
     обязана приложить цитату, которая затем сверяется с текстом файла.
     Вердикты без подтверждённой цитаты помечены `needs_human_attention`.
 
-    ``404`` — рубрика не найдена. ``422`` — ссылка или источник неверны.
-    ``502`` — источник сдачи не ответил.
+    Прогон сохраняется как `Submission` — карточка доступна дальше по
+    `submission_id` через `GET /submissions/{id}` и попадает в очередь
+    ревьюера (`GET /me/queue`). `with_detection: true` заодно прогоняет
+    детектор ГенИИ на тех же `bundle`/`texts`, без второго похода к источнику
+    сдачи. `reviewer_username` — только для admin, назначить сдачу не себе.
+
+    ``403`` — `reviewer_username` указан не администратором.
+    ``404`` — рубрика или `reviewer_username` не найдены.
+    ``422`` — ссылка или источник неверны. ``502`` — источник сдачи не ответил.
     """
     rubric = _rubric(request, body.rubric_id, body.rubric)
+    reviewer = await _resolve_reviewer(session, user, body.reviewer_username)
     bundle = await _ingest(request, body)
 
     ai: AIService = request.app.state.ai
@@ -176,20 +233,53 @@ async def review(body: ReviewRequest, request: Request) -> ReviewResponse:
         condition_text=body.condition_text,
         student_name=body.student_name,
     )
+    detection = None
+    if body.with_detection:
+        try:
+            detection = await run_in_threadpool(
+                partial(ai.detect, bundle, texts, rubric, student_name=body.student_name)
+            )
+        except Exception:
+            # Реши детектор не отвечать вовсе — это не повод терять уже
+            # посчитанный черновик ревью. Advisory-сигнал и без того необязателен;
+            # его отсутствие ревьюер увидит по пустому `detection` в ответе.
+            _log.exception("with_detection: детектор не отработал, черновик отдаём без него")
+
+    files = [ArtifactTextOut.of(text) for text in texts]
+    submission = Submission(
+        id=bundle.submission_id,
+        origin_url=bundle.origin_url,
+        source=bundle.source.value,
+        rubric_key=rubric.assignment_id,
+        rubric_snapshot=rubric.model_dump(mode="json"),
+        reviewer_id=reviewer.id,
+        bundle=bundle.model_dump(mode="json"),
+        files=[f.model_dump(mode="json") for f in files],
+        draft=draft.model_dump(mode="json"),
+        detection=detection.model_dump(mode="json") if detection else None,
+        condition_text=body.condition_text,
+        submitted_at=bundle.submitted_at,
+        deadline_at=bundle.deadline_at,
+    )
+    session.add(submission)
+    await session.commit()
+
     return ReviewResponse(
-        bundle=bundle,
-        files=[ArtifactTextOut.of(text) for text in texts],
-        draft=draft,
+        bundle=bundle, files=files, draft=draft, detection=detection, submission_id=submission.id
     )
 
 
 @router.post("/detect", summary="Look for signs of generative-AI authorship")
-async def detect(body: DetectRequest, request: Request) -> DetectResponse:
+async def detect(body: DetectRequest, request: Request, user: RequireReviewer) -> DetectResponse:
     """Ансамбль из четырёх сигналов: форензика истории, стилометрия, перплексия, judge.
 
     Вывод рекомендательный. Он не является доказательством, на балл не влияет
     и содержит явный список того, чего проверка не видела: недоступные сигналы
     и файлы, доступные только фрагментом.
+
+    Разовый прогон, ничего не сохраняет: чтобы отчёт лёг в карточку сдачи и
+    был виден через `GET /submissions/{id}/ai-detection`, запросите его вместе
+    с ревью — `POST /review` с `with_detection: true`.
     """
     rubric = (
         _rubric(request, body.rubric_id, None) if body.rubric_id else None
@@ -209,7 +299,7 @@ async def detect(body: DetectRequest, request: Request) -> DetectResponse:
 
 
 @router.get("/cost", summary="Model spend since startup")
-async def cost(request: Request) -> CostSummary:
+async def cost(request: Request, user: RequireAdmin) -> CostSummary:
     """Журнал шлюза в цифрах: сколько вызовов ушло наружу, сколько это стоило."""
     ai: AIService = request.app.state.ai
     return CostSummary.model_validate(ai.cost_summary)

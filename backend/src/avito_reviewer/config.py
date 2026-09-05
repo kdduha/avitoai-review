@@ -154,3 +154,74 @@ class AIConfig(BaseSettings):
     detection: DetectionOptions = Field(default_factory=DetectionOptions)
 
     rubrics_dir: str = "rubrics"
+
+
+class DatabaseConfig(BaseSettings):
+    """Where persisted submissions, review revisions and users live.
+
+    SQLite (via `sqlite+aiosqlite:///path`) works with the same engine for
+    hermetic tests; the docker-compose service and any real deployment point
+    this at Postgres.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
+
+    dsn: str = "postgresql+asyncpg://avito:avito@localhost:5432/avito_reviewer"
+    echo: bool = False
+
+
+class QueueConfig(BaseSettings):
+    """Redis, for the one thing actually queued today: `POST .../review/rerun`.
+
+    Everything else on the request path stays synchronous — a rubric-sized
+    LLM run is seconds, not minutes, and queuing it would only add latency.
+    Rerun is different: it is explicitly fire-and-forget in the architecture
+    (`POST /submissions/{id}/review/rerun`), so it is the one place arq earns
+    its keep instead of sitting unused in docker-compose.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="QUEUE_", env_file=".env", extra="ignore")
+
+    redis_dsn: str = "redis://localhost:6379/0"
+
+
+class AuthConfig(BaseSettings):
+    """JWT auth for the hackathon-variant RBAC: one hardcoded login per role.
+
+    Three accounts are seeded at startup — `student`, `reviewer`, `admin` —
+    all sharing `seed_password`. This is exactly the reduction the
+    architecture doc calls out for the hackathon timeline (§15,
+    "аутентификация — один хардкод-логин на роль"); a real deployment
+    replaces the seed with actual user records and overrides `jwt_secret`.
+    The doc's `coordinator` role (runs the stream day-to-day: reassign,
+    rubrics, cost) is folded into `admin` here — one project, one methodist,
+    no separate coordinator headcount to give its own account to yet.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="AUTH_", env_file=".env", extra="ignore")
+
+    jwt_secret: SecretStr = SecretStr("dev-only-change-me-in-production-please")
+    jwt_algorithm: str = "HS256"
+    access_token_ttl_minutes: int = 480
+    seed_password: str = "avito2026"
+
+
+class AppConfig(BaseSettings):
+    """Single construction point for every settings object the app needs.
+
+    Each field is still its own `BaseSettings` with its own env prefix
+    (`INGEST_`, `AI_`, `DB_`, `AUTH_`, `QUEUE_`) — nesting them here does not
+    change how they read the environment, it just gives `main.py`, `queue.py`
+    and tests one object to build instead of five. Splitting them was never
+    about isolation (they all read the same process environment); it is
+    about naming — `config.ai.llm.provider` reads better than a flat config
+    with `ai_llm_provider` fighting `db_dsn` for the same namespace.
+    """
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+    ingest: IngestConfig = Field(default_factory=IngestConfig)
+    ai: AIConfig = Field(default_factory=AIConfig)
+    db: DatabaseConfig = Field(default_factory=DatabaseConfig)
+    auth: AuthConfig = Field(default_factory=AuthConfig)
+    queue: QueueConfig = Field(default_factory=QueueConfig)

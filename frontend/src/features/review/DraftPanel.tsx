@@ -15,6 +15,9 @@ interface Props {
   onEvidence: (evidence: Evidence) => void
   onApprove: () => void
   activeQuote: string | null
+  /** Правка или утверждение не долетели до сервера — 409 "уже утверждена",
+   *  сеть, что угодно. `null`, пока всё в порядке. */
+  actionError?: string | null
 }
 
 function outcomeIcon(outcome: CheckOutcome) {
@@ -98,6 +101,7 @@ export function DraftPanel({
   onEvidence,
   onApprove,
   activeQuote,
+  actionError,
 }: Props) {
   const verdictTexts = new Set(workspace.verdicts.map((verdict) => verdict.verdict))
   const attentionReasons = workspace.attentionReasons.filter((reason) => !verdictTexts.has(reason))
@@ -141,6 +145,11 @@ export function DraftPanel({
 
       {/* Одно громкое место — итог; действие стоит рядом с числом, которое утверждает. */}
       <footer className="shrink-0 border-t border-line bg-raised px-5 py-4">
+        {actionError ? (
+          <p className="mb-3 rounded-lg border border-[#f0d3d3] bg-critical-wash px-3 py-2 text-[12.5px] text-critical-ink">
+            {actionError}
+          </p>
+        ) : null}
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="flex items-baseline gap-2">

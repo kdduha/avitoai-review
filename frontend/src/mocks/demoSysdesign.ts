@@ -117,6 +117,7 @@ const BUNDLE = {
 } as unknown as SubmissionBundle
 
 export const DEMO_SYSDESIGN_REVIEW: ReviewResponse = {
+  submission_id: 'demo-sysdesign',
   bundle: BUNDLE,
   files: toArtifacts(FILES),
   draft: {

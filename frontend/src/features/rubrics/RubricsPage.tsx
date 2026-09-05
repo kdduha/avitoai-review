@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Coins, ShieldCheck } from 'lucide-react'
+import { CircleAlert, Coins, ShieldCheck, Sparkles } from 'lucide-react'
+import { useSession } from '@/app/session'
 import { backend, type Criterion, type FormatCheck, type LatePolicy } from '@/lib/backend'
 import { cn } from '@/lib/cn'
 import { plural } from '@/lib/format'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
+import { CompileRubricPanel } from './CompileRubricPanel'
 
 const LEVEL_TONE = { blocking: 'critical', warning: 'warn', info: 'neutral' } as const
 
@@ -78,7 +81,9 @@ function CriterionCard({ criterion }: { criterion: Criterion }) {
 }
 
 export function RubricsPage() {
+  const { role } = useSession()
   const [selected, setSelected] = useState<string | null>(null)
+  const [compiling, setCompiling] = useState(false)
 
   const list = useQuery({ queryKey: ['rubrics'], queryFn: backend.rubrics, retry: false })
   const current = selected ?? list.data?.[0]?.assignment_id ?? null
@@ -109,13 +114,37 @@ export function RubricsPage() {
 
   return (
     <div className="mx-auto max-w-[920px] px-6 py-6">
-      <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Рубрики</h1>
-      <p className="mt-1 max-w-[68ch] text-[13.5px] leading-[1.6] text-muted">
-        То, против чего ставится каждый вердикт. Промпт собирается из этой структуры, а не пишется
-        руками под каждое задание.
-      </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Рубрики</h1>
+          <p className="mt-1 max-w-[68ch] text-[13.5px] leading-[1.6] text-muted">
+            То, против чего ставится каждый вердикт. Промпт собирается из этой структуры, а не
+            пишется руками под каждое задание.
+          </p>
+        </div>
+        {role === 'head' ? (
+          <Button
+            variant={compiling ? 'secondary' : 'primary'}
+            onClick={() => setCompiling((value) => !value)}
+            icon={<Sparkles size={14} strokeWidth={1.9} />}
+          >
+            {compiling ? 'К каталогу' : 'Собрать из условия'}
+          </Button>
+        ) : null}
+      </div>
 
-      {list.data && list.data.length > 1 ? (
+      {compiling ? (
+        <div className="mt-5">
+          <CompileRubricPanel
+            onConfirmed={(assignmentId) => {
+              setCompiling(false)
+              setSelected(assignmentId)
+            }}
+          />
+        </div>
+      ) : null}
+
+      {!compiling && list.data && list.data.length > 1 ? (
         <div className="mt-4 flex flex-wrap gap-1.5">
           {list.data.map((item) => (
             <button
@@ -134,7 +163,7 @@ export function RubricsPage() {
         </div>
       ) : null}
 
-      {data ? (
+      {!compiling && data ? (
         <>
           <header className="mt-5">
             <h2 className="text-[16px] font-semibold text-ink">{data.title}</h2>

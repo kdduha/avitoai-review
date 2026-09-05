@@ -11,7 +11,15 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, '') },
+      // Playwright (`playwright.config.ts`) поднимает свой изолированный бэкенд
+      // на отдельном порту, чтобы не столкнуться с уже поднятым docker-compose
+      // на 8000 — `reuseExistingServer` иначе молча переиспользует его, и e2e
+      // проверяет `fake`-специфичное поведение против настоящего ключа.
+      '/api': {
+        target: `http://localhost:${process.env.VITE_BACKEND_PORT ?? '8000'}`,
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
     },
   },
 })

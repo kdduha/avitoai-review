@@ -28,7 +28,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
+
+import nbformat
 
 from avito_reviewer.config import ContentConfig
 from avito_reviewer.ingest import Artifact, ArtifactRole, ChangeStatus, SubmissionBundle
@@ -112,6 +114,66 @@ class ArtifactText:
         return ", ".join(f"{a}–{b}" if a != b else str(a) for a, b in spans)
 
 
+_NOTEBOOK_OUTPUT_CHARS = 800
+
+
+def strip_notebook(raw: str) -> str | None:
+    """`.ipynb` JSON → code, markdown and truncated text output. `None` if it
+    does not even parse as a notebook (then the caller falls back to the raw
+    JSON, same as any other unrecognised text).
+
+    A saved output cell is the single biggest source of wasted tokens in this
+    pipeline: one real "хорошее решение" from the LLM course repo ran ~116k
+    tokens raw and ~14k stripped, purely from base64 plot images and long
+    stdout dumps sitting in `outputs`. None of that is the student's
+    argument — it is the notebook remembering what a prior run printed.
+    """
+    try:
+        notebook = nbformat.reads(raw, as_version=4)
+    except Exception:
+        return None
+
+    parts: list[str] = []
+    for index, cell in enumerate(notebook.get("cells", [])):
+        cell_type = cell.get("cell_type")
+        if cell_type == "markdown":
+            parts.append(cell.get("source", ""))
+        elif cell_type == "code":
+            parts.append(f"```python\n{cell.get('source', '')}\n```")
+            for output in cell.get("outputs", []) or []:
+                rendered = _notebook_output_text(output, index)
+                if rendered:
+                    parts.append(rendered)
+        # 'raw' cells: export boilerplate, not the student's work — skipped.
+    return "\n\n".join(part for part in parts if part)
+
+
+def _notebook_output_text(output: dict[str, Any], cell_index: int) -> str | None:
+    kind = output.get("output_type")
+    if kind == "stream":
+        return _truncate_output("".join(output.get("text", "")))
+    if kind == "error":
+        return f"[error: {output.get('ename', '')}: {output.get('evalue', '')}]"
+    if kind in ("execute_result", "display_data"):
+        data = output.get("data", {}) or {}
+        if any(mime.startswith("image/") for mime in data):
+            # Плейсхолдер, не описание: угадывать содержание графика по имени
+            # переменной — то же самое придумывание, которого не должна себе
+            # позволять модель нигде в этом конвейере.
+            return f"[plot: cell {cell_index}]"
+        if "text/plain" in data:
+            return _truncate_output("".join(data["text/plain"]))
+    return None
+
+
+def _truncate_output(text: str) -> str:
+    text = text.strip()
+    if len(text) <= _NOTEBOOK_OUTPUT_CHARS:
+        return text
+    kept = text[:_NOTEBOOK_OUTPUT_CHARS]
+    return f"{kept}… [вывод обрезан, ещё {len(text) - _NOTEBOOK_OUTPUT_CHARS} симв.]"
+
+
 def from_artifact(artifact: Artifact, body: str | None = None) -> ArtifactText | None:
     """Собрать текст артефакта из тела, `excerpt` или диффа. `None` — показывать нечего."""
     changed = {
@@ -123,6 +185,15 @@ def from_artifact(artifact: Artifact, body: str | None = None) -> ArtifactText |
     origin = FETCHED if body is not None else EXCERPT
 
     if full is not None:
+        if artifact.lang == "jupyter":
+            stripped = strip_notebook(full)
+            if stripped is not None:
+                full = stripped
+                # Строки диффа считаны в координатах сырого JSON — после
+                # переформатирования они уже ни на что не указывают. Показать
+                # неверный диапазон хуже, чем не показать никакого: бейдж
+                # «изменено» на ноутбуках просто не появляется.
+                changed = set()
         lines = full.splitlines()
         return ArtifactText(
             path=artifact.path,

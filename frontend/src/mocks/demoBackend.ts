@@ -137,6 +137,7 @@ const BUNDLE = {
 } as unknown as SubmissionBundle
 
 export const DEMO_BACKEND_REVIEW: ReviewResponse = {
+  submission_id: 'demo-backend',
   bundle: BUNDLE,
   files: toArtifacts(FILES),
   draft: {
