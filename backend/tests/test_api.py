@@ -243,7 +243,9 @@ def test_a_failing_detector_does_not_lose_the_review_draft(make_client):
     assert response.status_code == 200
     body = response.json()
     assert body["draft"]["score"] > 0
-    assert body["detection"] is None
+    # Не `null`: пустой отчёт и отсутствие отчёта — разные события. `null` значит
+    # «не просили», а здесь просили и не вышло, и причина обязана быть названа.
+    assert any("детектор упал" in line for line in body["detection"]["limitations"])
 
 
 # --------------------------------------------------------------------------- #

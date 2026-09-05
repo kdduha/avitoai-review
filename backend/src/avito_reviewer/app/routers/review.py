@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from avito_reviewer.ai import AIService, Rubric
 from avito_reviewer.ai.compiler import DRAFT_NOTE, CompilerError, RubricCompiler
+from avito_reviewer.ai.content import ArtifactText
+from avito_reviewer.ai.detection import DetectionReport
+from avito_reviewer.ai.review import ReviewDraft
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
 from avito_reviewer.app.auth import RequireAdmin, RequireReviewer
 from avito_reviewer.app.deps import ingest_submission
