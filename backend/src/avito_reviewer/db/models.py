@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -36,19 +36,24 @@ class Base(DeclarativeBase):
 
 
 class Role(StrEnum):
-    """RBAC roles: three, not the four in the architecture doc (§2).
+    """RBAC roles: four, matching the words the organisers actually use.
 
-    The doc splits `coordinator` (runs the stream: reassign, rubrics, cost)
-    from `admin` (config, integrations). One project, one methodist, no
-    separate coordinator headcount yet — `admin` does both jobs until that
-    split earns its own account. `student` has no API surface today (per the
-    doc: "в MVP не имеет UI") — the value exists so a seeded account and a
-    future student-facing token are representable, not because any route
-    checks for it yet.
+    `methodist` owns what a work is judged against — rubrics, assignment
+    descriptions, deadlines. `reviewer` judges works against it. Splitting
+    them is not bureaucracy: a deadline change silently rescores every late
+    submission on the stream, and that is not a call the person grading one
+    work should be able to make mid-review.
+
+    Rights are a ladder — student < reviewer < methodist < admin — so a
+    methodist can also grade. That is deliberate and matches the courses: the
+    person who wrote the rubric is the one who reviews the disputed work. The
+    ladder is not a claim that the roles are interchangeable, only that each
+    step keeps what the one below it could do.
     """
 
     STUDENT = "student"
     REVIEWER = "reviewer"
+    METHODIST = "methodist"
     ADMIN = "admin"
 
 
@@ -102,6 +107,111 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(_TZ_DATETIME, server_default=func.now())
 
 
+class Course(Base):
+    """Направление обучения. Рубрики к нему не привязаны — они файлы.
+
+    Курс здесь только чтобы потоки было к чему подвесить и чтобы у статистики
+    была верхняя группировка. Всё содержательное про задание живёт в рубрике.
+    """
+
+    __tablename__ = "courses"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    """Человекочитаемый идентификатор: `go`, `system-design`. Совпадает с тем,
+    что ревьюеры перечисляют в `course_ids` своих карточек."""
+    title: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(_TZ_DATETIME, server_default=func.now())
+
+    streams: Mapped[list[Stream]] = relationship(
+        back_populates="course", cascade="all, delete-orphan", order_by="Stream.key"
+    )
+
+
+class Stream(Base):
+    """Поток — конкретный запуск курса, с которым и работают люди.
+
+    Ревьюеров назначают на поток, дедлайны ставят на поток, статистику
+    считают по потоку. Курс без потока не проводится.
+    """
+
+    __tablename__ = "streams"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    course_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("courses.id"), index=True)
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    """`go-a`, `qa-a`. Уникален в пределах курса, не глобально."""
+    title: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(_TZ_DATETIME, server_default=func.now())
+
+    course: Mapped[Course] = relationship(back_populates="streams")
+    assignments: Mapped[list[Assignment]] = relationship(
+        back_populates="stream", cascade="all, delete-orphan", order_by="Assignment.created_at"
+    )
+
+    __table_args__ = (UniqueConstraint("course_id", "key", name="uq_streams_course_key"),)
+
+
+class Assignment(Base):
+    """Рубрика, выданная потоку в срок. Именно её сдаёт студент.
+
+    Здесь проходит шов, ради которого сущность и заведена: **рубрика — это
+    требования, задание — это расписание**. Одна рубрика обслуживает
+    несколько потоков, а сроки у них разные, и класть дату в рубрику значило
+    бы либо копировать её на каждый поток, либо переписывать файл, по
+    которому уже проверены работы.
+
+    До этого дедлайн вбивал ревьюер руками в форме проверки — на каждой
+    работе заново. Одна опечатка в дате давала штраф за просрочку там, где
+    просрочки не было, и объяснить такой балл студенту было нечем.
+    """
+
+    __tablename__ = "assignments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    stream_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("streams.id"), index=True)
+    rubric_key: Mapped[str] = mapped_column(String(128), index=True)
+    """`Rubric.assignment_id` — ключ каталога рубрик, который лежит файлами."""
+    title: Mapped[str] = mapped_column(String(200), default="")
+    """Пусто — берём название из рубрики. Поле для случая, когда поток
+    называет то же задание иначе."""
+    description: Mapped[str] = mapped_column(default="")
+    """Что методист говорит студентам сверх рубрики: где брать данные, как
+    оформлять сдачу. В модель не уходит — это не критерий."""
+
+    opens_at: Mapped[datetime | None] = mapped_column(_TZ_DATETIME, nullable=True)
+    deadline_at: Mapped[datetime | None] = mapped_column(_TZ_DATETIME, nullable=True)
+    """`None` — срока нет, и просрочки не бывает. Это не «забыли заполнить»:
+    у восьми курсов из одиннадцати сроков в условиях нет вовсе, и выдумывать
+    их за методиста нельзя."""
+
+    created_at: Mapped[datetime] = mapped_column(_TZ_DATETIME, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        _TZ_DATETIME, server_default=func.now(), onupdate=func.now()
+    )
+
+    stream: Mapped[Stream] = relationship(back_populates="assignments")
+
+    __table_args__ = (
+        UniqueConstraint("stream_id", "rubric_key", name="uq_assignments_stream_rubric"),
+    )
+
+
+class Enrollment(Base):
+    """Студент в потоке. Пара, а не поле у пользователя: курсов у него много."""
+
+    __tablename__ = "enrollments"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=_uuid)
+    stream_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("streams.id"), index=True)
+    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(_TZ_DATETIME, server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint("stream_id", "student_id", name="uq_enrollments_stream_student"),
+    )
+
+
 class Submission(Base):
     """One run of the pipeline the reviewer can come back to.
 
@@ -122,6 +232,19 @@ class Submission(Base):
     status: Mapped[SubmissionStatus] = mapped_column(
         String(16), default=SubmissionStatus.DRAFT_READY
     )
+
+    assignment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("assignments.id"), nullable=True, index=True
+    )
+    """Какое задание сдано. `None` — разбор по ссылке вне потока: рубрику
+    назвали напрямую, срока нет. Такой путь остаётся: он нужен, чтобы
+    проверить работу до того, как заведён поток."""
+
+    student_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True, index=True
+    )
+    """Автор работы, если он завёден аккаунтом. Имени в бандле нет намеренно,
+    поэтому связь идёт по строке `users`, а не по тексту сдачи."""
 
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id"), nullable=True, index=True

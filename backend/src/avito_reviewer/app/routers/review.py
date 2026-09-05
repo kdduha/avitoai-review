@@ -4,8 +4,9 @@ import logging
 from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +32,7 @@ from avito_reviewer.app.schemas.review import (
     ReviewResponse,
     RubricSummary,
 )
-from avito_reviewer.db import Role, Submission, User, session_dependency
+from avito_reviewer.db import Assignment, Role, Submission, User, session_dependency
 from avito_reviewer.ingest import SubmissionBundle
 
 _log = logging.getLogger(__name__)
@@ -189,6 +190,16 @@ async def delete_rubric(assignment_id: str, request: Request, user: RequireAdmin
         raise HTTPException(status_code=404, detail=f"рубрика {assignment_id!r} не найдена") from exc
 
 
+async def _assignment(session: AsyncSession, assignment_id: UUID | None) -> Assignment | None:
+    """Задание, если его назвали. ``404`` — назвали несуществующее."""
+    if assignment_id is None:
+        return None
+    assignment = await session.get(Assignment, assignment_id)
+    if assignment is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="задание не найдено")
+    return assignment
+
+
 async def _resolve_reviewer(session: AsyncSession, user: User, reviewer_username: str | None) -> User:
     """Who a persisted submission is assigned to.
 
@@ -230,6 +241,15 @@ async def review(
     ``404`` — рубрика или `reviewer_username` не найдены.
     ``422`` — ссылка или источник неверны. ``502`` — источник сдачи не ответил.
     """
+    assignment = await _assignment(session, body.assignment_id)
+    if assignment is not None:
+        # Срок и рубрику диктует задание, а не тело запроса. Раньше дедлайн
+        # вводил ревьюер руками на каждой работе: опечатка в дате давала
+        # штраф за просрочку там, где просрочки не было, и объяснить такой
+        # балл студенту было нечем.
+        body = body.model_copy(
+            update={"rubric_id": assignment.rubric_key, "deadline_at": assignment.deadline_at}
+        )
     rubric = _rubric(request, body.rubric_id, body.rubric)
     reviewer = await _resolve_reviewer(session, user, body.reviewer_username)
     bundle = await ingest_submission(request, body)
@@ -261,6 +281,7 @@ async def review(
         source=bundle.source.value,
         rubric_key=rubric.assignment_id,
         rubric_snapshot=rubric.model_dump(mode="json"),
+        assignment_id=assignment.id if assignment else None,
         reviewer_id=reviewer.id,
         bundle=bundle.model_dump(mode="json"),
         files=[f.model_dump(mode="json") for f in files],
