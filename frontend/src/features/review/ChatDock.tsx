@@ -71,19 +71,37 @@ export function ChatDock({ live, submissionId, demoThread, onPatchApplied }: Pro
   async function send() {
     const message = text.trim()
     if (!message || !submissionId || sending) return
+
+    /* Реплика показывается сразу, но помечена как своя: если отправка не
+       удастся, её надо убрать — иначе на экране остаётся сообщение, которого
+       модель не видела, а следующий ответ встаёт под ним и выглядит ответом
+       на него. */
+    const localId = `local-${Date.now()}`
     setText('')
     setSending(true)
     setError(null)
     setLiveMessages((prev) => [
       ...prev,
-      { id: `local-${Date.now()}`, role: 'user', content: message, tool_name: null, proposed_patch: null, created_at: new Date().toISOString() },
+      {
+        id: localId,
+        role: 'user',
+        content: message,
+        tool_name: null,
+        proposed_patch: null,
+        created_at: new Date().toISOString(),
+      },
     ])
+
     try {
       await backend.sendChat(submissionId, message, (step) => {
         setLiveMessages((prev) => [...prev, step])
       })
       client.invalidateQueries({ queryKey: ['chat', submissionId] })
     } catch (err) {
+      setLiveMessages((prev) => prev.filter((item) => item.id !== localId))
+      // Текст возвращается в поле: он написан руками, и терять его из-за
+      // недоступного бэкенда — худшее, что можно сделать с этой формой.
+      setText(message)
       setError(err instanceof ApiError ? err.message : 'Модель не ответила')
     } finally {
       setSending(false)

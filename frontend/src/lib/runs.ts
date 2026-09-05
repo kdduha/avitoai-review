@@ -229,10 +229,18 @@ export async function setSpanVerdict(
 }
 
 /** Утверждение черновика. На демо-прогоне утверждать нечего — экран уже не
- *  даёт зайти в этот путь без `submissionId` (см. `ReviewPage`). */
+ *  даёт зайти в этот путь без `submissionId` (см. `ReviewPage`).
+ *
+ *  Новый статус берётся из ответа сервера и кладётся в кэш. Без этого сдача
+ *  оставалась в кэше вкладки со старым `draft_ready`, и `ReviewPage`, который
+ *  выводит «утверждено» из `workspace.status`, при повторном открытии из
+ *  очереди снова предлагал утвердить уже утверждённое. */
 export async function approveRun(id: string): Promise<Workspace | undefined> {
   const workspace = runs.get(id)
   if (!workspace?.submissionId) return workspace
-  await backend.approveReview(workspace.submissionId)
-  return workspace
+
+  const summary = await backend.approveReview(workspace.submissionId)
+  const next: Workspace = { ...workspace, status: summary.status }
+  runs.set(id, next)
+  return next
 }
