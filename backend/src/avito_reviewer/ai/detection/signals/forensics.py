@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import statistics
 from datetime import timedelta
+from itertools import pairwise
 
 from avito_reviewer.ingest import (
     Artifact,
@@ -194,7 +195,7 @@ def _minutes_between(first: Revision, last: Revision) -> float | None:
 
 def _gaps_minutes(revisions: list[Revision]) -> list[float]:
     gaps: list[float] = []
-    for previous, current in zip(revisions, revisions[1:]):
+    for previous, current in pairwise(revisions):
         try:
             delta = current.authored_at - previous.authored_at
         except (AttributeError, TypeError):

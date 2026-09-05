@@ -16,12 +16,11 @@ import json
 import time
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from .audit import AuditLog, AuditRecord
 from avito_reviewer.config import LLMConfig
 
+from .audit import AuditLog, AuditRecord
 from .providers import (
     FakeProvider,
     LLMError,

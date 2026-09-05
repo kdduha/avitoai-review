@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import local_bundle
+
 from avito_reviewer.ai import AIService, load_rubric
 from avito_reviewer.ai.content import ArtifactText, solution_texts
 from avito_reviewer.ai.llm import fake_gateway
@@ -74,7 +75,7 @@ def canned(texts: list[ArtifactText], rubric: Rubric, batch_size: int) -> list[s
     quotes: list[tuple[str, int, str]] = [
         (text.path, number, line.strip())
         for text in texts
-        for number, line in zip(text.line_numbers, text.lines)
+        for number, line in zip(text.line_numbers, text.lines, strict=False)
         if len(line.strip()) > 25 and not line.strip().startswith(("//", "#", "import"))
     ]
 

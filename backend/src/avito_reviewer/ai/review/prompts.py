@@ -89,7 +89,7 @@ def render_artifact(text: ArtifactText, *, max_lines: int = MAX_ARTIFACT_LINES) 
     У фрагмента номера идут с пропусками; разрыв показан явно, чтобы модель не
     приняла соседние строки за соседние в файле.
     """
-    shown = list(zip(text.line_numbers, text.lines))[:max_lines]
+    shown = list(zip(text.line_numbers, text.lines, strict=True))[:max_lines]
     width = max((len(str(number)) for number, _ in shown), default=1)
 
     body: list[str] = []

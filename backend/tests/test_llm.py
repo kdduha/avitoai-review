@@ -27,7 +27,6 @@ from avito_reviewer.ai.llm import (
 from avito_reviewer.ai.llm.structured import extract_json
 from avito_reviewer.config import AIConfig, LLMConfig
 
-
 # --------------------------------------------------------------------------- #
 # обезличивание
 # --------------------------------------------------------------------------- #

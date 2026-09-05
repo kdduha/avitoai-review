@@ -278,7 +278,7 @@ def _code_absent(check: FormatCheck, context: GateContext) -> CheckOutcome:
 
 def _find(text: ArtifactText, pattern: re.Pattern[str]) -> str | None:
     """Первое совпадение с номером строки в координатах полной версии файла."""
-    for number, line in zip(text.line_numbers, text.lines):
+    for number, line in zip(text.line_numbers, text.lines, strict=True):
         if pattern.search(line):
             return f"{text.path}:{number}"
     return None

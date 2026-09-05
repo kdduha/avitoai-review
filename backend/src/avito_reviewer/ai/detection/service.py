@@ -54,7 +54,6 @@ class DetectionService:
         # `tooling` и `noise` исключены и отсюда тоже: сгенерированный
         # Dockerfile ничего не говорит о самостоятельности студента.
         studied = solution_texts(texts)
-        options = self.options
 
         if self.gateway is None:
             return self._run(bundle, studied, spend=None)

@@ -176,4 +176,4 @@ def _function_lengths(text: str) -> list[int]:
     if len(starts) < 2:
         return []
     total = len(text.splitlines())
-    return [b - a for a, b in zip(starts, starts[1:] + [total])]
+    return [b - a for a, b in zip(starts, [*starts[1:], total], strict=True)]

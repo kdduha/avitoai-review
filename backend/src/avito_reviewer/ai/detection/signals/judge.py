@@ -24,8 +24,6 @@ from collections.abc import Sequence
 from pydantic import BaseModel, Field
 
 from avito_reviewer.ai.content import ArtifactText
-from avito_reviewer.ingest import ArtifactRole
-from avito_reviewer.ingest.classify import classify
 from avito_reviewer.ai.llm import (
     DataClass,
     Identity,
@@ -36,6 +34,8 @@ from avito_reviewer.ai.llm import (
     TaskKind,
     complete_json,
 )
+from avito_reviewer.ingest import ArtifactRole
+from avito_reviewer.ingest.classify import classify
 
 from ..schema import SignalKind, SignalResult, SignalStatus, Span
 

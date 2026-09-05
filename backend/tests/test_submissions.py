@@ -71,7 +71,7 @@ def make_client(tmp_path):
         app = create_app()
         client = TestClient(app)
         client.__enter__()
-        gateway, provider = fake_gateway(responses if responses is not None else [VERDICTS])
+        gateway, _provider = fake_gateway(responses if responses is not None else [VERDICTS])
         app.state.ingest = StubIngest()
         app.state.ai = AIService(AIConfig(), gateway=gateway, resolver=app.state.ingest)
         as_role(client, role)
