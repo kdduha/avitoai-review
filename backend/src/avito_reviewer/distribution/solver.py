@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 
 from .hungarian import INFEASIBLE, solve
 from .schema import (
@@ -62,9 +62,11 @@ def distribute(
     author_salt: str = "",
 ) -> DistributionPlan:
     """Разложить работы по ревьюерам. Один и тот же вход даёт один и тот же план."""
+    now = _aware(now)
     items = sorted(items, key=lambda i: i.item_id)
-    reviewers = sorted(reviewers, key=lambda r: r.id)
-    load = dict(committed_minutes or {})
+    reviewers = list({r.id: r for r in reviewers}.values())
+    reviewers.sort(key=lambda r: r.id)
+    load = {key: max(value, 0) for key, value in (committed_minutes or {}).items()}
 
     enabled, disabled, limitations = enabled_terms(items, now=now)
     ctx = ScoreContext(
@@ -113,7 +115,7 @@ def distribute(
 
     plan.allocations.sort(key=lambda a: a.item_id)
     plan.unassigned.sort(key=lambda u: u.item_id)
-    plan.loads = [_load_of(ledgers[r.id]) for r in reviewers]
+    plan.loads = [_load_of(ledgers[key]) for key in sorted(ledgers)]
     plan.limitations += _tight_note(plan.loads)
     log.info(
         "distribute: %d работ на %d ревьюеров — распределено %d за %d раундов, без ревьюера %d",
@@ -127,6 +129,18 @@ def distribute(
 
 
 # --------------------------------------------------------------------------- #
+
+def _aware(moment: datetime | None) -> datetime | None:
+    """Наивное время считаем UTC.
+
+    Сравнение наивной даты с осведомлённой роняет запрос целиком, а ошибиться на
+    смещение здесь дешевле, чем отдать пятисотку на штатном вводе: то же правило
+    и по той же причине уже действует для дедлайнов рубрики.
+    """
+    if moment is None or moment.tzinfo is not None:
+        return moment
+    return moment.replace(tzinfo=UTC)
+
 
 def _round(
     pending: list[DistributionItem],
@@ -164,9 +178,11 @@ def _round(
             row.extend([_IDLE] * padding)
 
     taken = 0
+    chosen: set[int] = set()
     for index, column in enumerate(solve(cost)):
         if column < 0 or column >= len(pending) or cost[index][column] >= _IDLE:
             continue
+        chosen.add(column)
         reviewer, item = feasible[index], pending[column]
         plan.allocations.append(
             Allocation(
@@ -184,13 +200,14 @@ def _round(
         )
         taken += 1
 
-    assigned = {a.item_id for a in plan.allocations}
     for allocation in plan.allocations:
         if allocation.round == number:
             ledger = ledgers[allocation.reviewer_id]
             ledger.minutes_assigned += allocation.est_review_minutes
             ledger.items += 1
-    return [item for item in pending if item.item_id not in assigned], taken
+    # Из очереди уходят выбранные позиции, а не всё с тем же item_id: ключ даёт
+    # вызывающий, и две работы под одним ключом — его право, а не наша ошибка.
+    return [item for column, item in enumerate(pending) if column not in chosen], taken
 
 
 def _apply_pins(
@@ -263,13 +280,13 @@ def _refuse(
     return Unassigned(
         item_id=item.item_id,
         est_review_minutes=item.minutes,
-        reason=_dominant(refusals),
-        detail=_detail(item, refusals),
+        reason=_dominant(refusals, pool=len(ledgers)),
+        detail=_detail(item, refusals, pool=len(ledgers)),
         blocked_by=sorted(refusals, key=lambda b: b.reviewer_id),
     )
 
 
-def _dominant(refusals: Sequence[Blocked]) -> UnassignedReason:
+def _dominant(refusals: Sequence[Blocked], *, pool: int) -> UnassignedReason:
     """Причина, которую координатор может починить.
 
     Нехватка ёмкости чинится: поднять капасити, снять чужую работу. Конфликт не
@@ -277,7 +294,9 @@ def _dominant(refusals: Sequence[Blocked]) -> UnassignedReason:
     ёмкость, и координатор увидит действие, а не приговор.
     """
     if not refusals:
-        return UnassignedReason.NO_REVIEWERS
+        # Пул не пуст, а работу никто не взял: ёмкость разобрали раньше в этом
+        # же прогоне. Сказать «ревьюеров нет» было бы неправдой.
+        return UnassignedReason.NO_REVIEWERS if not pool else UnassignedReason.CAPACITY
     reasons = {r.reason for r in refusals}
     if UnassignedReason.CAPACITY in reasons:
         return UnassignedReason.CAPACITY
@@ -288,9 +307,9 @@ def _dominant(refusals: Sequence[Blocked]) -> UnassignedReason:
     return UnassignedReason.NOT_ELIGIBLE
 
 
-def _detail(item: DistributionItem, refusals: Sequence[Blocked]) -> str:
+def _detail(item: DistributionItem, refusals: Sequence[Blocked], *, pool: int) -> str:
     if not refusals:
-        return "ревьюеров в пуле нет"
+        return "ревьюеров в пуле нет" if not pool else f"{item.minutes} мин никуда не поместились"
     counts: dict[UnassignedReason, int] = {}
     for refusal in refusals:
         counts[refusal.reason] = counts.get(refusal.reason, 0) + 1

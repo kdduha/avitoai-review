@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
 from avito_reviewer.ingest.identity import author_hash
 
@@ -90,7 +90,7 @@ class ScoreContext:
 
     @property
     def denominator(self) -> float:
-        total = sum(abs(self.weights.of(term)) for term in self.enabled)
+        total = sum(abs(self.weights.of(term)) for term in sorted(self.enabled))
         return total or 1.0
 
 
@@ -337,7 +337,7 @@ def _tov(
 def _load(
     reviewer: Reviewer, item: DistributionItem, ledger: Ledger, ctx: ScoreContext
 ) -> tuple[float, str]:
-    after = min(ledger.ratio(item.minutes), 1.0)
+    after = min(max(ledger.ratio(item.minutes), 0.0), 1.0)
     return after, f"после этой работы {after:.0%} недельной ёмкости"
 
 
@@ -346,7 +346,8 @@ def _deadline(
 ) -> tuple[float, str]:
     if item.due_at is None or ctx.now is None:
         return 0.0, "срок не задан"
-    left = (item.due_at - ctx.now).total_seconds() / 60
+    due = item.due_at if item.due_at.tzinfo else item.due_at.replace(tzinfo=UTC)
+    left = (due - ctx.now).total_seconds() / 60
     backlog = ledger.minutes_assigned + item.minutes
     if left <= 0:
         return 1.0, "срок уже прошёл"

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import random
 from datetime import timedelta
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from pydantic import ValidationError
 
 from avito_reviewer.distribution import (
     DistributionItem,
+    Weights,
     ReviewerStore,
     TermName,
     Tov,
@@ -475,6 +477,128 @@ def test_a_preferred_tone_is_honoured_when_asked():
     plan = distribute([item(preferred_tov=Tov.SUPPORTIVE)], [strict, warm])
 
     assert plan.allocations[0].reviewer_id == "c-warm"
+
+
+# --------------------------------------------------------------------------- #
+# устойчивость к тому, что приходит снаружи
+# --------------------------------------------------------------------------- #
+
+def test_two_works_under_one_key_are_two_works():
+    """`item_id` даёт вызывающий: слить два пакета или повторить запрос — его право.
+
+    Раньше очередь чистилась по ключу, и одно назначение выносило из неё обе
+    работы — вторая пропадала бесследно, ровно тем отказом, против которого
+    написан весь отчёт.
+    """
+    works = [item("A", est_review_minutes=30), item("A", est_review_minutes=30)]
+
+    plan = distribute(works, [reviewer("c-one", capacity_minutes=30)])
+
+    assert len(plan.allocations) + len(plan.unassigned) == plan.items == 2
+    assert len(plan.allocations) == 1
+    assert plan.unassigned[0].reason is UnassignedReason.CAPACITY
+
+
+def test_a_naive_deadline_does_not_take_the_request_down():
+    """Тело запроса приходит и без смещения; сравнение с осведомлённым временем роняло разбор."""
+    naive = item("s1", due_at=NOW.replace(tzinfo=None) + timedelta(days=1))
+
+    plan = distribute([naive], [reviewer()], now=NOW)
+
+    assert len(plan.allocations) == 1
+
+
+def test_a_naive_now_does_not_take_the_request_down():
+    plan = distribute([item("s1", due_at=NOW + timedelta(days=1))], [reviewer()],
+                      now=NOW.replace(tzinfo=None))
+
+    assert len(plan.allocations) == 1
+
+
+def test_negative_load_cannot_buy_extra_capacity():
+    """Отрицательная занятость из тела запроса пробивала жёсткое ограничение."""
+    works = [item(f"s{n}", est_review_minutes=120) for n in range(8)]
+
+    plan = distribute(works, [reviewer("c-one", capacity_minutes=600)],
+                      committed_minutes={"c-one": -1000})
+    load = plan.loads[0]
+
+    assert load.minutes_assigned <= load.capacity_minutes
+
+
+def test_a_reviewer_named_twice_is_one_reviewer():
+    """Иначе клиент, суммирующий loads, видит вдвое больше работы, чем есть."""
+    twice = [reviewer("c-one"), reviewer("c-one")]
+
+    plan = distribute([item("s1", est_review_minutes=40)], twice)
+
+    assert plan.reviewers == 1
+    assert [load.reviewer_id for load in plan.loads] == ["c-one"]
+    assert sum(load.minutes_assigned for load in plan.loads) == 40
+
+
+def test_an_exhausted_pool_does_not_claim_to_be_empty():
+    """«Ревьюеров нет» при непустом пуле отправило бы координатора искать не то."""
+    works = [item(f"s{n}", est_review_minutes=50) for n in range(3)]
+
+    plan = distribute(works, [reviewer("c-one", capacity_minutes=60)])
+
+    assert plan.unassigned
+    assert plan.unassigned[0].reason is UnassignedReason.CAPACITY
+
+
+def test_the_invariant_holds_on_pools_nobody_thought_about():
+    """Одиночные случаи ловят известное. Этот — неизвестное.
+
+    Проверяются разом три обещания: работа не пропадает, ёмкость не пробивается,
+    соавтор работу не получает.
+    """
+    rng = random.Random(20260905)
+    for _ in range(300):
+        pool = [
+            reviewer(
+                f"c{n}",
+                name=f"Р{n}",
+                capacity_minutes=rng.choice([0, 30, 120, 600]),
+                active=rng.random() > 0.15,
+                github_handle=f"h{n}",
+                max_items=rng.choice([None, 1, 3]),
+            )
+            for n in range(rng.randint(1, 5))
+        ]
+        works = [
+            item(
+                f"s{n}",
+                est_review_minutes=rng.choice([15, 40, 90, 200]),
+                author_hashes=[author_hash(f"h{rng.randint(0, 4)}")] if rng.random() > 0.7 else [],
+                due_at=NOW + timedelta(days=1) if rng.random() > 0.5 else None,
+            )
+            for n in range(rng.randint(0, 8))
+        ]
+        committed = {r.id: rng.choice([0, 100, 400]) for r in pool}
+
+        plan = distribute(works, pool, committed_minutes=committed, now=NOW)
+        by_id = {r.id: r for r in pool}
+
+        assert len(plan.allocations) + len(plan.unassigned) == len(works)
+        for load in plan.loads:
+            # Прийти перегруженным ревьюер может — это состояние платформы.
+            # Нельзя другое: чтобы движок добавил ему работы сверх ёмкости.
+            if load.items:
+                assert load.committed_before + load.minutes_assigned <= load.capacity_minutes
+        for allocation in plan.allocations:
+            got = by_id[allocation.reviewer_id]
+            assert got.active
+            source = next(w for w in works if w.item_id == allocation.item_id)
+            assert author_hash(got.github_handle) not in source.author_hashes
+
+
+def test_a_weight_that_is_not_a_number_is_refused():
+    """NaN доезжал до round() и превращался в пятисотку."""
+    with pytest.raises(ValidationError):
+        Weights(load=float("nan"))
+    with pytest.raises(ValidationError):
+        Weights(load=float("inf"))
 
 
 # --------------------------------------------------------------------------- #

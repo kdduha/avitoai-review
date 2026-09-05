@@ -179,14 +179,16 @@ class Weights(BaseModel):
     встанет на своё место, знаменатель перенормируется, формула не изменится.
     """
 
-    topics: float = 1.0
-    skills: float = 0.6
-    continuity: float = 0.4
-    tov: float = 0.3
-    load: float = -0.8
-    deadline: float = -0.5
-    fairness: float = 0.2
-    onboarding: float = -0.7
+    model_config = ConfigDict(extra="forbid")
+
+    topics: float = Field(default=1.0, allow_inf_nan=False)
+    skills: float = Field(default=0.6, allow_inf_nan=False)
+    continuity: float = Field(default=0.4, allow_inf_nan=False)
+    tov: float = Field(default=0.3, allow_inf_nan=False)
+    load: float = Field(default=-0.8, allow_inf_nan=False)
+    deadline: float = Field(default=-0.5, allow_inf_nan=False)
+    fairness: float = Field(default=0.2, allow_inf_nan=False)
+    onboarding: float = Field(default=-0.7, allow_inf_nan=False)
 
     def of(self, term: TermName) -> float:
         return float(getattr(self, _WEIGHT_FIELD[term]))

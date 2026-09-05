@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, NonNegativeInt
 
 from avito_reviewer.app.schemas.review import SubmissionRequest
 from avito_reviewer.distribution import (
@@ -48,7 +48,7 @@ class DistributeRequest(BaseModel):
     reviewer_ids: list[str] = Field(
         default_factory=list, description="Подмножество каталога. Пусто — весь каталог"
     )
-    committed_minutes: dict[str, int] = Field(
+    committed_minutes: dict[str, NonNegativeInt] = Field(
         default_factory=dict,
         description=(
             "Занятые минуты по ревьюерам на момент запроса. Только отсюда: "

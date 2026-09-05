@@ -439,6 +439,29 @@ def test_a_work_without_a_duration_is_refused_at_the_edge(make_client):
     assert response.status_code == 422
 
 
+def test_a_contradictory_pool_is_refused_rather_than_half_ignored(make_client):
+    """Раньше reviewer_ids молча пропадал, включая заведомо неверный."""
+    client, _ = make_client(responses=[])
+    response = client.post(
+        "/distribute",
+        json={"items": [WORK], "reviewers": [], "reviewer_ids": ["нет-такого"]},
+    )
+    assert response.status_code == 422
+
+
+def test_an_empty_inline_pool_is_refused_like_an_empty_catalogue(make_client):
+    client, _ = make_client(responses=[])
+    assert client.post("/distribute", json={"items": [WORK], "reviewers": []}).status_code == 422
+
+
+def test_negative_load_is_refused_at_the_edge(make_client):
+    client, _ = make_client(responses=[])
+    response = client.post(
+        "/distribute", json={"items": [WORK], "committed_minutes": {"c-kruglov": -1000}}
+    )
+    assert response.status_code == 422
+
+
 def test_init_lists_the_reviewer_catalogue(make_client):
     client, _ = make_client()
     assert "c-kruglov" in client.get("/init").json()["reviewers"]

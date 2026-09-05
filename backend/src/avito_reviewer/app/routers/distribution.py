@@ -99,7 +99,8 @@ async def distribute_submissions(
     смог взять, приходят в `unassigned` с поимённым списком отказавших.
 
     ``404`` — распределять не между кем: пул не передан, а каталог пуст.
-    ``422`` — в `reviewer_ids` идентификатор, которого в каталоге нет.
+    ``422`` — пустой или противоречивый пул, либо `reviewer_ids` с идентификатором,
+    которого в каталоге нет.
     """
     pool = _pool(request, body)
     ingest: IngestService = request.app.state.ingest
@@ -126,7 +127,14 @@ async def distribute_submissions(
 
 
 def _pool(request: Request, body: DistributeRequest) -> list[Reviewer]:
+    if body.reviewers is not None and body.reviewer_ids:
+        raise HTTPException(
+            status_code=422,
+            detail="укажите либо reviewers, либо reviewer_ids: вместе они противоречат друг другу",
+        )
     if body.reviewers is not None:
+        if not body.reviewers:
+            raise HTTPException(status_code=422, detail="пул ревьюеров пуст")
         return body.reviewers
 
     store: ReviewerStore = request.app.state.reviewers
