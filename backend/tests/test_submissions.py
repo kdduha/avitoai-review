@@ -71,10 +71,14 @@ def make_client(tmp_path):
         app = create_app()
         client = TestClient(app)
         client.__enter__()
-        gateway, _provider = fake_gateway(responses if responses is not None else [VERDICTS])
+        gateway, provider = fake_gateway(responses if responses is not None else [VERDICTS])
         app.state.ingest = StubIngest()
         app.state.ai = AIService(AIConfig(), gateway=gateway, resolver=app.state.ingest)
         as_role(client, role)
+        # Провайдер прицеплен к клиенту, а не возвращён вторым элементом:
+        # так у полусотни существующих вызовов не меняется форма, а тесты про
+        # то, что именно уехало в модель, до промпта всё-таки дотягиваются.
+        client.provider = provider
         return client
 
     return build
@@ -421,6 +425,74 @@ def test_chat_propose_patch_carries_the_proposal_but_does_not_apply_it(make_clie
     )
     assert applied.status_code == 200
     assert applied.json()["score"] < before
+
+
+def test_the_student_handle_never_reaches_the_model_from_the_chat(make_client):
+    """`/review` вычищает логин прицельно — чат обязан делать то же.
+
+    Раньше роутер звал `run_chat` без `identities`, и логин оставался на общих
+    детекторах ПДн: одна дверь заперта, вторая открыта, при том что за обеими
+    один и тот же текст работы и одна и та же внешняя модель.
+    """
+    reply = json.dumps({"action": "reply", "reply": "смотрю"})
+    client = make_client(responses=[VERDICTS, VERDICTS, reply])
+    submission_id = _review(client)["submission_id"]
+
+    client.post(f"/submissions/{submission_id}/chat", json={"message": "что сдал octocat?"})
+
+    assert "octocat" not in client.provider.last_prompt
+    assert "[STUDENT_HANDLE]" in client.provider.last_prompt
+
+
+def test_the_reviewers_message_survives_a_turn_that_blew_up(make_client, monkeypatch):
+    """Вопрос, оставшийся без ответа, — честно. Исчезнувший вопрос — потеря.
+
+    Реплика писалась после `run_chat`, поэтому неожиданный сбой уносил с собой
+    набранный руками текст: клиент показывал ошибку, а перезагрузка
+    транскрипта не находила даже вопроса.
+    """
+    client = make_client(responses=[VERDICTS, VERDICTS])
+    submission_id = _review(client)["submission_id"]
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("модель отвалилась посреди хода")
+
+    monkeypatch.setattr("avito_reviewer.app.routers.submissions.run_chat", explode)
+
+    with pytest.raises(RuntimeError):
+        client.post(f"/submissions/{submission_id}/chat", json={"message": "почему c2 не максимум?"})
+
+    history = client.get(f"/submissions/{submission_id}/chat").json()
+    assert [m["content"] for m in history] == ["почему c2 не максимум?"]
+
+
+def test_the_transcript_keeps_the_order_of_two_turns(make_client):
+    """Порядок держится на `seq`, а не на `created_at`.
+
+    Все строки одного хода пишутся в одной транзакции, и `now()` в Postgres
+    выдаёт им одинаковую метку; в SQLite гранулярность секундная. Сортировка
+    по времени вырождается, и «прочитала файл, потом ответила» становится
+    «ответила, потом прочитала».
+    """
+    tool = json.dumps(
+        {"action": "tool", "tool": "get_file", "args": {"path": "cmd/main.go"}, "reply": "смотрю"}
+    )
+    client = make_client(
+        responses=[
+            VERDICTS, VERDICTS,
+            tool, json.dumps({"action": "reply", "reply": "первый ответ"}),
+            json.dumps({"action": "reply", "reply": "второй ответ"}),
+        ]
+    )
+    submission_id = _review(client)["submission_id"]
+
+    client.post(f"/submissions/{submission_id}/chat", json={"message": "первый вопрос"})
+    client.post(f"/submissions/{submission_id}/chat", json={"message": "второй вопрос"})
+
+    history = client.get(f"/submissions/{submission_id}/chat").json()
+    assert [m["role"] for m in history] == ["user", "tool", "assistant", "user", "assistant"]
+    assert history[0]["content"] == "первый вопрос"
+    assert history[-1]["content"] == "второй ответ"
 
 
 def test_a_reviewer_cannot_open_chat_after_the_submission_is_reassigned_away(make_client):
