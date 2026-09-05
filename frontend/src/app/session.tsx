@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { useQuery } from '@tanstack/react-query'
 import type { Role } from '@/lib/types'
 import { api } from '@/lib/api'
-import { ApiError, backend, setAuthToken } from '@/lib/backend'
+import { backend, setAuthToken } from '@/lib/backend'
 
 interface Session {
   role: Role
@@ -66,9 +66,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
    *  сеяным аккаунтом и предложить войти вручную снова через CredentialsModal. */
   async function loginAs(nextUsername: string, password: string): Promise<void> {
     const token = await backend.login({ username: nextUsername, password })
-    if (token.role === 'student') {
-      throw new ApiError(403, 'у роли student пока нет экрана в этом интерфейсе')
-    }
     setAuthToken(token.access_token)
     setUsername(nextUsername)
     setName(token.display_name)

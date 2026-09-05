@@ -3,6 +3,7 @@ from avito_reviewer.app.routers.base import router as base_router
 from avito_reviewer.app.routers.distribution import router as distribution_router
 from avito_reviewer.app.routers.ingest import router as ingest_router
 from avito_reviewer.app.routers.review import router as review_router
+from avito_reviewer.app.routers.student import router as student_router
 from avito_reviewer.app.routers.submissions import router as submissions_router
 from avito_reviewer.app.routers.teaching import router as teaching_router
 from avito_reviewer.app.routers.users import router as users_router
@@ -13,6 +14,7 @@ __all__ = [
     "distribution_router",
     "ingest_router",
     "review_router",
+    "student_router",
     "submissions_router",
     "teaching_router",
     "users_router",
