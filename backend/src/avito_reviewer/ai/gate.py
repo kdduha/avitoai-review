@@ -31,12 +31,13 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from avito_reviewer.ingest import SubmissionBundle
+from avito_reviewer.ingest import Revision, SubmissionBundle
 
 from .content import ArtifactText
 from .rubric import FormatCheck, Rubric
@@ -72,6 +73,19 @@ class CheckOutcome(BaseModel):
         return self.level == "blocking" and not self.passed and not self.inconclusive
 
 
+@dataclass(frozen=True, slots=True)
+class GateContext:
+    """Сдача, по которой отвечают проверки.
+
+    Тексты и карта путей собраны заранее — их читает почти каждая проверка;
+    бандл нужен тем, чей ответ лежит не в файлах, а в самой сдаче.
+    """
+
+    bundle: SubmissionBundle
+    texts: list[ArtifactText]
+    paths: set[str]
+
+
 class GateReport(BaseModel):
     status: GateStatus = GateStatus.PASSED
     outcomes: list[CheckOutcome] = Field(default_factory=list)
@@ -99,9 +113,9 @@ def run(
     if not rubric.format_gate:
         return report
 
-    paths = _known_paths(bundle, texts)
+    context = GateContext(bundle=bundle, texts=texts, paths=_known_paths(bundle, texts))
     for check in rubric.format_gate:
-        outcome = _run_check(check, texts, paths)
+        outcome = _run_check(check, context)
         if outcome is not None:
             report.outcomes.append(outcome)
 
@@ -143,14 +157,12 @@ def _status(outcomes: list[CheckOutcome]) -> GateStatus:
     return GateStatus.PASSED
 
 
-def _run_check(
-    check: FormatCheck, texts: list[ArtifactText], paths: set[str]
-) -> CheckOutcome | None:
+def _run_check(check: FormatCheck, context: GateContext) -> CheckOutcome | None:
     handler = _HANDLERS.get(check.check)
     if handler is None:
         # Молча пропасть проверка не имеет права: рубрика несёт требования
         # условия, и часть из них исполняется только другим каналом сдачи —
-        # шрифт и история ревизий живут в Google Docs, а не в git. Пропавшая
+        # шрифт и число страниц живут в Google Docs, а не в git. Пропавшая
         # блокирующая проверка означала бы работу, прошедшую гейт без проверки.
         log.warning("gate: проверка %r не реализована — уходит человеку", check.check)
         return CheckOutcome(
@@ -161,16 +173,15 @@ def _run_check(
             inconclusive=True,
             detail="проверка не реализована для этого источника сдачи — проверьте вручную",
         )
-    return handler(check, texts, paths)
+    return handler(check, context)
 
 
 def _label(check: FormatCheck, fallback: str) -> str:
     return str(check.params.get("label") or check.note or fallback)
 
 
-def _required_paths(
-    check: FormatCheck, texts: list[ArtifactText], paths: set[str]
-) -> CheckOutcome:
+def _required_paths(check: FormatCheck, context: GateContext) -> CheckOutcome:
+    paths = context.paths
     wanted = [str(p) for p in check.params.get("paths", [])]
     missing = [p for p in wanted if not _path_present(p, paths)]
     return CheckOutcome(
@@ -187,9 +198,8 @@ def _required_paths(
     )
 
 
-def _forbidden_paths(
-    check: FormatCheck, texts: list[ArtifactText], paths: set[str]
-) -> CheckOutcome:
+def _forbidden_paths(check: FormatCheck, context: GateContext) -> CheckOutcome:
+    paths = context.paths
     wanted = [str(p) for p in check.params.get("paths", [])]
     pattern = check.params.get("pattern")
     found = [p for p in wanted if _path_present(p, paths)]
@@ -220,12 +230,10 @@ def _candidates(check: FormatCheck, texts: list[ArtifactText]) -> list[ArtifactT
     return [text for text in texts if text.path.endswith(suffixes)]
 
 
-def _code_contains(
-    check: FormatCheck, texts: list[ArtifactText], paths: set[str]
-) -> CheckOutcome:
+def _code_contains(check: FormatCheck, context: GateContext) -> CheckOutcome:
     pattern = re.compile(str(check.params.get("pattern", "")))
     expected = str(check.params.get("expected") or check.params.get("pattern", ""))
-    candidates = _candidates(check, texts)
+    candidates = _candidates(check, context.texts)
 
     hits = [where for text in candidates if (where := _find(text, pattern))]
     if hits:
@@ -254,12 +262,10 @@ def _code_contains(
     )
 
 
-def _code_absent(
-    check: FormatCheck, texts: list[ArtifactText], paths: set[str]
-) -> CheckOutcome:
+def _code_absent(check: FormatCheck, context: GateContext) -> CheckOutcome:
     pattern = re.compile(str(check.params.get("pattern", "")))
     label = _label(check, "Запрещённый фрагмент")
-    hits = [where for text in _candidates(check, texts) if (where := _find(text, pattern))]
+    hits = [where for text in _candidates(check, context.texts) if (where := _find(text, pattern))]
     return CheckOutcome(
         check=check.check,
         level=check.level,
@@ -278,11 +284,9 @@ def _find(text: ArtifactText, pattern: re.Pattern[str]) -> str | None:
     return None
 
 
-def _token_budget(
-    check: FormatCheck, texts: list[ArtifactText], paths: set[str]
-) -> CheckOutcome:
+def _token_budget(check: FormatCheck, context: GateContext) -> CheckOutcome:
     limit = int(check.params.get("max_tokens", 0) or 0)
-    estimate = sum(len(text.text) for text in texts) // CHARS_PER_TOKEN
+    estimate = sum(len(text.text) for text in context.texts) // CHARS_PER_TOKEN
     return CheckOutcome(
         check=check.check,
         level=check.level,
@@ -292,12 +296,52 @@ def _token_budget(
     )
 
 
+def _revision_history(check: FormatCheck, context: GateContext) -> CheckOutcome:
+    """История изменений сдачи. В git-канале это коммиты pull request'а.
+
+    Требование пришло из условия, написанного про Google Docs («оформите работу
+    с доступом на редактирование: должна быть видна история изменений, иначе
+    работа принята не будет»), и в git оно исполнимо: коммиты лежат в бандле.
+    Отвечать на него здесь — сознательная переинтерпретация требования во
+    втором канале, а не закрытие пробела.
+
+    Пустая история — не «истории нет», а «источник её не отдал»: pull request
+    без коммитов не бывает. Поэтому такой ответ уходит человеку и не блокирует
+    сдачу. Судить о том, что история из одного коммита выглядит подозрительно,
+    — работа форензики детектора, а не гейта.
+    """
+    revisions = context.bundle.revisions
+    label = _label(check, "Видна история изменений")
+    if not revisions:
+        return CheckOutcome(
+            check=check.check,
+            level=check.level,
+            label=label,
+            passed=False,
+            inconclusive=True,
+            detail="история сдачи не пришла от источника — проверьте вручную",
+        )
+    return CheckOutcome(
+        check=check.check,
+        level=check.level,
+        label=label,
+        passed=True,
+        detail=f"коммитов: {len(revisions)}, {_span(revisions)}",
+    )
+
+
+def _span(revisions: list[Revision]) -> str:
+    days = sorted(revision.authored_at.date().isoformat() for revision in revisions)
+    return days[0] if days[0] == days[-1] else f"{days[0]} — {days[-1]}"
+
+
 _HANDLERS = {
     "required_paths": _required_paths,
     "forbidden_paths": _forbidden_paths,
     "code_contains": _code_contains,
     "code_absent": _code_absent,
     "token_budget": _token_budget,
+    "revision_history_visible": _revision_history,
 }
 
 
