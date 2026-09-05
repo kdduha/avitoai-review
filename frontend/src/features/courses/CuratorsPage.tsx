@@ -33,7 +33,7 @@ export function CuratorsPage() {
 
   return (
     <div className="mx-auto max-w-[900px] px-6 py-6">
-      <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Кураторы</h1>
+      <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Ревьюеры</h1>
       <p className="mt-1 max-w-[68ch] text-[13.5px] text-muted">
         Кто на каких потоках проверяет работы. Ёмкость считается в минутах разбора, а не в штуках:
         работа на Go и ноутбук по ML — это не «две работы».
@@ -101,7 +101,7 @@ export function CuratorsPage() {
       <Modal
         open={Boolean(current)}
         title={current ? `Потоки: ${current.name}` : ''}
-        description="Куратор увидит только работы студентов выбранных потоков."
+        description="Ревьюер увидит только работы студентов выбранных потоков."
         onClose={() => setEditing(null)}
         footer={
           <>

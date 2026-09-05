@@ -1,6 +1,6 @@
 # Frontend
 
-Рабочее место куратора: React + Vite + TypeScript, TanStack Query, Tailwind v4,
+Рабочее место ревьюера: React + Vite + TypeScript, TanStack Query, Tailwind v4,
 Recharts.
 
 ```bash
@@ -23,7 +23,7 @@ cd ../backend && uv run uvicorn avito_reviewer.app.main:app --port 8000
 
 Бэкенд требует Bearer-токен почти везде (см. `docs/backend.md`) — фронт логинится
 сам при старте и при смене роли (`app/session.tsx`), в один из трёх сеяных
-аккаунтов: куратор → `reviewer`, руководитель → `admin` (бэкенд не заводит
+аккаунтов: ревьюер → `reviewer`, руководитель → `admin` (бэкенд не заводит
 отдельной роли координатора — см. `docs/backend.md`). Пароль —
 `VITE_BACKEND_PASSWORD` (по умолчанию `avito2026`, тот же, что `AUTH_SEED_PASSWORD`
 на бэкенде). Токен живёт в памяти вкладки (`lib/backend.ts`), не в `localStorage`.
@@ -49,7 +49,7 @@ src/app/session.tsx    роль → авторизация: логин в сея
 src/mocks/             каталог программ и записанные прогоны
 src/features/review/   Review Workspace и запуск проверки
 src/features/rubrics/  каталог рубрик + CompileRubricPanel (условие → черновик → подтверждение)
-src/features/courses/  ведомость, дашборд, кураторы
+src/features/courses/  ведомость, дашборд, ревьюеры
 src/styles/index.css   токены визуального языка
 e2e/                    Playwright: обход маршрутов, правка балла, вход, компилятор рубрик
 ```

@@ -80,7 +80,7 @@ export function Sidebar() {
       {role === 'head' ? (
         <NavLink to="/curators" className={linkClass}>
           <Users size={15} strokeWidth={1.7} className="text-faint" />
-          Кураторы
+          Ревьюеры
         </NavLink>
       ) : null}
     </nav>

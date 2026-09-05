@@ -37,7 +37,7 @@ function delay<T>(value: T, ms = LATENCY): Promise<T> {
 const state = { curators: CURATORS.map((curator) => ({ ...curator })) }
 
 export const api = {
-  /** Текущий пользователь. Аутентификации ещё нет, поэтому это первый куратор
+  /** Текущий пользователь. Аутентификации ещё нет, поэтому это первый ревьюер
    *  из каталога; когда появится JWT, поменяется только тело функции. */
   me: (): Promise<Curator> => delay({ ...state.curators[0] }),
 
@@ -46,7 +46,7 @@ export const api = {
   course: (courseId: string): Promise<Course | undefined> =>
     delay(COURSES.find((course) => course.id === courseId)),
 
-  /** Без `courseId` — все потоки: навигации и карточке куратора нужны сразу все. */
+  /** Без `courseId` — все потоки: навигации и карточке ревьюера нужны сразу все. */
   streams: (courseId?: string): Promise<Stream[]> =>
     delay(courseId ? STREAMS.filter((stream) => stream.courseId === courseId) : STREAMS),
 
@@ -71,7 +71,7 @@ export const api = {
 
   curators: (): Promise<Curator[]> => delay(state.curators.map((curator) => ({ ...curator }))),
 
-  /** Назначение куратора на поток — операция руководителя. */
+  /** Назначение ревьюера на поток — операция руководителя. */
   setCuratorStreams: (curatorId: string, streamIds: string[]): Promise<Curator[]> => {
     const curator = state.curators.find((item) => item.id === curatorId)
     if (curator) {

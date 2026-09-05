@@ -72,7 +72,7 @@ export function StudentPage() {
             <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-[12.5px] text-muted">
               <span className="font-mono text-[12px] text-faint">{student.alias}</span>
               <span>{stream?.title}</span>
-              <span>куратор: {curator?.name ?? 'не назначен'}</span>
+              <span>ревьюер: {curator?.name ?? 'не назначен'}</span>
             </div>
           </div>
         </div>
@@ -165,7 +165,7 @@ export function StudentPage() {
             </ResponsiveContainer>
           </Panel>
 
-          <Panel title="Сигналы ГенИИ по курсу" hint="решение принимает куратор, на балл не влияет">
+          <Panel title="Сигналы ГенИИ по курсу" hint="решение принимает ревьюер, на балл не влияет">
             {flags.length ? (
               <ul className="space-y-2">
                 {flags.map((grade) => (

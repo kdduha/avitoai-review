@@ -55,7 +55,7 @@ function Meter({ report }: { report: DetectionReport }) {
 }
 
 /** Какие сигналы вообще отработали. Недоступный сигнал — не ноль, а «не
- *  смотрели», и это должно быть видно до того, как куратор сделает вывод. */
+ *  смотрели», и это должно быть видно до того, как ревьюер сделает вывод. */
 function Signals({ signals }: { signals: SignalResult[] }) {
   if (!signals.length) return null
 

@@ -24,7 +24,7 @@ export function AppShell() {
             <div className="leading-tight">
               <div className="text-[13px] font-medium text-ink">{name}</div>
               <div className="text-[11.5px] text-faint">
-                {username} · {role === 'head' ? 'руководитель программы' : 'куратор'}
+                {username} · {role === 'head' ? 'руководитель программы' : 'ревьюер'}
               </div>
             </div>
           </div>

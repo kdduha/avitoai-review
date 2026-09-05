@@ -81,7 +81,7 @@ const CURATOR_SEED: Omit<Curator, 'courseIds' | 'streamIds' | 'committedMinutes'
   { id: 'c-grinev', name: 'Лев Гринёв', initials: 'ЛГ', email: 'l.grinev@avito.ru', skills: ['GPU', 'инфраструктура'], capacityMinutes: 300, medianMinutesPerWork: 36, onboarding: false },
 ]
 
-/** Кто какие программы ведёт. Часть кураторов намеренно оставлена без
+/** Кто какие программы ведёт. Часть ревьюеров намеренно оставлена без
  *  назначений — руководителю есть кого распределять. */
 const ASSIGNED: Record<string, string[]> = {
   'c-kruglov': ['go', 'backend'],
@@ -334,7 +334,7 @@ export function statsForStream(streamId: string): StreamStats | null {
   }
 }
 
-/* Загрузка кураторов складывается из того, что им реально назначено. */
+/* Загрузка ревьюеров складывается из того, что им реально назначено. */
 for (const curator of CURATORS) {
   curator.committedMinutes = curator.streamIds.reduce((sum, streamId) => {
     const load = statsForStream(streamId)?.reviewLoad.find((row) => row.curatorId === curator.id)

@@ -98,12 +98,12 @@ export function CuratorsTab({ stream, courseTitle }: Props) {
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
         <p className="text-[13px] text-muted">
           {onStream.length
-            ? `${onStream.length} ${plural(onStream.length, 'куратор', 'куратора', 'кураторов')} на потоке`
+            ? `${onStream.length} ${plural(onStream.length, 'ревьюер', 'ревьюера', 'ревьюеров')} на потоке`
             : 'На поток пока никого не назначили'}
         </p>
         {role === 'head' ? (
           <Button size="sm" onClick={openDialog} icon={<UserPlus size={13} strokeWidth={1.8} />}>
-            Назначить кураторов
+            Назначить ревьюеров
           </Button>
         ) : null}
       </div>
@@ -121,12 +121,12 @@ export function CuratorsTab({ stream, courseTitle }: Props) {
       ) : (
         <div className="card grid place-items-center px-6 py-12 text-center">
           <p className="max-w-[42ch] text-[13.5px] text-muted">
-            Работы этого потока некому распределить. Назначьте кураторов — после этого движок
+            Работы этого потока некому распределить. Назначьте ревьюеров — после этого движок
             распределения сможет разложить сдачи по ним.
           </p>
           {role === 'head' ? (
             <Button variant="primary" size="sm" className="mt-3" onClick={openDialog}>
-              Назначить кураторов
+              Назначить ревьюеров
             </Button>
           ) : (
             <p className="mt-2 text-[12.5px] text-faint">Назначение делает руководитель программы.</p>
@@ -136,7 +136,7 @@ export function CuratorsTab({ stream, courseTitle }: Props) {
 
       <Modal
         open={open}
-        title="Кураторы на потоке"
+        title="Ревьюеры на потоке"
         description={`${courseTitle}, ${stream.title.toLowerCase()}`}
         onClose={() => setOpen(false)}
         footer={
