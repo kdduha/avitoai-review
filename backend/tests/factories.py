@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 from avito_reviewer.ai.content import ArtifactText, build_texts
 from avito_reviewer.ai.rubric import Criterion, LatePolicy, Rubric, Scale
+from avito_reviewer.distribution import DistributionItem, Reviewer, WorkProfile
 from avito_reviewer.ingest import (
     Artifact,
     ArtifactRole,
@@ -180,6 +181,36 @@ def go_rubric(**kwargs) -> Rubric:
     )
     defaults.update(kwargs)
     return Rubric(**defaults)
+
+
+def reviewer(reviewer_id: str = "c-one", **kwargs) -> Reviewer:
+    defaults = dict(
+        id=reviewer_id,
+        name="Антон Круглов",
+        skills=["go", "бэкенд"],
+        capacity_minutes=600,
+        median_minutes_per_work=20.0,
+        source="анкета куратора, 02.2026",
+    )
+    defaults.update(kwargs)
+    return Reviewer(**defaults)
+
+
+def work_profile(**kwargs) -> WorkProfile:
+    defaults = dict(
+        topics=["gRPC", "graceful shutdown"],
+        stack=["go", "docker"],
+        complexity=0.4,
+        est_review_minutes=30,
+    )
+    defaults.update(kwargs)
+    return WorkProfile(**defaults)
+
+
+def item(item_id: str = "s1", **kwargs) -> DistributionItem:
+    defaults = dict(item_id=item_id, est_review_minutes=30, course_id="go")
+    defaults.update(kwargs)
+    return DistributionItem(**defaults)
 
 
 def atext(path: str = "a.go", *, text: str = "", **kwargs) -> ArtifactText:

@@ -1,0 +1,28 @@
+{
+  "id": "c-prohorova",
+  "name": "Дарья Прохорова",
+  "initials": "ДП",
+  "email": "d.prohorova@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "аналитика",
+    "статистика",
+    "А/Б"
+  ],
+  "capacity_minutes": 420,
+  "median_minutes_per_work": 29.0,
+  "onboarding": true,
+  "tov": "поддерживающий",
+  "course_ids": [
+    "product"
+  ],
+  "stream_ids": [
+    "product-a",
+    "product-b"
+  ],
+  "assignment_ids": [],
+  "github_handle": "dprohorova",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}
