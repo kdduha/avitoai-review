@@ -177,8 +177,8 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
               const row = byStudentTotals.get(student.id)
               const curator = curators.find((c) => c.id === student.curatorId)
               return (
-                <tr key={student.id} className="border-b border-line-soft last:border-b-0 hover:bg-[#f8f9f6]">
-                  <td className="sticky left-0 z-10 bg-inherit px-4 py-2">
+                <tr key={student.id} className="group border-b border-line-soft last:border-b-0 hover:bg-[#f8f9f6]">
+                  <td className="sticky left-0 z-10 bg-surface px-4 py-2 group-hover:bg-[#f8f9f6]">
                     <Link to={`/students/${student.id}`} className="group flex items-center gap-2">
                       <Avatar name={student.name} size={24} />
                       <span className="text-[13.5px] text-ink group-hover:text-accent-ink">{student.name}</span>

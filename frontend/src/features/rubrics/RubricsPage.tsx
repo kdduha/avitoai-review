@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CircleAlert, Coins, ShieldCheck, Sparkles } from 'lucide-react'
+import { CircleAlert, Coins, Pencil, Plus, ShieldCheck, Sparkles } from 'lucide-react'
 import { useSession } from '@/app/session'
-import { backend, type Criterion, type FormatCheck, type LatePolicy } from '@/lib/backend'
+import { backend, type Criterion, type RubricSummary } from '@/lib/backend'
+import { checkLabel, lateInWords } from '@/lib/rubric'
 import { cn } from '@/lib/cn'
 import { plural } from '@/lib/format'
 import { Badge } from '@/components/ui/Badge'
@@ -11,36 +13,36 @@ import { CompileRubricPanel } from './CompileRubricPanel'
 
 const LEVEL_TONE = { blocking: 'critical', warning: 'warn', info: 'neutral' } as const
 
-/** Правило просрочки записано в рубрике числами; куратору нужно предложение. */
-function lateInWords(policy: LatePolicy | undefined): string {
-  if (!policy) return 'штраф за просрочку не задан'
-  const grace = policy.grace_days ?? 0
-  const penalty = policy.penalty_per_grace_day ?? 0
-  if (!grace && !penalty) return 'штрафа за просрочку нет'
+/** Откуда взялась рубрика.
+ *
+ *  Компилятор и методист пишут сюда разбор: что взято из условия дословно, что
+ *  решено самостоятельно и почему. Читают это не каждый раз, а в споре о балле,
+ *  поэтому целиком заметка разворачивается по требованию — абзац на десяток
+ *  строк уводил бы саму рубрику под сгиб. */
+function SourceNote({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const long = text.length > 220
 
-  const head = grace
-    ? `досдача в течение ${grace} ${plural(grace, 'дня', 'дней', 'дней')} — минус ${penalty} ${plural(penalty, 'балл', 'балла', 'баллов')} за день`
-    : `минус ${penalty} за каждый день просрочки`
-  return head + (policy.after_grace === 'zero' ? ', позже — 0 баллов' : ', дальше штраф растёт')
-}
-
-/** У части проверок методист пишет `label`, у части — нет; голое число из
- *  `params` в списке нечитаемо, поэтому у каждого вида проверки есть своя
- *  формулировка. */
-function checkLabel(check: FormatCheck): string {
-  const params = (check.params ?? {}) as Record<string, unknown>
-  if (typeof params.label === 'string' && params.label) return params.label
-
-  switch (check.check) {
-    case 'token_budget':
-      return `Объём работы — не больше ${params.max_tokens} токенов`
-    case 'required_paths':
-      return `Требуемые пути: ${[params.paths].flat().join(', ')}`
-    case 'code_absent':
-      return `В работе не должно быть: ${params.pattern}`
-    default:
-      return typeof params.expected === 'string' ? params.expected : check.check
-  }
+  return (
+    <div className="mt-1.5">
+      <p
+        className={cn(
+          'max-w-[70ch] text-[12.5px] leading-[1.5] text-faint',
+          long && !open && 'line-clamp-2',
+        )}
+      >
+        {text}
+      </p>
+      {long ? (
+        <button
+          onClick={() => setOpen(!open)}
+          className="mt-0.5 text-[12px] text-muted transition-colors hover:text-ink"
+        >
+          {open ? 'свернуть' : 'откуда рубрика'}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 function CriterionCard({ criterion }: { criterion: Criterion }) {
@@ -82,11 +84,31 @@ function CriterionCard({ criterion }: { criterion: Criterion }) {
 
 export function RubricsPage() {
   const { role } = useSession()
-  const [selected, setSelected] = useState<string | null>(null)
+  const [params, setParams] = useSearchParams()
   const [compiling, setCompiling] = useState(false)
 
   const list = useQuery({ queryKey: ['rubrics'], queryFn: backend.rubrics, retry: false })
-  const current = selected ?? list.data?.[0]?.assignment_id ?? null
+
+  /* Каталог растёт вместе с курсами, и плоский список перестаёт читаться: по
+     названию задания не видно, чьё оно. Отсюда два уровня — курс, потом
+     задание. Второй уровень показывается только там, где есть из чего
+     выбирать: у большинства курсов задание одно, и ряд из единственной кнопки
+     был бы лишним кликом, а не выбором. */
+  const courses = useMemo(() => {
+    const byCourse = new Map<string, RubricSummary[]>()
+    for (const item of list.data ?? []) {
+      byCourse.set(item.course, [...(byCourse.get(item.course) ?? []), item])
+    }
+    return [...byCourse.entries()]
+      .sort((left, right) => left[0].localeCompare(right[0], 'ru'))
+      .map(([course, items]) => ({ course, items }))
+  }, [list.data])
+
+  const setSelected = (assignmentId: string) => setParams({ id: assignmentId })
+  const current = params.get('id') ?? courses[0]?.items[0]?.assignment_id ?? null
+  const currentCourse =
+    list.data?.find((item) => item.assignment_id === current)?.course ?? courses[0]?.course ?? null
+  const siblings = courses.find((item) => item.course === currentCourse)?.items ?? []
 
   const rubric = useQuery({
     queryKey: ['rubric', current],
@@ -123,13 +145,20 @@ export function RubricsPage() {
           </p>
         </div>
         {role === 'head' ? (
-          <Button
-            variant={compiling ? 'secondary' : 'primary'}
-            onClick={() => setCompiling((value) => !value)}
-            icon={<Sparkles size={14} strokeWidth={1.9} />}
-          >
-            {compiling ? 'К каталогу' : 'Собрать из условия'}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            {compiling ? null : (
+              <Link to="/rubrics/new">
+                <Button icon={<Plus size={14} strokeWidth={1.9} />}>С чистого листа</Button>
+              </Link>
+            )}
+            <Button
+              variant={compiling ? 'secondary' : 'primary'}
+              onClick={() => setCompiling((value) => !value)}
+              icon={<Sparkles size={14} strokeWidth={1.9} />}
+            >
+              {compiling ? 'К каталогу' : 'Собрать из условия'}
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -144,35 +173,70 @@ export function RubricsPage() {
         </div>
       ) : null}
 
-      {!compiling && list.data && list.data.length > 1 ? (
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {list.data.map((item) => (
-            <button
-              key={item.assignment_id}
-              onClick={() => setSelected(item.assignment_id)}
-              className={cn(
-                'rounded-lg border px-3 py-1.5 text-[13px] transition-colors',
-                item.assignment_id === current
-                  ? 'border-accent-line bg-accent-wash font-medium text-accent-ink'
-                  : 'border-line bg-surface text-muted hover:text-ink',
-              )}
-            >
-              {item.title}
-            </button>
-          ))}
+      {!compiling && courses.length > 1 ? (
+        <div className="mt-5">
+          <div className="label">Курс</div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {courses.map(({ course, items }) => (
+              <button
+                key={course}
+                onClick={() => setSelected(items[0].assignment_id)}
+                className={cn(
+                  'rounded-lg border px-3 py-1.5 text-[13px] transition-colors',
+                  course === currentCourse
+                    ? 'border-accent-line bg-accent-wash font-medium text-accent-ink'
+                    : 'border-line bg-surface text-muted hover:text-ink',
+                )}
+              >
+                {course}
+                {items.length > 1 ? (
+                  <span className="num ml-1.5 text-[11.5px] text-faint">{items.length}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {!compiling && siblings.length > 1 ? (
+        <div className="mt-3.5">
+          <div className="label">Задание</div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {siblings.map((item) => (
+              <button
+                key={item.assignment_id}
+                onClick={() => setSelected(item.assignment_id)}
+                className={cn(
+                  'rounded-lg border px-3 py-1.5 text-[13px] transition-colors',
+                  item.assignment_id === current
+                    ? 'border-accent-line bg-accent-wash font-medium text-accent-ink'
+                    : 'border-line bg-surface text-muted hover:text-ink',
+                )}
+              >
+                {item.title}
+              </button>
+            ))}
+          </div>
         </div>
       ) : null}
 
       {!compiling && data ? (
         <>
-          <header className="mt-5">
+          <header className="mt-5 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
             <h2 className="text-[16px] font-semibold text-ink">{data.title}</h2>
             <p className="mt-0.5 text-[13px] text-muted">
               {data.course}
               {data.stage ? `, этап ${data.stage}` : ''}
             </p>
-            {data.source_note ? (
-              <p className="mt-1.5 max-w-[70ch] text-[12.5px] leading-[1.5] text-faint">{data.source_note}</p>
+            {data.source_note ? <SourceNote text={data.source_note} /> : null}
+            </div>
+            {role === 'head' ? (
+              <Link to={`/rubrics/${encodeURIComponent(data.assignment_id)}/edit`} className="shrink-0">
+                <Button size="sm" icon={<Pencil size={13} strokeWidth={1.8} />}>
+                  Редактировать
+                </Button>
+              </Link>
             ) : null}
           </header>
 

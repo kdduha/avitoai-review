@@ -33,6 +33,8 @@ export type DetectResponse = S['DetectResponse']
 export type ReviewRequest = S['ReviewRequest']
 export type DetectRequest = S['DetectRequest']
 export type CompileRubricResponse = S['CompileRubricResponse']
+export type CriterionSource = S['CriterionSource']
+export type Scale = S['Scale']
 
 export type LoginRequest = S['LoginRequest']
 export type TokenResponse = S['TokenResponse']
@@ -65,6 +67,10 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Список поломок целиком: `POST /rubrics` отвечает на 422 не одной строкой,
+     *  а перечнем того, что в рубрике не считается. Склеенный в предложение, он
+     *  читается хуже списка, поэтому доезжает до экрана обеими формами. */
+    readonly problems: string[] = [],
   ) {
     super(message)
   }
@@ -72,20 +78,19 @@ export class ApiError extends Error {
 
 /** Бэкенд отвечает `detail` строкой или списком ошибок валидации — и то, и
  *  другое должно доехать до экрана человеческим текстом, а не `[object Object]`. */
-function readDetail(payload: unknown, status: number): string {
-  if (typeof payload === 'string' && payload) return payload
+function readDetail(payload: unknown, status: number): { message: string; problems: string[] } {
+  if (typeof payload === 'string' && payload) return { message: payload, problems: [] }
   if (payload && typeof payload === 'object' && 'detail' in payload) {
     const detail = (payload as { detail: unknown }).detail
-    if (typeof detail === 'string') return detail
+    if (typeof detail === 'string') return { message: detail, problems: [] }
     if (Array.isArray(detail)) {
-      return detail
-        .map((item) =>
-          item && typeof item === 'object' && 'msg' in item ? String((item as { msg: unknown }).msg) : String(item),
-        )
-        .join('; ')
+      const problems = detail.map((item) =>
+        item && typeof item === 'object' && 'msg' in item ? String((item as { msg: unknown }).msg) : String(item),
+      )
+      return { message: problems.join('; '), problems }
     }
   }
-  return `Бэкенд ответил ${status}`
+  return { message: `Бэкенд ответил ${status}`, problems: [] }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -104,7 +109,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new ApiError(response.status, readDetail(payload, response.status))
+  if (!response.ok) {
+    const { message, problems } = readDetail(payload, response.status)
+    throw new ApiError(response.status, message, problems)
+  }
   return payload as T
 }
 
@@ -194,7 +202,8 @@ export const backend = {
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null)
-      throw new ApiError(response.status, readDetail(payload, response.status))
+      const { message, problems } = readDetail(payload, response.status)
+      throw new ApiError(response.status, message, problems)
     }
     if (!response.body) return
 
