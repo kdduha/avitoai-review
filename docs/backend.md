@@ -337,7 +337,10 @@ tests/                   pytest; factories.py строит настоящие м
       остальных аккаунтов
 
 **Ingest**
-- [ ] классификатор артефактов + денилист шума (`solution` / `evidence` / `tooling` / `noise`)
+- [x] классификатор артефактов (`ingest/classify.py`): `solution` / `evidence` /
+      `tooling` / `noise` одним списком на систему — судья детектора и демо-скрипт
+      спрашивают его же. `tooling` не доезжает до детектора, `evidence` учитывается
+      по факту наличия
 - [x] стриппинг ноутбуков (`ai/content.py:strip_notebook`, `nbformat`) — код и
       markdown-ячейки целиком, вывод обрезан до 800 символов, картинки →
       `[plot: cell N]` без выдумывания описания; парсеры docx / xlsx / pdf — нет
