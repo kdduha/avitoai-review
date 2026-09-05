@@ -15,3 +15,4 @@ class InitResponse(BaseModel):
     sources: list[SubmissionSource]
     llm_provider: str
     rubrics: list[str]
+    reviewers: list[str]

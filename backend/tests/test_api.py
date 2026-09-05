@@ -18,7 +18,19 @@ from avito_reviewer.ai.llm import fake_gateway
 from avito_reviewer.ai.rubric import RubricStore
 from avito_reviewer.app.main import create_app
 from avito_reviewer.config import AIConfig
+from avito_reviewer.distribution import ReviewerStore
 from avito_reviewer.ingest import InvalidLinkError, ProviderFetchError
+
+PROFILE = json.dumps(
+    {
+        "topics": ["gRPC"],
+        "stack": ["go"],
+        "complexity": 0.4,
+        "est_review_minutes": 25,
+        "rationale": "один файл",
+    },
+    ensure_ascii=False,
+)
 
 VERDICTS = json.dumps(
     {
@@ -53,6 +65,9 @@ class StubIngest:
         self.bundle = bundle if bundle is not None else go_bundle()
         self.error = error
         self.calls = 0
+        # Двойник обязан совпадать с настоящим сервисом по составу: на этом
+        # расхождении здесь уже дважды пряталась ошибка.
+        self.author_salt = ""
 
     async def ingest(self, link, source, *, context=None):
         self.calls += 1
@@ -73,7 +88,7 @@ class StubIngest:
 
 @pytest.fixture
 def make_client(tmp_path):
-    def build(*, ingest=None, responses=None, rubrics=True, writable=False):
+    def build(*, ingest=None, responses=None, rubrics=True, writable=False, reviewers=True):
         app = create_app()
         client = TestClient(app)
         client.__enter__()
@@ -82,6 +97,8 @@ def make_client(tmp_path):
         app.state.ai = AIService(AIConfig(), gateway=gateway, resolver=app.state.ingest)
         if not rubrics:
             app.state.rubrics = RubricStore("нет такого каталога")
+        if not reviewers:
+            app.state.reviewers = ReviewerStore("нет такого каталога")
         if writable:
             # Каталог на запись: подтверждение рубрики не должно трогать рабочий.
             app.state.rubrics = RubricStore(tmp_path)
@@ -400,6 +417,112 @@ def test_gate_facts_are_returned_with_the_draft(make_client):
     # Каждая проверка приходит с местом, чтобы ревьюер мог кликнуть.
     found = [o for o in gate["outcomes"] if o["passed"] and o["locations"]]
     assert found and ":" in found[0]["locations"][0]
+
+
+# --------------------------------------------------------------------------- #
+# распределение
+# --------------------------------------------------------------------------- #
+
+WORK = {"item_id": "s1", "est_review_minutes": 40, "course_id": "go"}
+
+
+def test_distribute_needs_no_model(make_client):
+    """Раскладка не должна стоить ни одного токена: к модели она не ходит вовсе."""
+    client, provider = make_client(responses=[])
+    response = client.post("/distribute", json={"items": [WORK]})
+
+    assert response.status_code == 200
+    assert provider.calls == []
+    assert response.json()["allocations"]
+
+
+def test_distribute_uses_the_catalogue_when_no_pool_is_given(make_client):
+    client, _ = make_client(responses=[])
+    plan = client.post("/distribute", json={"items": [WORK]}).json()
+
+    assert plan["reviewers"] == len(client.app.state.reviewers.ids)
+    assert plan["allocations"][0]["reviewer_id"].startswith("c-")
+    assert plan["allocations"][0]["explain"]
+
+
+def test_distribute_rejects_an_unknown_reviewer_id(make_client):
+    client, _ = make_client(responses=[])
+    response = client.post(
+        "/distribute", json={"items": [WORK], "reviewer_ids": ["c-kruglov", "нет-такого"]}
+    )
+
+    assert response.status_code == 422
+    assert "нет-такого" in response.json()["detail"]
+
+
+def test_distribute_with_nobody_to_distribute_to_is_404(make_client):
+    client, _ = make_client(responses=[], reviewers=False)
+    response = client.post("/distribute", json={"items": [WORK]})
+
+    assert response.status_code == 404
+    assert "каталог ревьюеров пуст" in response.json()["detail"]
+
+
+def test_an_exhausted_pool_is_a_200_with_reasons(make_client):
+    """Исчерпание ёмкости — результат, а не ошибка: координатору нужен список причин."""
+    client, _ = make_client(responses=[])
+    plan = client.post(
+        "/distribute",
+        json={
+            "items": [WORK],
+            "reviewer_ids": ["c-kruglov"],
+            "committed_minutes": {"c-kruglov": 600},
+        },
+    ).json()
+
+    assert plan["allocations"] == []
+    assert plan["unassigned"][0]["reason"] == "capacity"
+    assert plan["unassigned"][0]["blocked_by"][0]["reviewer_id"] == "c-kruglov"
+
+
+def test_a_work_without_a_duration_is_refused_at_the_edge(make_client):
+    client, _ = make_client(responses=[])
+    response = client.post("/distribute", json={"items": [{"item_id": "s1"}]})
+
+    assert response.status_code == 422
+
+
+def test_init_lists_the_reviewer_catalogue(make_client):
+    client, _ = make_client()
+    assert "c-kruglov" in client.get("/init").json()["reviewers"]
+
+
+def test_work_profile_returns_an_item_ready_to_distribute(make_client):
+    """Улики соавторства собирает бэкенд: клиент не должен воспроизводить author_hash."""
+    client, _ = make_client(responses=[PROFILE])
+    body = client.post("/work-profile", json={"link": LINK, "rubric_id": "go-task1"}).json()
+
+    assert body["profile"]["est_review_minutes"] == 25
+    assert body["item"]["author_hashes"] == ["author1"]
+    assert body["item"]["assignment_id"] == "go-task1"
+
+
+def test_a_profile_and_a_plan_are_one_road(make_client):
+    """Профиль обязан приниматься распределением как есть, без правки руками."""
+    client, _ = make_client(responses=[PROFILE])
+    item = client.post("/work-profile", json={"link": LINK}).json()["item"]
+
+    plan = client.post("/distribute", json={"items": [item]}).json()
+
+    assert len(plan["allocations"]) == 1
+    assert plan["allocations"][0]["est_review_minutes"] == 25
+
+
+def test_work_profile_upstream_failure_is_502(make_client):
+    client, _ = make_client(responses=["не json", "снова не json", "и ещё"])
+    assert client.post("/work-profile", json={"link": LINK}).status_code == 502
+
+
+def test_work_profile_translates_a_bad_link(make_client):
+    client, _ = make_client(
+        ingest=StubIngest(error=InvalidLinkError("не ссылка на PR")), responses=[PROFILE]
+    )
+    assert client.post("/work-profile", json={"link": LINK}).status_code == 422
 
 
 # --------------------------------------------------------------------------- #

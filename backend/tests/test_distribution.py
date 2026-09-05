@@ -426,6 +426,19 @@ def test_a_work_without_a_duration_is_refused():
         DistributionItem(item_id="s1")
 
 
+def test_a_reviewer_at_the_edge_of_capacity_is_named():
+    """Порог загрузки считает сервер: у клиента он расползается по экранам."""
+    loaded = reviewer("c-loaded", capacity_minutes=600)
+    roomy = reviewer("c-roomy", name="Свободнее", capacity_minutes=600)
+    works = [item(f"s{n}", est_review_minutes=40) for n in range(2)]
+
+    plan = distribute(works, [loaded, roomy], committed_minutes={"c-loaded": 520})
+    tight = {load.reviewer_id for load in plan.loads if load.tight}
+
+    assert tight == {"c-loaded"}
+    assert any("верхней границы" in line for line in plan.limitations)
+
+
 def test_an_unsalted_conflict_check_says_it_is_weaker_than_it_looks():
     author = reviewer("c-author", github_handle="octocat")
     work = item(author_hashes=[author_hash("octocat")])

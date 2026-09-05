@@ -48,7 +48,7 @@ OpenRouter говорят на одном протоколе, и клиент у
 ## Эндпоинты
 
 - `GET /health` — liveness
-- `GET /init` — статус бутстрапа: провайдеры ingest, маршрут модели, рубрики
+- `GET /init` — статус бутстрапа: провайдеры ingest, маршрут модели, рубрики, ревьюеры
 - `POST /ingest` — `{link, source, assignment_id?, deadline_at?}` → `SubmissionBundle`
 - `GET /rubrics`, `GET /rubrics/{assignment_id}` — каталог рубрик
 - `POST /review` — `{link, rubric_id | rubric, gate_facts?, condition_text?, with_detection?}` →
@@ -62,6 +62,11 @@ OpenRouter говорят на одном протоколе, и клиент у
 - `POST /rubrics` — `{rubric, confirmed_by, overwrite?}` → рубрика подтверждена
   методистом и вступила в силу для потока. `422` — не считается (список поломок),
   `409` — такая уже есть
+- `POST /work-profile` — `{link, rubric_id?, condition_text?}` → профиль работы
+  (темы, стек, сложность, оценка минут) и готовая к распределению `item`
+- `POST /distribute` — `{items, reviewers? | reviewer_ids?, committed_minutes?}` →
+  план: назначения с объяснением, нераспределённое с причинами, нагрузка.
+  К модели не ходит, ноль токенов
 - `GET /cost` — журнал шлюза в цифрах: вызовы, токены, рубли
 
 `/review` и `/detect` сами тянут сдачу по ссылке и отдают `bundle` вместе с
@@ -124,7 +129,14 @@ src/avito_reviewer/
     llm/                 PrivacyGateway — единственный выход к моделям
     review/              промпт из рубрики, валидатор цитат, агрегатор баллов
     detection/           ансамбль сигналов ГенИИ + signals/
+  distribution/          раскладка работ по ревьюерам
+    schema.py            контракты; заявленное отделено от измеренного
+    hungarian.py         венгерский алгоритм, целочисленный и без зависимостей
+    score.py             слагаемые §9.3; терм без данных отключается, а не обнуляется
+    solver.py            раунды, книга ёмкости, полнота отчёта
+    profile.py           единственное место домена, ходящее к модели
 rubrics/                 рубрики как данные: добавить курс = добавить JSON
+reviewers/               ревьюеры как данные: добавить куратора = добавить JSON
 scripts/                 ручные примеры и демо (не тесты)
 tests/                   pytest; factories.py строит настоящие модели, не двойники
 ```
@@ -172,10 +184,13 @@ tests/                   pytest; factories.py строит настоящие м
 
 - **Новый роутер** — `app/routers/<name>.py` (`APIRouter`) + `app/schemas/<name>.py`,
   `include_router` в `main.py`.
+- **Ревьюера в каталог** — JSON в `reviewers/`. Занятость туда не пишут: она
+  меняется каждый час и приходит в запросе, а карточка с `committed_minutes`
+  каталогом отвергается.
 - **Новый провайдер ingest** — `SubmissionProvider` в `ingest/providers/<name>.py`, запись
   в словарь `IngestService`, конфиг в `config.py`, значение в `SubmissionSource`.
-- **Новый домен** (assignment, review, detection) — пакет рядом с `ingest`/`ai`; на входе
-  только `SubmissionBundle`, наружу — сервисный класс, который зовёт роутер.
+- **Новый домен** — пакет рядом с `ingest`/`ai`/`distribution`; на входе только
+  `SubmissionBundle`, наружу — сервисный класс, который зовёт роутер.
 
 ## TODO (по `.claude/architecture.md`)
 
@@ -206,7 +221,9 @@ tests/                   pytest; factories.py строит настоящие м
 - [x] Rubric Compiler: условие → JSON-рубрика; каждый критерий сверяется с
       условием цитатой, чего в условии нет — уходит в `open_questions`
 - [x] подтверждение черновика методистом: `POST /rubrics` с проверкой рубрики кодом
-- [ ] Assignment Engine: `WorkProfile` от LLM + детерминированный солвер (венгерский / min-cost flow)
+- [x] Распределение (`distribution/`): `WorkProfile` от модели + венгерский солвер
+      с объяснением каждого назначения. Профили ревьюера и студента из §9.2 ждут
+      истории ревью, косинус по темам — эмбеддингов
 - [x] агрегатор баллов в коде: `Σ criterion × weight`, штраф за срок, confidence-флаги
 
 **AI-слой**

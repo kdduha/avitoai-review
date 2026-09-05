@@ -15,6 +15,9 @@ class IngestService:
     """
 
     def __init__(self, config: IngestConfig) -> None:
+        self.author_salt = config.author_salt
+        """Соль псевдонимизации автора. Ею же распределение ищет соавторство
+        ревьюера с работой, поэтому она обязана быть одна на приложение."""
         self._providers: dict[SubmissionSource, SubmissionProvider] = {
             SubmissionSource.GITHUB_PR: GitHubProvider(
                 config.github, author_salt=config.author_salt

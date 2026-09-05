@@ -13,6 +13,7 @@ from avito_reviewer.ai.content import ArtifactText
 from avito_reviewer.ai.detection import DetectionReport
 from avito_reviewer.ai.review import ReviewDraft
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
+from avito_reviewer.app.deps import ingest_submission
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
     CompileRubricRequest,
@@ -26,33 +27,11 @@ from avito_reviewer.app.schemas.review import (
     ReviewResponse,
     RubricSummary,
 )
-from avito_reviewer.ingest import (
-    IngestContext,
-    IngestService,
-    InvalidLinkError,
-    ProviderFetchError,
-    SubmissionBundle,
-    UnknownSourceError,
-)
+from avito_reviewer.ingest import SubmissionBundle
 
 _log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["review"])
-
-
-async def _ingest(request: Request, body: DetectRequest | ReviewRequest) -> SubmissionBundle:
-    service: IngestService = request.app.state.ingest
-    context = IngestContext(
-        assignment_id=body.assignment_id,
-        deadline_at=body.deadline_at,
-        student_internal_id=body.student_internal_id,
-    )
-    try:
-        return await service.ingest(body.link, body.source, context=context)
-    except (UnknownSourceError, InvalidLinkError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ProviderFetchError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 async def _detection(
@@ -200,7 +179,7 @@ async def review(body: ReviewRequest, request: Request) -> ReviewResponse:
     ``502`` — источник сдачи не ответил.
     """
     rubric = _rubric(request, body.rubric_id, body.rubric)
-    bundle = await _ingest(request, body)
+    bundle = await ingest_submission(request, body)
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)
@@ -240,7 +219,7 @@ async def detect(body: DetectRequest, request: Request) -> DetectResponse:
     rubric = (
         _rubric(request, body.rubric_id, None) if body.rubric_id else None
     )
-    bundle = await _ingest(request, body)
+    bundle = await ingest_submission(request, body)
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)
