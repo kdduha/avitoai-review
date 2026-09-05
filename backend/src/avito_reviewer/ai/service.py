@@ -21,7 +21,9 @@ from avito_reviewer.ingest import SubmissionBundle
 from . import gate
 from .content import ArtifactText, ContentResolver, build_texts
 from .detection import DetectionReport, DetectionService
+from .detection.signals.perplexity import LogprobScorer
 from .llm import Identity, PrivacyGateway, gateway_from_config
+from .llm.audit import Spend
 from .review import ReviewDraft, ReviewService
 from .rubric import Rubric
 
@@ -37,7 +39,7 @@ class AIService:
         *,
         gateway: PrivacyGateway | None = None,
         resolver: ContentResolver | None = None,
-        scorer: object | None = None,
+        scorer: LogprobScorer | None = None,
     ) -> None:
         self.config = config
         self.gateway = gateway or gateway_from_config(config.llm)
@@ -147,6 +149,6 @@ class AIService:
         return report
 
     @property
-    def cost_summary(self) -> dict[str, object]:
+    def cost_summary(self) -> Spend:
         """Сводка по всем обращениям к моделям с момента старта приложения."""
         return self.gateway.audit.summary()

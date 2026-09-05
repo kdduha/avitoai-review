@@ -145,9 +145,9 @@ def _call_tool(
         return f"{path}{note}\n{text.text[:FILE_CHARS]}"
 
     if tool == "get_diff":
-        path = args.get("path")
-        if path:
-            return diffs.get(str(path), f"диффа для {path!r} нет")
+        wanted = args.get("path")
+        if wanted:
+            return diffs.get(str(wanted), f"диффа для {wanted!r} нет")
         if not diffs:
             return "диффов нет"
         return "\n\n".join(f"--- {p} ---\n{d}" for p, d in list(diffs.items())[:5])

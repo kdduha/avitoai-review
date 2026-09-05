@@ -106,9 +106,9 @@ class ReviewService:
         draft.needs_human_attention = bool(draft.attention_reasons) or bool(draft.failed_criteria)
 
         summary = self.gateway.audit.summary(spend)
-        draft.tokens_in = int(summary["tokens_in"])
-        draft.tokens_out = int(summary["tokens_out"])
-        draft.cost_rub = float(summary["cost_rub"])
+        draft.tokens_in = summary["tokens_in"]
+        draft.tokens_out = summary["tokens_out"]
+        draft.cost_rub = summary["cost_rub"]
         return draft
 
     def without_model(

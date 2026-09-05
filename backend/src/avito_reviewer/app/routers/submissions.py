@@ -465,7 +465,7 @@ def _chat_history(rows: list[ChatMessage]) -> list[dict[str, str]]:
 def _out(message: ChatMessage) -> ChatMessageOut:
     return ChatMessageOut(
         id=message.id,
-        role=message.role,
+        role=ChatRole(message.role).value,
         content=message.content,
         tool_name=message.tool_name,
         proposed_patch=ProposedPatchOut.model_validate(message.proposed_patch)

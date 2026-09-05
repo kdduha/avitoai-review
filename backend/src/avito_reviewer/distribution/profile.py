@@ -167,9 +167,9 @@ class WorkProfiler:
             summary = self.gateway.audit.summary(spend)
 
         profile = _assemble(output, bundle, max_review_minutes=max_review_minutes)
-        profile.tokens_in = int(summary["tokens_in"])
-        profile.tokens_out = int(summary["tokens_out"])
-        profile.cost_rub = float(summary["cost_rub"])
+        profile.tokens_in = summary["tokens_in"]
+        profile.tokens_out = summary["tokens_out"]
+        profile.cost_rub = summary["cost_rub"]
         log.info(
             "профиль %s: %d мин, сложность %.2f, тем %d",
             bundle.origin_url,
@@ -218,19 +218,27 @@ def _assemble(
     )
 
 
-def item_for(bundle: SubmissionBundle, profile: WorkProfile, **fields: object) -> DistributionItem:
+def item_for(
+    bundle: SubmissionBundle,
+    profile: WorkProfile,
+    *,
+    assignment_id: str = "",
+    course_id: str = "",
+    stream_id: str = "",
+) -> DistributionItem:
     """Готовая к распределению работа.
 
     Улики соавторства собирает бэкенд, а не клиент: `author_hash` — внутреннее
     правило псевдонимизации, и просить вызывающего его воспроизвести значило бы
     раздать наружу то, что должно жить в одном месте.
     """
-    defaults: dict[str, object] = {
-        "item_id": str(bundle.submission_id),
-        "author_hashes": sorted({revision.author_hash for revision in bundle.revisions}),
-        "student_internal_id": bundle.student_ref.internal_id,
-        "due_at": bundle.deadline_at,
-        "profile": profile,
-    }
-    defaults.update(fields)
-    return DistributionItem(**defaults)
+    return DistributionItem(
+        item_id=str(bundle.submission_id),
+        assignment_id=assignment_id,
+        course_id=course_id,
+        stream_id=stream_id,
+        author_hashes=sorted({revision.author_hash for revision in bundle.revisions}),
+        student_internal_id=bundle.student_ref.internal_id,
+        due_at=bundle.deadline_at,
+        profile=profile,
+    )
