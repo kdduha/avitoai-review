@@ -1,0 +1,10 @@
+# Binaries
+/service-courier
+*.exe
+*.out
+
+# Env
+.env
+
+# IDE
+.vscode/
