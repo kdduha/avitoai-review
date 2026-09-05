@@ -105,6 +105,16 @@ RBAC — лестница `student < reviewer < admin`, каждая ручка 
 - `GET /cost`, `GET /audit/llm-calls` 🔒 admin — журнал шлюза: сводка и
   построчно
 
+**Распределение** (§9)
+- `POST /work-profile` 🔒 reviewer+ — `{link, rubric_id?, condition_text?}` →
+  `{profile, item}`: о чём работа и во сколько обойдётся её проверка. Единственный
+  вызов модели во всём распределении; `item` приходит собранным, с
+  `author_hashes` из бандла
+- `POST /distribute` 🔒 reviewer+ — `{items, reviewers? | reviewer_ids?,
+  committed_minutes?, now?}` → план: назначения с объяснением по слагаемым,
+  нераспределённое с поимённым списком отказавших, нагрузка. **К модели не
+  ходит вовсе** — ноль токенов и побитово воспроизводимый ответ
+
 **Персистентные сдачи** (`Submission` — см. `db/models.py`)
 - `GET /me/queue` 🔒 reviewer+ — своя очередь; `?all=true` для admin
 - `GET /submissions/{id}` 🔒 reviewer+ (только свои для reviewer) — карточка целиком,
@@ -236,7 +246,15 @@ src/avito_reviewer/
     llm/                 PrivacyGateway — единственный выход к моделям
     review/              промпт из рубрики, валидатор цитат, агрегатор баллов
     detection/           ансамбль сигналов ГенИИ + signals/
+  distribution/          раскладка работ по ревьюерам (§9)
+    schema.py            контракты; у каждого слагаемого есть basis — заявленное или данное
+    hungarian.py         венгерский алгоритм, целочисленный, без зависимостей
+    roster.py            каталог ревьюеров: файл с committed_minutes отвергается
+    score.py             слагаемые §9.3; терм без данных отключается, а не обнуляется
+    solver.py            раунды, книга ёмкости, полнота отчёта
+    profile.py           единственное место домена, ходящее к модели
 rubrics/                 рубрики как данные: добавить курс = добавить JSON
+reviewers/               ревьюеры как данные; занятость туда не пишут
 migrations/              Alembic (async шаблон); env.py берёт DSN из DatabaseConfig
 scripts/                 ручные примеры и демо (не тесты)
 tests/                   pytest; factories.py строит настоящие модели, не двойники
@@ -299,7 +317,8 @@ tests/                   pytest; factories.py строит настоящие м
 - [x] Alembic — миграции до `head` в lifespan (`db/migrate.py`), автогенерация
       против `Base.metadata`; воркер прогоняет их же идемпотентной страховкой
 - [x] Redis + arq: воркер на одну задачу — `review/rerun`. Остальной async
-      (нормализация, батч-распределение) ждёт Assignment Engine, которого нет
+      (нормализация, батч-распределение) пока не нужен: `/distribute` считается
+      за миллисекунды и очереди не требует
 - [ ] S3/MinIO для сырых артефактов; резолвер `content_ref` читает отсюда
 - [x] единый `AppConfig` — агрегирует `IngestConfig` / `AIConfig` /
       `DatabaseConfig` / `AuthConfig` / `QueueConfig` в одну точку сборки
@@ -329,11 +348,15 @@ tests/                   pytest; factories.py строит настоящие м
 **Проверки и оценка**
 - [x] Format Gate — статические проверки рубрики по git-каналу
       (`required_paths`, `forbidden_paths`, `code_contains`, `code_absent`,
-      `token_budget`), до вызова LLM; `blocked` останавливает модель
+      `token_budget`, `revision_history_visible`), до вызова LLM; `blocked`
+      останавливает модель, а на непринятой работе не запускается и детектор
 - [x] Rubric Compiler: условие → JSON-рубрика; каждый критерий сверяется с
       условием цитатой, чего в условии нет — уходит в `open_questions`
 - [x] подтверждение черновика методистом: `POST /rubrics` с проверкой рубрики кодом
-- [ ] Assignment Engine: `WorkProfile` от LLM + детерминированный солвер (венгерский / min-cost flow)
+- [x] Распределение (`distribution/`): `WorkProfile` от модели + свой венгерский
+      солвер, каждое назначение объяснено вкладом слагаемых. Профили ревьюера и
+      студента (§9.2) ждут истории ревью, косинус по темам — эмбеддингов; такое
+      слагаемое отключается и называет причину, а не обнуляется
 - [x] агрегатор баллов в коде: `Σ criterion × weight`, штраф за срок, confidence-флаги
 
 **AI-слой**

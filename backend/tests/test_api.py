@@ -444,6 +444,14 @@ def test_init_lists_the_reviewer_catalogue(make_client):
     assert "c-kruglov" in client.get("/init").json()["reviewers"]
 
 
+def test_distribution_is_behind_the_same_door_as_everything_else(make_client):
+    """Новая ручка не должна быть дырой в RBAC, который закрыл остальные."""
+    client, _ = make_client(responses=[], role=None)
+
+    assert client.post("/distribute", json={"items": [WORK]}).status_code == 401
+    assert client.post("/work-profile", json={"link": LINK}).status_code == 401
+
+
 def test_work_profile_returns_an_item_ready_to_distribute(make_client):
     """Улики соавторства собирает бэкенд: клиент не должен воспроизводить author_hash."""
     client, _ = make_client(responses=[PROFILE])

@@ -8,6 +8,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from avito_reviewer.ai import AIService
 from avito_reviewer.ai.rubric import RubricStore
+from avito_reviewer.app.auth import RequireReviewer
 from avito_reviewer.app.deps import ingest_submission
 from avito_reviewer.app.schemas.distribution import (
     DistributeRequest,
@@ -25,7 +26,9 @@ router = APIRouter(tags=["distribution"])
 
 
 @router.post("/work-profile", summary="Describe a submission and estimate the review effort")
-async def work_profile(body: WorkProfileRequest, request: Request) -> WorkProfileResponse:
+async def work_profile(
+    body: WorkProfileRequest, request: Request, user: RequireReviewer
+) -> WorkProfileResponse:
     """Собрать профиль работы: о чём она и сколько займёт её проверка.
 
     Единственный вызов модели во всём распределении. Дальше решает код:
@@ -83,7 +86,9 @@ async def work_profile(body: WorkProfileRequest, request: Request) -> WorkProfil
 
 
 @router.post("/distribute", summary="Lay submissions out across reviewers")
-async def distribute_submissions(body: DistributeRequest, request: Request) -> DistributionPlan:
+async def distribute_submissions(
+    body: DistributeRequest, request: Request, user: RequireReviewer
+) -> DistributionPlan:
     """Разложить работы по ревьюерам и объяснить каждое назначение.
 
     К модели не обращается ни разу: раскладка не стоит ни одного токена и
