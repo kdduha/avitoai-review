@@ -3,6 +3,7 @@
 
     uv run python scripts/demo.py review
     uv run python scripts/demo.py detect
+    uv run python scripts/demo.py distribute
 
 По умолчанию берётся записанный бандл `scripts/fixtures/go-task1-pr42.json` —
 ровно та форма, что отдаёт ingest на настоящем PR, включая крупный файл без
@@ -37,6 +38,7 @@ from avito_reviewer.ai.llm import fake_gateway
 from avito_reviewer.ai.review import aggregate, explain
 from avito_reviewer.ai.rubric import Rubric
 from avito_reviewer.config import AIConfig, IngestConfig
+from avito_reviewer.distribution import DistributionItem, ReviewerStore, distribute
 from avito_reviewer.ingest import IngestContext, SubmissionBundle, SubmissionSource
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -226,6 +228,84 @@ async def cmd_detect(args) -> int:
     return 0
 
 
+async def cmd_distribute(args) -> int:
+    bundle = await load_bundle(args)
+    store = ReviewerStore(ROOT / "reviewers")
+    if not store.ids:
+        print(f"каталог ревьюеров пуст: {ROOT / 'reviewers'}")
+        return 1
+
+    # В записанной сдаче работа одна, а распределение — про поток. Остальные
+    # собраны из неё же с разной трудоёмкостью: показать раскладку на одной
+    # работе нельзя, а выдавать синтетику за настоящие сдачи — тем более.
+    minutes = [40, 25, 60, 30, 45, 20, 35, 50, 15, 55, 30, 40]
+    items = [
+        DistributionItem(
+            item_id=f"s{n + 1:02}",
+            est_review_minutes=value,
+            course_id="go",
+            author_hashes=sorted({r.author_hash for r in bundle.revisions}),
+        )
+        for n, value in enumerate(minutes[: args.works])
+    ]
+    committed = {"c-kruglov": 500, "c-bahtin": 200}
+
+    plan = distribute(
+        items,
+        store.all(),
+        committed_minutes=committed,
+        max_items_per_reviewer=AIConfig().distribution.max_items_per_reviewer,
+    )
+
+    rule(f"РАСПРЕДЕЛЕНИЕ · {plan.items} работ на {plan.reviewers} ревьюеров")
+    print(f"пакет собран вокруг записанной сдачи {bundle.origin_url}")
+    print(f"раундов: {plan.rounds}, без ревьюера: {len(plan.unassigned)}\n")
+
+    for allocation in plan.allocations:
+        print(
+            f"  {allocation.item_id}  {allocation.est_review_minutes:>3} мин  →  "
+            f"{allocation.reviewer_name:<20} скор {allocation.score:+.3f}  раунд {allocation.round}"
+        )
+
+    rule("ПОЧЕМУ ИМЕННО ОН — первое назначение по слагаемым")
+    first = plan.allocations[0]
+    print(f"{first.item_id} → {first.reviewer_name}\n")
+    for term in first.explain:
+        print(
+            f"  {term.label:<34} {term.value:>5.2f} × вес {term.weight:+.1f}"
+            f"  = {term.contribution:+.4f}  [{term.basis.value}]"
+        )
+        if term.note:
+            print(f"      {term.note[:80]}")
+    print(f"  {'ИТОГО':<34} {first.score:+.4f}")
+    if first.alternatives:
+        others = ", ".join(f"{a.reviewer_name} ({a.score:+.3f})" for a in first.alternatives)
+        print(f"\n  кто ещё мог: {others}")
+
+    rule("НАГРУЗКА")
+    for load in plan.loads:
+        if not load.items and not load.committed_before:
+            continue
+        mark = " ⚠" if load.tight else ""
+        print(
+            f"  {load.name:<20} {load.items} работ, {load.minutes_assigned:>3} мин  "
+            f"{load.load_ratio_before:>4.0%} → {load.load_ratio_after:>4.0%} ёмкости{mark}"
+        )
+
+    if plan.unassigned:
+        rule("НЕ РАСПРЕДЕЛЕНО")
+        for miss in plan.unassigned:
+            print(f"  {miss.item_id}: {miss.detail}")
+
+    rule("ЧЕГО НЕ СЧИТАЛИ")
+    for term in plan.disabled_terms:
+        print(f"  {term.label:<34} {term.reason[:60]}")
+    for line in plan.limitations:
+        print(f"  - {line[:100]}")
+    print("\nни одного обращения к модели: раскладку считает арифметика")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Демонстрация ревью-агента и детектора")
     parser.add_argument("--repo", default=None, help="каталог с решением (клон homework_examples)")
@@ -239,6 +319,10 @@ def main() -> int:
 
     p = sub.add_parser("detect", help="сигналы генеративного ИИ")
     p.set_defaults(func=cmd_detect)
+
+    p = sub.add_parser("distribute", help="раскладка работ по ревьюерам, без модели")
+    p.add_argument("--works", type=int, default=8, help="сколько работ в пакете (до 12)")
+    p.set_defaults(func=cmd_distribute)
 
     args = parser.parse_args()
     return asyncio.run(args.func(args))
