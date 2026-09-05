@@ -170,7 +170,12 @@ export function demoRunForCourse(courseId: string | undefined): string | null {
 
 export interface StartRunParams {
   link: string
+  /** Ключ рубрики — нужен здесь и тогда, когда сервер выбирает её сам:
+   *  адаптер строит рабочее место против снимка рубрики. */
   rubricId: string
+  /** Задание потока. Задано — рубрику и срок берёт сервер, а не форма:
+   *  срок принадлежит заданию, и ревьюер его не вводит. */
+  assignmentId?: string
   deadlineAt?: string
   studentInternalId?: string
   studentName?: string
@@ -184,16 +189,20 @@ export interface StartRunResult {
 export async function startRun(params: StartRunParams): Promise<StartRunResult> {
   const rubric: Rubric = await backend.rubric(params.rubricId)
 
+  // С заданием рубрика и срок не передаются вовсе: сервер отвергает запрос,
+  // где названо и задание, и рубрика, — это работа, оценённая не по той
+  // рубрике, которую поток выдал.
   const review = await backend.review({
     link: params.link,
     source: 'github_pr' as const,
-    deadline_at: params.deadlineAt || null,
     student_internal_id: params.studentInternalId || null,
     student_name: params.studentName || null,
-    rubric_id: params.rubricId,
     condition_text: '',
     gate_facts: [],
     with_detection: params.withDetection,
+    ...(params.assignmentId
+      ? { assignment_id: params.assignmentId }
+      : { rubric_id: params.rubricId, deadline_at: params.deadlineAt || null }),
   })
 
   const id = `run-${Date.now().toString(36)}`

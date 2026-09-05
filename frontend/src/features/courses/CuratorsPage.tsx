@@ -82,7 +82,7 @@ export function CuratorsPage() {
                 </div>
               </div>
 
-              {role === 'head' ? (
+              {role === 'admin' ? (
                 <Button
                   size="sm"
                   onClick={() => {

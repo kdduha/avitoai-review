@@ -31,6 +31,13 @@ export type InitResponse = S['InitResponse']
 export type ReviewResponse = S['ReviewResponse']
 export type DetectResponse = S['DetectResponse']
 export type ReviewRequest = S['ReviewRequest']
+export type CourseOut = S['CourseOut']
+export type StreamOut = S['StreamOut']
+export type AssignmentOut = S['AssignmentOut']
+export type AssignmentIn = S['AssignmentIn']
+export type AssignmentPatch = S['AssignmentPatch']
+export type CourseIn = S['CourseIn']
+export type StreamIn = S['StreamIn']
 export type DetectRequest = S['DetectRequest']
 export type CompileRubricResponse = S['CompileRubricResponse']
 export type CriterionSource = S['CriterionSource']
@@ -121,6 +128,29 @@ export const backend = {
   rubrics: () => request<RubricSummary[]>('/rubrics'),
   rubric: (assignmentId: string) => request<Rubric>(`/rubrics/${encodeURIComponent(assignmentId)}`),
   cost: () => request<CostSummary>('/cost'),
+
+  /* Учебный каталог: курс → поток → задание. Задание — это рубрика, выданная
+     потоку в срок; читать может ревьюер, менять — методист. */
+  courses: () => request<CourseOut[]>('/courses'),
+  createCourse: (body: CourseIn) =>
+    request<CourseOut>('/courses', { method: 'POST', body: JSON.stringify(body) }),
+  streams: (courseId?: string) =>
+    request<StreamOut[]>(`/streams${courseId ? `?course_id=${encodeURIComponent(courseId)}` : ''}`),
+  createStream: (body: StreamIn) =>
+    request<StreamOut>('/streams', { method: 'POST', body: JSON.stringify(body) }),
+  assignments: (streamId?: string) =>
+    request<AssignmentOut[]>(
+      `/assignments${streamId ? `?stream_id=${encodeURIComponent(streamId)}` : ''}`,
+    ),
+  createAssignment: (body: AssignmentIn) =>
+    request<AssignmentOut>('/assignments', { method: 'POST', body: JSON.stringify(body) }),
+  patchAssignment: (id: string, body: AssignmentPatch) =>
+    request<AssignmentOut>(`/assignments/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteAssignment: (id: string) =>
+    request<void>(`/assignments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   login: (body: LoginRequest) =>
     request<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),

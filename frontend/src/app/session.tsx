@@ -31,12 +31,17 @@ const ROLE_KEY = 'avito-reviewer:role'
  *  отдельной роли координатора, пока некому дать под неё отдельный аккаунт).
  *  Любой другой аккаунт, заведённый через `/users`, попадает в ту же пару
  *  корзин по своей настоящей роли — `reviewer` → ревьюер, `admin` → руководитель. */
-const BACKEND_USERNAME: Record<Role, string> = { curator: 'reviewer', head: 'admin' }
+const BACKEND_USERNAME: Record<Role, string> = {
+  student: 'student',
+  reviewer: 'reviewer',
+  methodist: 'methodist',
+  admin: 'admin',
+}
 const BACKEND_PASSWORD = (import.meta.env.VITE_BACKEND_PASSWORD as string | undefined) ?? 'avito2026'
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [role, setRoleState] = useState<Role>(
-    () => (localStorage.getItem(ROLE_KEY) as Role | null) ?? 'curator',
+    () => (localStorage.getItem(ROLE_KEY) as Role | null) ?? 'reviewer',
   )
   const [username, setUsername] = useState(BACKEND_USERNAME[role])
   const [name, setName] = useState('—')
@@ -56,7 +61,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAuthToken(token.access_token)
     setUsername(nextUsername)
     setName(token.display_name)
-    const nextRole: Role = token.role === 'admin' ? 'head' : 'curator'
+    // Роль берётся из токена как есть: сервер — источник правды о правах,
+    // и любой перевод здесь был бы вторым мнением о том, что человеку можно.
+    const nextRole = token.role as Role
     setRoleState(nextRole)
     localStorage.setItem(ROLE_KEY, nextRole)
     setAuthReady(true)

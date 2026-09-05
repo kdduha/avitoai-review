@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, Coins, Pencil, Plus, ShieldCheck, Sparkles } from 'lucide-react'
 import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 import { backend, type Criterion, type RubricSummary } from '@/lib/backend'
 import { checkLabel, lateInWords } from '@/lib/rubric'
 import { cn } from '@/lib/cn'
@@ -144,7 +145,7 @@ export function RubricsPage() {
             пишется руками под каждое задание.
           </p>
         </div>
-        {role === 'head' ? (
+        {atLeast(role, 'methodist') ? (
           <div className="flex shrink-0 items-center gap-2">
             {compiling ? null : (
               <Link to="/rubrics/new">
@@ -231,7 +232,7 @@ export function RubricsPage() {
             </p>
             {data.source_note ? <SourceNote text={data.source_note} /> : null}
             </div>
-            {role === 'head' ? (
+            {atLeast(role, 'methodist') ? (
               <Link to={`/rubrics/${encodeURIComponent(data.assignment_id)}/edit`} className="shrink-0">
                 <Button size="sm" icon={<Pencil size={13} strokeWidth={1.8} />}>
                   Редактировать
