@@ -32,6 +32,10 @@ export type ReviewResponse = S['ReviewResponse']
 export type DetectResponse = S['DetectResponse']
 export type ReviewRequest = S['ReviewRequest']
 export type CourseOut = S['CourseOut']
+export type StreamStats = S['StreamStats']
+export type AssignmentStats = S['AssignmentStats']
+export type StreamReviewerRow = S['StreamReviewerRow']
+export type DistributeResult = S['DistributeResult']
 export type StudentAssignment = S['StudentAssignment']
 export type StudentSubmission = S['StudentSubmission']
 export type StudentVerdict = S['StudentVerdict']
@@ -139,6 +143,27 @@ export const backend = {
 
   /* Кабинет студента. Балл приезжает только у утверждённых работ: до этого
      оценки нет — её ставит человек, а не модель. */
+  /* Статистика считается по строкам submissions, а не генератором. */
+  streamStats: (streamId: string) =>
+    request<StreamStats>(`/stats/streams/${encodeURIComponent(streamId)}`),
+  streamReviewers: (streamId: string) =>
+    request<StreamReviewerRow[]>(`/streams/${encodeURIComponent(streamId)}/reviewers`),
+  assignReviewers: (streamId: string, usernames: string[]) =>
+    request<StreamReviewerRow[]>(`/streams/${encodeURIComponent(streamId)}/reviewers`, {
+      method: 'POST',
+      body: JSON.stringify({ usernames }),
+    }),
+  unassignReviewer: (streamId: string, username: string) =>
+    request<void>(
+      `/streams/${encodeURIComponent(streamId)}/reviewers/${encodeURIComponent(username)}`,
+      { method: 'DELETE' },
+    ),
+  distributeStream: (streamId: string) =>
+    request<DistributeResult>(`/streams/${encodeURIComponent(streamId)}/distribute`, {
+      method: 'POST',
+    }),
+  users: () => request<{ username: string; role: string; display_name: string }[]>('/users'),
+
   myAssignments: () => request<StudentAssignment[]>('/me/assignments'),
   mySubmissions: () => request<StudentSubmission[]>('/me/submissions'),
   submitWork: (body: StudentSubmitRequest) =>

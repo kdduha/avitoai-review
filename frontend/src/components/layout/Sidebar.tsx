@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
+import { BarChart3, CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/app/session'
@@ -87,6 +87,10 @@ export function Sidebar() {
         </div>
 
         <Section>Программа</Section>
+        <NavLink to="/streams" className={linkClass}>
+          <BarChart3 size={15} strokeWidth={1.7} className="text-faint" />
+          Потоки
+        </NavLink>
         <NavLink to="/assignments" className={linkClass}>
           <CalendarClock size={15} strokeWidth={1.7} className="text-faint" />
           Задания
