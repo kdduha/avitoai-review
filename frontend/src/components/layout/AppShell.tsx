@@ -1,11 +1,12 @@
 import { Link, Outlet } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { useSession } from '@/app/session'
+import { LoginModal } from './LoginModal'
 import { RoleSwitch } from './RoleSwitch'
 import { Sidebar } from './Sidebar'
 
 export function AppShell() {
-  const { name, role } = useSession()
+  const { name, role, username } = useSession()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -17,11 +18,14 @@ export function AppShell() {
 
         <div className="flex items-center gap-3">
           <RoleSwitch />
+          <LoginModal />
           <div className="flex items-center gap-2 pl-1">
             <Avatar name={name} size={28} />
             <div className="leading-tight">
               <div className="text-[13px] font-medium text-ink">{name}</div>
-              <div className="text-[11.5px] text-faint">{role === 'head' ? 'руководитель программы' : 'куратор'}</div>
+              <div className="text-[11.5px] text-faint">
+                {username} · {role === 'head' ? 'руководитель программы' : 'куратор'}
+              </div>
             </div>
           </div>
         </div>

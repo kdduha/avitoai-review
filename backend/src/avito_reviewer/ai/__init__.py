@@ -6,6 +6,7 @@
 `ai.llm` запрещены архитектурно и проверяются тестом.
 """
 
+from .chat import AgentStep, ChatStep, ProposedPatch, run_chat
 from .compiler import CompilerError, RubricCompiler, RubricDraft
 from .content import ArtifactText, ContentResolver, build_texts, solution_texts
 from .detection import DetectionReport, DetectionService, SignalKind, SignalStatus, Span
@@ -23,7 +24,9 @@ from .service import AIService
 
 __all__ = [
     "AIService",
+    "AgentStep",
     "ArtifactText",
+    "ChatStep",
     "ContentResolver",
     "CompilerError",
     "Criterion",
@@ -33,6 +36,7 @@ __all__ = [
     "Evidence",
     "EvidenceStatus",
     "PrivacyGateway",
+    "ProposedPatch",
     "ReviewDraft",
     "ReviewService",
     "Rubric",
@@ -47,5 +51,6 @@ __all__ = [
     "fake_gateway",
     "gateway_from_config",
     "load_rubric",
+    "run_chat",
     "solution_texts",
 ]

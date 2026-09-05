@@ -2,23 +2,30 @@
 name = "avito-reviewer"
 version = "0.1.0"
 description = "Avito AI Reviewer backend — ingestion, review and AI-detection services"
-readme = "README.md"
 authors = [
     { name = "kdduha", email = "just.andrew.kd@gmail.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [
+    "alembic>=1.19.2",
+    "arq>=0.26",
+    "asyncpg>=0.29",
     "fastapi>=0.141.1",
     "githubkit>=0.16.1",
     "httpx>=0.28",
+    "nbformat>=5.11.1",
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
+    "pyjwt>=2.9",
+    "redis>=5.0",
+    "sqlalchemy[asyncio]>=2.0",
     "unidiff>=1.0.0",
     "uvicorn[standard]>=0.52.4",
 ]
 
 [dependency-groups]
 dev = [
+    "aiosqlite>=0.20",
     "pytest>=8.0",
 ]
 

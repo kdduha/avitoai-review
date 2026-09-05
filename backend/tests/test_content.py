@@ -167,3 +167,70 @@ def test_changed_ranges_are_summarised_for_the_prompt():
     )
     assert text is not None
     assert text.changed_summary() == "1–3, 5"
+
+
+# --------------------------------------------------------------------------- #
+# стриппинг ноутбуков (§5.5 архитектуры)
+# --------------------------------------------------------------------------- #
+
+def _notebook(cells) -> str:
+    import nbformat
+    from nbformat.v4 import new_notebook
+
+    nb = new_notebook()
+    nb.cells = cells
+    return nbformat.writes(nb)
+
+
+def test_code_and_markdown_cells_survive_stripping():
+    from nbformat.v4 import new_code_cell, new_markdown_cell
+
+    raw = _notebook([new_markdown_cell("# Заголовок"), new_code_cell("print(1)")])
+    text = from_artifact(artifact("nb.ipynb", text=raw, lang="jupyter"))
+
+    assert text is not None
+    assert "# Заголовок" in text.text
+    assert "print(1)" in text.text
+
+
+def test_image_output_becomes_a_placeholder_not_base64():
+    from nbformat.v4 import new_code_cell, new_output
+
+    cell = new_code_cell("plot()")
+    cell.outputs = [new_output("display_data", data={"image/png": "QUFBQQ==", "text/plain": "<Figure>"})]
+    raw = _notebook([cell])
+    text = from_artifact(artifact("nb.ipynb", text=raw, lang="jupyter"))
+
+    assert text is not None
+    assert "QUFBQQ==" not in text.text
+    assert "[plot: cell 0]" in text.text
+
+
+def test_long_stream_output_is_truncated():
+    from nbformat.v4 import new_code_cell, new_output
+
+    cell = new_code_cell("for i in range(10000): print(i)")
+    cell.outputs = [new_output("stream", name="stdout", text="x" * 5000)]
+    raw = _notebook([cell])
+    text = from_artifact(artifact("nb.ipynb", text=raw, lang="jupyter"))
+
+    assert text is not None
+    assert "обрезан" in text.text
+    assert len(text.text) < 5000
+
+
+def test_a_file_that_is_not_really_a_notebook_falls_back_to_raw_text():
+    text = from_artifact(artifact("nb.ipynb", text="это не JSON вовсе", lang="jupyter"))
+    assert text is not None
+    assert text.text == "это не JSON вовсе"
+
+
+def test_stripped_notebooks_do_not_claim_stale_changed_ranges():
+    """Номера строк диффа считаны в координатах сырого JSON — после
+    переформатирования текста они уже ни на что не указывают."""
+    from nbformat.v4 import new_code_cell
+
+    raw = _notebook([new_code_cell("print(1)")])
+    text = from_artifact(artifact("nb.ipynb", text=raw, lang="jupyter", changed=[(1, 5)]))
+    assert text is not None
+    assert text.changed_summary() == ""

@@ -299,6 +299,18 @@ class RubricStore:
         log.info("rubrics: saved %s to %s", rubric.assignment_id, path)
         return path
 
+    def delete(self, assignment_id: str) -> None:
+        """Remove a rubric from the catalogue. Submissions already scored against
+        it keep meaning what they meant — `Submission.rubric_snapshot` froze the
+        rubric at scoring time, so deleting the file here does not touch them.
+        """
+        if assignment_id not in self._rubrics:
+            raise KeyError(assignment_id)
+        path = self.directory / f"{assignment_id}.json"
+        path.unlink(missing_ok=True)
+        del self._rubrics[assignment_id]
+        log.info("rubrics: deleted %s", assignment_id)
+
     @property
     def ids(self) -> list[str]:
         return sorted(self._rubrics)

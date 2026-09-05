@@ -44,6 +44,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a seeded login for a JWT
+         * @description Hackathon-variant auth: three accounts seeded at startup, one per role
+         *     (`student` / `reviewer` / `admin`), sharing one password — see
+         *     `AuthConfig.seed_password`. Returns a bearer JWT good for
+         *     `AuthConfig.access_token_ttl_minutes`.
+         *
+         *     ``401`` — unknown username or wrong password.
+         */
+        post: operations["login_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who the bearer token belongs to */
+        get: operations["me_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ingest": {
         parameters: {
             query?: never;
@@ -117,7 +159,15 @@ export interface paths {
         get: operations["get_rubric_rubrics__assignment_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Remove a rubric from the catalogue
+         * @description Submissions already scored against this rubric keep meaning what they
+         *     meant — `Submission.rubric_snapshot` froze it at scoring time — so this
+         *     only takes it out of future `POST /review` calls.
+         *
+         *     ``404`` — no such rubric.
+         */
+        delete: operations["delete_rubric_rubrics__assignment_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -172,8 +222,15 @@ export interface paths {
          *     обязана приложить цитату, которая затем сверяется с текстом файла.
          *     Вердикты без подтверждённой цитаты помечены `needs_human_attention`.
          *
-         *     ``404`` — рубрика не найдена. ``422`` — ссылка или источник неверны.
-         *     ``502`` — источник сдачи не ответил.
+         *     Прогон сохраняется как `Submission` — карточка доступна дальше по
+         *     `submission_id` через `GET /submissions/{id}` и попадает в очередь
+         *     ревьюера (`GET /me/queue`). `with_detection: true` заодно прогоняет
+         *     детектор ГенИИ на тех же `bundle`/`texts`, без второго похода к источнику
+         *     сдачи. `reviewer_username` — только для admin, назначить сдачу не себе.
+         *
+         *     ``403`` — `reviewer_username` указан не администратором.
+         *     ``404`` — рубрика или `reviewer_username` не найдены.
+         *     ``422`` — ссылка или источник неверны. ``502`` — источник сдачи не ответил.
          */
         post: operations["review_review_post"];
         delete?: never;
@@ -198,6 +255,10 @@ export interface paths {
          *     Вывод рекомендательный. Он не является доказательством, на балл не влияет
          *     и содержит явный список того, чего проверка не видела: недоступные сигналы
          *     и файлы, доступные только фрагментом.
+         *
+         *     Разовый прогон, ничего не сохраняет: чтобы отчёт лёг в карточку сдачи и
+         *     был виден через `GET /submissions/{id}/ai-detection`, запросите его вместе
+         *     с ревью — `POST /review` с `with_detection: true`.
          */
         post: operations["detect_detect_post"];
         delete?: never;
@@ -224,6 +285,312 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/me/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The current reviewer's queue
+         * @description Submissions assigned to the caller, deadline-soonest first.
+         *
+         *     An admin may pass ``?all=true`` to see the whole stream instead of just
+         *     their own queue — the dashboard-shaped view the architecture doc puts
+         *     behind `GET /courses/{id}/dashboard`, without inventing the
+         *     course/assignment-engine machinery that endpoint implies.
+         */
+        get: operations["my_queue_me_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Full card of one submission */
+        get: operations["get_submission_submissions__submission_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove a submission
+         * @description Admin only — mainly for cleaning up a bad test run. Cascades to its
+         *     `review_revisions` and `chat_messages`; the GitHub PR itself is untouched,
+         *     only this record of having reviewed it.
+         */
+        delete: operations["delete_submission_submissions__submission_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/artifacts/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One file's text as the model saw it */
+        get: operations["get_artifact_submissions__submission_id__artifacts__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stored review draft */
+        get: operations["get_review_submissions__submission_id__review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Manually override one or more criteria
+         * @description Overwrite score/verdict/feedback on named criteria and recompute the total.
+         *
+         *     The total is never hand-edited directly — only `review/aggregate.py`
+         *     produces it, from whatever the criteria say now. Every patch is logged to
+         *     `review_revisions` with ``author_type=human`` before/after, per the
+         *     architecture's audit requirement (§0, §10).
+         */
+        patch: operations["patch_review_submissions__submission_id__review_patch"];
+        trace?: never;
+    };
+    "/submissions/{submission_id}/review/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve the draft */
+        post: operations["approve_submissions__submission_id__review_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/review/rerun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-queue the review agent over the stored bundle
+         * @description Queue a fresh model pass — the one job that goes through Redis/arq.
+         *
+         *     ``503`` — the queue is unreachable. Run the worker with
+         *     ``uv run arq avito_reviewer.queue.WorkerSettings``.
+         */
+        post: operations["rerun_submissions__submission_id__review_rerun_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/ai-detection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stored AI-detection report */
+        get: operations["get_detection_submissions__submission_id__ai_detection_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/ai-detection/{span_id}/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reviewer confirms or rejects one detection span
+         * @description Advisory only, by design (§7.5): this never touches `score`. It logs a
+         *     reviewer's judgement on one span, which is exactly the labelled data the
+         *     architecture names as the input to future threshold calibration.
+         *
+         *     Allowed after approval on purpose — confirming or rejecting a signal is
+         *     not a review edit (§7.5 again: it cannot change the score), so the "no
+         *     writes to an approved submission" guard that blocks `PATCH .../review`
+         *     does not apply here.
+         */
+        post: operations["set_detection_verdict_submissions__submission_id__ai_detection__span_id__verdict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hand a submission to another reviewer
+         * @description Admin only — the doc's `POST /assignments/{id}/reassign` (§11), scoped
+         *     to one submission rather than an assignment: there is no Assignment
+         *     Engine here to reassign a whole batch by, only rows an admin can move
+         *     one at a time.
+         */
+        post: operations["reassign_submissions__submission_id__reassign_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit/llm-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Raw audit log of every model call
+         * @description Everything `GET /cost` totals, one row per call — route, model, tokens,
+         *     cost, and whether it errored. The prompt itself is never in here (see
+         *     `ai/llm/audit.py`): only its hash is, and that is not returned either.
+         */
+        get: operations["audit_llm_calls_audit_llm_calls_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/submissions/{submission_id}/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stored chat transcript */
+        get: operations["get_chat_submissions__submission_id__chat_get"];
+        put?: never;
+        /**
+         * Ask the model about this submission, streamed over SSE
+         * @description One turn of the tool-using chat from architecture §6.3: `get_file`,
+         *     `get_diff`, `get_criterion`, `search_submission`, `propose_review_patch`.
+         *
+         *     The model never edits the draft — `propose_review_patch` only returns a
+         *     proposal; applying it is `PATCH /submissions/{id}/review`, the same
+         *     endpoint a manual edit uses. Every step (tool calls, their results, the
+         *     final reply) is persisted before it is streamed, so a dropped connection
+         *     never loses the turn — reload `GET .../chat` and it is there.
+         *
+         *     Streaming here means the *transport* is SSE, not that the model's answer
+         *     arrives token by token: the whole turn (all tool calls plus the final
+         *     reply) is computed first, then sent out as a sequence of `data:` events.
+         *     True upstream token streaming is a real future improvement, not something
+         *     this endpoint's contract promises today.
+         */
+        post: operations["chat_submissions__submission_id__chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List every account */
+        get: operations["list_users_users_get"];
+        put?: never;
+        /**
+         * Create an account
+         * @description ``409`` — username already taken.
+         */
+        post: operations["create_user_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One account */
+        get: operations["get_user_users__user_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove an account
+         * @description ``409`` — this account still owns or approved submissions; reassign
+         *     those first (`POST /submissions/{id}/reassign`). Deleting it out from
+         *     under them would turn `reviewer_username` into a name pointing at
+         *     nothing — a card a reviewer can never load again is worse than a delete
+         *     that asks you to clean up first. Also ``409`` if it's the last admin
+         *     (see `_require_another_admin`).
+         */
+        delete: operations["delete_user_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Change role, display name or password
+         * @description ``409`` — this would demote the last admin, leaving nobody able to log
+         *     in as one (see `_require_another_admin`).
+         */
+        patch: operations["update_user_users__user_id__patch"];
         trace?: never;
     };
 }
@@ -315,12 +682,75 @@ export interface components {
             /** Text */
             text: string;
         };
+        /** AuditRecordOut */
+        AuditRecordOut: {
+            /** Request Id */
+            request_id: string;
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string;
+            /** Task */
+            task: string;
+            /** Data Class */
+            data_class: string;
+            /** Route */
+            route: string;
+            /** Redactions */
+            redactions: number;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Cost Rub */
+            cost_rub: number;
+            /** Error */
+            error: string | null;
+            /** At */
+            at: string;
+        };
         /**
          * ChangeStatus
          * @description What happened to an artifact between ``base_ref`` and ``head_ref``.
          * @enum {string}
          */
         ChangeStatus: "added" | "modified" | "removed" | "renamed";
+        /**
+         * ChatMessageOut
+         * @description Один сохранённый шаг транскрипта — то, что отдаёт `GET .../chat`.
+         */
+        ChatMessageOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant" | "tool";
+            /** Content */
+            content: string;
+            /** Tool Name */
+            tool_name?: string | null;
+            proposed_patch?: components["schemas"]["ProposedPatchOut"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ChatRequest */
+        ChatRequest: {
+            /**
+             * Message
+             * @description Реплика ревьюера
+             */
+            message: string;
+        };
         /** CheckOutcome */
         CheckOutcome: {
             /** Check */
@@ -428,6 +858,22 @@ export interface components {
             /** Cost Rub */
             cost_rub: number;
         };
+        /** CreateUserRequest */
+        CreateUserRequest: {
+            /** Username */
+            username: string;
+            /**
+             * Password
+             * @description Хранится только хэшем (PBKDF2), см. app/auth.py
+             */
+            password: string;
+            role: components["schemas"]["Role"];
+            /**
+             * Display Name
+             * @default
+             */
+            display_name: string;
+        };
         /** Criterion */
         Criterion: {
             /** Id */
@@ -469,6 +915,20 @@ export interface components {
              * @default false
              */
             ai_sensitive: boolean;
+        };
+        /**
+         * CriterionPatch
+         * @description One criterion's manual override. Omitted fields keep the model's value.
+         */
+        CriterionPatch: {
+            /** Criterion Id */
+            criterion_id: string;
+            /** Score */
+            score?: number | null;
+            /** Verdict */
+            verdict?: string | null;
+            /** Student Feedback */
+            student_feedback?: string | null;
         };
         /**
          * CriterionSource
@@ -639,6 +1099,14 @@ export interface components {
              */
             readonly mismatch: boolean;
         };
+        /** DetectionVerdictRequest */
+        DetectionVerdictRequest: {
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "confirmed" | "rejected";
+        };
         /**
          * Evidence
          * @description Цитата, на которую опирается вердикт.
@@ -796,6 +1264,42 @@ export interface components {
             /** End */
             end: number;
         };
+        /** LoginRequest */
+        LoginRequest: {
+            /** Username */
+            username: string;
+            /** Password */
+            password: string;
+        };
+        /** MeResponse */
+        MeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string;
+            role: components["schemas"]["Role"];
+            /** Display Name */
+            display_name: string;
+        };
+        /** ProposedPatchOut */
+        ProposedPatchOut: {
+            /** Criterion Id */
+            criterion_id: string;
+            /** Score */
+            score?: number | null;
+            /** Verdict */
+            verdict?: string | null;
+            /** Student Feedback */
+            student_feedback?: string | null;
+        };
+        /** ReassignRequest */
+        ReassignRequest: {
+            /** Reviewer Username */
+            reviewer_username: string;
+        };
         /**
          * RepoContext
          * @description Compact map of the surrounding codebase. ``None`` for non-repository sources.
@@ -822,6 +1326,15 @@ export interface components {
              * @default false
              */
             truncated: boolean;
+        };
+        /** RerunResponse */
+        RerunResponse: {
+            /**
+             * Submission Id
+             * Format: uuid
+             */
+            submission_id: string;
+            status: components["schemas"]["SubmissionStatus"];
         };
         /**
          * ReviewDraft
@@ -902,6 +1415,11 @@ export interface components {
              */
             readonly evidence_coverage: number;
         };
+        /** ReviewPatchRequest */
+        ReviewPatchRequest: {
+            /** Patches */
+            patches: components["schemas"]["CriterionPatch"][];
+        };
         /**
          * ReviewRequest
          * @description Запрос на черновик ревью.
@@ -939,6 +1457,17 @@ export interface components {
              * @description Факты Format Gate: проверены кодом, модель их не пересчитывает
              */
             gate_facts?: string[];
+            /**
+             * With Detection
+             * @description Заодно прогнать детектор ГенИИ на том же bundle/texts — без второго похода к источнику сдачи. Закрывает двойной ingest между /review и /detect, задокументированный как проблема в docs/handover-frontend.md.
+             * @default false
+             */
+            with_detection: boolean;
+            /**
+             * Reviewer Username
+             * @description Назначить сдачу конкретному ревьюеру вместо себя — только для admin.
+             */
+            reviewer_username?: string | null;
         };
         /**
          * ReviewResponse
@@ -952,6 +1481,14 @@ export interface components {
             /** Files */
             files: components["schemas"]["ArtifactTextOut"][];
             draft: components["schemas"]["ReviewDraft"];
+            /** @description Заполнено только при `with_detection: true` */
+            detection?: components["schemas"]["DetectionReport"] | null;
+            /**
+             * Submission Id
+             * Format: uuid
+             * @description Карточка сдачи целиком — GET /submissions/{id}
+             */
+            submission_id: string;
         };
         /**
          * ReviewerVerdict
@@ -985,6 +1522,20 @@ export interface components {
              */
             removed_lines: number;
         };
+        /**
+         * Role
+         * @description RBAC roles: three, not the four in the architecture doc (§2).
+         *
+         *     The doc splits `coordinator` (runs the stream: reassign, rubrics, cost)
+         *     from `admin` (config, integrations). One project, one methodist, no
+         *     separate coordinator headcount yet — `admin` does both jobs until that
+         *     split earns its own account. `student` has no API surface today (per the
+         *     doc: "в MVP не имеет UI") — the value exists so a seeded account and a
+         *     future student-facing token are representable, not because any route
+         *     checks for it yet.
+         * @enum {string}
+         */
+        Role: "student" | "reviewer" | "admin";
         /** Rubric */
         Rubric: {
             /** Assignment Id */
@@ -1219,11 +1770,133 @@ export interface components {
             repo?: components["schemas"]["RepoContext"] | null;
         };
         /**
+         * SubmissionDetail
+         * @description Full card: the same shapes `/review` and `/detect` return, plus workflow state.
+         */
+        SubmissionDetail: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            status: components["schemas"]["SubmissionStatus"];
+            /** Reviewer Username */
+            reviewer_username: string | null;
+            /** Approved By Username */
+            approved_by_username: string | null;
+            /** Approved At */
+            approved_at: string | null;
+            bundle: components["schemas"]["SubmissionBundle"];
+            /** Files */
+            files: components["schemas"]["ArtifactTextOut"][];
+            draft: components["schemas"]["ReviewDraft"];
+            detection: components["schemas"]["DetectionReport"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            rubric: components["schemas"]["Rubric"];
+        };
+        /**
          * SubmissionSource
          * @description The input provider a submission was fetched from. One value per provider.
          * @enum {string}
          */
         SubmissionSource: "github_pr";
+        /**
+         * SubmissionStatus
+         * @description Subset of the architecture's state machine (§10) that the API drives.
+         *
+         *     `received` / `normalized` / `scrubbed` collapse into the single
+         *     synchronous `/review` call — there is no queue on the ingest path to
+         *     pause between them. `analyzing` exists for the one thing that *is*
+         *     queued: `review/rerun`.
+         * @enum {string}
+         */
+        SubmissionStatus: "draft_ready" | "analyzing" | "in_review" | "approved" | "failed";
+        /**
+         * SubmissionSummary
+         * @description One row of a queue: enough to triage without opening the submission.
+         */
+        SubmissionSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Origin Url */
+            origin_url: string;
+            /** Assignment Id */
+            assignment_id: string;
+            status: components["schemas"]["SubmissionStatus"];
+            /** Reviewer Username */
+            reviewer_username: string | null;
+            /** Score */
+            score: number;
+            /** Max Score */
+            max_score: number;
+            /** Passed */
+            passed: boolean;
+            /** Needs Human Attention */
+            needs_human_attention: boolean;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Deadline At */
+            deadline_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** TokenResponse */
+        TokenResponse: {
+            /** Access Token */
+            access_token: string;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+            role: components["schemas"]["Role"];
+            /** Display Name */
+            display_name: string;
+        };
+        /**
+         * UpdateUserRequest
+         * @description Все поля необязательные — правится только то, что указано.
+         */
+        UpdateUserRequest: {
+            role?: components["schemas"]["Role"] | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Password */
+            password?: string | null;
+        };
+        /** UserOut */
+        UserOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string;
+            role: components["schemas"]["Role"];
+            /** Display Name */
+            display_name: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1282,6 +1955,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InitResponse"];
+                };
+            };
+        };
+    };
+    login_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    me_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
                 };
             };
         };
@@ -1391,6 +2117,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Rubric"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_rubric_rubrics__assignment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1518,6 +2273,594 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostSummary"];
+                };
+            };
+        };
+    };
+    my_queue_me_queue_get: {
+        parameters: {
+            query?: {
+                /** @description admin: все сдачи потока, не только свои */
+                all?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_submission_submissions__submission_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_submission_submissions__submission_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_submissions__submission_id__artifacts__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactTextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_review_submissions__submission_id__review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDraft"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_review_submissions__submission_id__review_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewDraft"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_submissions__submission_id__review_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rerun_submissions__submission_id__review_rerun_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RerunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_detection_submissions__submission_id__ai_detection_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectionReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_detection_verdict_submissions__submission_id__ai_detection__span_id__verdict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+                span_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetectionVerdictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectionReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reassign_submissions__submission_id__reassign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    audit_llm_calls_audit_llm_calls_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRecordOut"][];
+                };
+            };
+        };
+    };
+    get_chat_submissions__submission_id__chat_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessageOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_submissions__submission_id__chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_users_users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"][];
+                };
+            };
+        };
+    };
+    create_user_users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_user_users__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_user_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_users__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

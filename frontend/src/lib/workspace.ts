@@ -9,12 +9,16 @@
 
 import type {
   ArtifactText,
-  DetectResponse,
+  CriterionVerdict,
   DetectionReport,
   Evidence,
   GateReport,
+  ReviewDraft,
   ReviewResponse,
   Rubric,
+  SubmissionBundle,
+  SubmissionDetail,
+  SubmissionStatus,
 } from './backend'
 
 export interface WorkspaceFile {
@@ -61,6 +65,12 @@ export interface WorkspaceVerdict {
 
 export interface Workspace {
   id: string
+  /** `null` для демо-прогонов и для офлайн-разбора — им нечего PATCH'ить. */
+  submissionId: string | null
+  /** Сразу после `/review` всегда `draft_ready` — открытая из очереди сдача
+   *  может прийти уже `approved`, и панель должна знать это до первого клика,
+   *  а не узнавать из 409 на `POST .../review/approve`. */
+  status: SubmissionStatus
   live: boolean
   link: string
   prLabel: string
@@ -94,7 +104,7 @@ export interface Workspace {
   detection: DetectionReport | null
 }
 
-function prLabel(url: string): string {
+export function prLabel(url: string): string {
   const match = url.match(/\/pull\/(\d+)/)
   return match ? `PR #${match[1]}` : 'Сдача'
 }
@@ -115,22 +125,9 @@ function toFile(text: ArtifactText, marked: Set<string>): WorkspaceFile {
   }
 }
 
-export function buildWorkspace(
-  id: string,
-  review: ReviewResponse,
-  detect: DetectResponse | null,
-  rubric: Rubric,
-): Workspace {
+function mapVerdicts(verdicts: CriterionVerdict[] | undefined, rubric: Rubric): WorkspaceVerdict[] {
   const criteria = new Map((rubric.criteria ?? []).map((criterion) => [criterion.id, criterion]))
-  const report = detect?.report ?? null
-
-  const marked = new Set<string>()
-  for (const verdict of review.draft.verdicts ?? []) {
-    for (const item of verdict.evidence ?? []) if (item.status === 'valid') marked.add(item.artifact)
-  }
-  for (const span of report?.spans ?? []) marked.add(span.artifact)
-
-  const verdicts: WorkspaceVerdict[] = (review.draft.verdicts ?? []).map((verdict) => {
+  return (verdicts ?? []).map((verdict) => {
     const criterion = criteria.get(verdict.criterion_id)
     return {
       criterionId: verdict.criterion_id,
@@ -151,51 +148,90 @@ export function buildWorkspace(
       edited: false,
     }
   })
+}
 
-  const bundle = review.bundle
+function assemble(
+  id: string,
+  submissionId: string | null,
+  status: SubmissionStatus,
+  bundle: SubmissionBundle,
+  files: ArtifactText[],
+  draft: ReviewDraft,
+  detection: DetectionReport | null,
+  rubric: Rubric,
+): Workspace {
+  const marked = new Set<string>()
+  for (const verdict of draft.verdicts ?? []) {
+    for (const item of verdict.evidence ?? []) if (item.status === 'valid') marked.add(item.artifact)
+  }
+  for (const span of detection?.spans ?? []) marked.add(span.artifact)
 
   return {
     id,
+    submissionId,
+    status,
     live: true,
     link: bundle.origin_url,
     prLabel: prLabel(bundle.origin_url),
-    assignmentTitle: review.draft.rubric_title || rubric.title,
+    assignmentTitle: draft.rubric_title || rubric.title,
     course: rubric.course,
     studentLabel: bundle.student_ref.internal_id,
     submittedAt: bundle.submitted_at,
     deadlineAt: bundle.deadline_at ?? null,
-    files: review.files.map((text) => toFile(text, marked)),
-    verdicts,
-    gate: review.draft.gate ?? null,
-    rawScore: review.draft.raw_score ?? 0,
-    score: review.draft.score ?? 0,
-    maxScore: review.draft.max_score ?? 0,
+    files: files.map((text) => toFile(text, marked)),
+    verdicts: mapVerdicts(draft.verdicts, rubric),
+    gate: draft.gate ?? null,
+    rawScore: draft.raw_score ?? 0,
+    score: draft.score ?? 0,
+    maxScore: draft.max_score ?? 0,
     scoreStep: rubric.scale?.step || 1,
-    passed: review.draft.passed ?? false,
-    passExplanation: review.draft.pass_explanation ?? '',
-    lateExplanation: review.draft.late_explanation ?? '',
-    needsHumanAttention: review.draft.needs_human_attention ?? false,
-    attentionReasons: review.draft.attention_reasons ?? [],
+    passed: draft.passed ?? false,
+    passExplanation: draft.pass_explanation ?? '',
+    lateExplanation: draft.late_explanation ?? '',
+    needsHumanAttention: draft.needs_human_attention ?? false,
+    attentionReasons: draft.attention_reasons ?? [],
     edited: false,
     detectionError: null,
-    partialArtifacts: review.draft.partial_artifacts ?? [],
-    evidenceCoverage: review.draft.evidence_coverage ?? 0,
-    tokensIn: (review.draft.tokens_in ?? 0) + (report?.tokens_in ?? 0),
-    tokensOut: (review.draft.tokens_out ?? 0) + (report?.tokens_out ?? 0),
-    costRub: (review.draft.cost_rub ?? 0) + (report?.cost_rub ?? 0),
-    detection: report,
+    partialArtifacts: draft.partial_artifacts ?? [],
+    evidenceCoverage: draft.evidence_coverage ?? 0,
+    tokensIn: (draft.tokens_in ?? 0) + (detection?.tokens_in ?? 0),
+    tokensOut: (draft.tokens_out ?? 0) + (detection?.tokens_out ?? 0),
+    costRub: (draft.cost_rub ?? 0) + (detection?.cost_rub ?? 0),
+    detection,
   }
 }
 
-/** Правка балла куратором.
+export function buildWorkspace(
+  id: string,
+  review: ReviewResponse,
+  detection: DetectionReport | null,
+  rubric: Rubric,
+): Workspace {
+  return assemble(id, review.submission_id ?? null, 'draft_ready', review.bundle, review.files, review.draft, detection, rubric)
+}
+
+/** Открытие сдачи из очереди/списка — `GET /submissions/{id}` вместо ответа
+ *  `/review`, которого для неё никто не звал в этой вкладке. Рубрику берём из
+ *  `detail.rubric` (снимок на момент разбора), а не из каталога: если методист
+ *  успел поправить JSON, старые сдачи не должны молча пересчитаться по другим
+ *  весам. */
+export function buildWorkspaceFromDetail(detail: SubmissionDetail): Workspace {
+  return assemble(
+    detail.id, detail.id, detail.status, detail.bundle, detail.files, detail.draft, detail.detection, detail.rubric,
+  )
+}
+
+/** Правка балла без сервера — только для демо- и офлайн-прогонов
+ *  (`submissionId === null`, PATCH'ить нечего).
  *
- *  Итог сознательно не пересчитывается: порядок операций у агрегатора не
- *  сводится к сумме — есть веса, шаг шкалы, обязательные минимумы и штраф за
- *  просрочку, причём два последних могут обнулить работу целиком. Досчитать
- *  это на фронте значит показать правдоподобное, но неверное число рядом с
- *  объяснением сервера, которое ему противоречит. Поэтому здесь только сумма
- *  по критериям и пометка `edited`: панель показывает её как предварительную и
- *  не выносит вердикт о зачёте, пока не появится `PATCH /review`.
+ *  Итог здесь не пересчитывается по-настоящему: порядок операций у
+ *  агрегатора не сводится к сумме — есть веса, шаг шкалы, обязательные
+ *  минимумы и штраф за просрочку, причём два последних могут обнулить работу
+ *  целиком. Досчитать это на фронте значит показать правдоподобное, но
+ *  неверное число рядом с объяснением сервера, которое ему противоречит.
+ *  Поэтому здесь только сумма по критериям и пометка `edited` — панель
+ *  показывает её как предварительную. Живой прогон использует
+ *  `withPatchedDraft`: тот берёт пересчитанный итог с сервера.
  */
 export function withScore(workspace: Workspace, criterionId: string, score: number): Workspace {
   const verdicts = workspace.verdicts.map((verdict) =>
@@ -208,4 +244,46 @@ export function withScore(workspace: Workspace, criterionId: string, score: numb
     edited: true,
     rawScore: verdicts.reduce((sum, verdict) => sum + verdict.score * verdict.weight, 0),
   }
+}
+
+/** Правка балла на живом прогоне: сервер уже пересчитал итог
+ *  (`PATCH /submissions/{id}/review`) — здесь только слияние его ответа с уже
+ *  собранным видом. Рубрика не нужна: название, максимум, вес, проверочные
+ *  пункты и обязательный минимум критерия патч не меняет, обновляются только
+ *  счёт, вердикт и вытекающие из них поля — их и берём из ответа сервера. */
+export function withPatchedDraft(workspace: Workspace, draft: ReviewDraft): Workspace {
+  const byId = new Map((draft.verdicts ?? []).map((verdict) => [verdict.criterion_id, verdict]))
+
+  return {
+    ...workspace,
+    verdicts: workspace.verdicts.map((verdict) => {
+      const patched = byId.get(verdict.criterionId)
+      if (!patched) return verdict
+      return {
+        ...verdict,
+        score: patched.score,
+        confidence: patched.confidence ?? verdict.confidence,
+        verdict: patched.verdict,
+        studentFeedback: patched.student_feedback ?? verdict.studentFeedback,
+        improvementHint: patched.improvement_hint ?? verdict.improvementHint,
+        needsHumanAttention: patched.needs_human_attention ?? false,
+        attentionReason: patched.attention_reason ?? '',
+        edited: false,
+      }
+    }),
+    rawScore: draft.raw_score ?? 0,
+    score: draft.score ?? 0,
+    passed: draft.passed ?? false,
+    passExplanation: draft.pass_explanation ?? '',
+    lateExplanation: draft.late_explanation ?? '',
+    needsHumanAttention: draft.needs_human_attention ?? false,
+    attentionReasons: draft.attention_reasons ?? [],
+    edited: false,
+  }
+}
+
+/** Вердикт ревьюера по спану ГенИИ, пришедший с сервера (advisory — на балл
+ *  не влияет, только помечает спан подтверждённым/отклонённым). */
+export function withDetectionReport(workspace: Workspace, detection: DetectionReport): Workspace {
+  return { ...workspace, detection }
 }

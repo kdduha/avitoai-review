@@ -19,6 +19,22 @@
 Рядом — Rubric Compiler: условие задания → черновик рубрики → подтверждение
 методистом → рубрика вступает в силу.
 
+Поверх конвейера — то, что раньше было в TODO целиком:
+
+```
+POST /auth/login → JWT      RBAC: student < reviewer < admin
+        │
+POST /review [with_detection?] → Submission (Postgres): очередь ревьюера,
+        │                          карточка, правка балла с авторством,
+        │                          утверждение, переназначение
+        ▼
+POST .../review/rerun → Redis/arq → worker: та же логика ai.review(),
+                          без повторного похода за PR
+        │
+POST .../chat → SSE: итеративный разбор с моделью (§6.3), тулы read-only +
+                          propose_review_patch — применяет ревьюер сам
+```
+
 Замеры на живой модели (`deepseek-v4-flash`, записанные сдачи из
 `backend/scripts/fixtures/`):
 
@@ -28,7 +44,8 @@
 | System design, текст | 4.5/6 | 9 из 9 | 0.69 ₽ |
 | Компиляция рубрики (`gpt-5.6-luna-pro`) | — | 100% критериев | ~2 ₽ один раз на задание |
 
-287 тестов, `uv run pytest` из `backend/`.
+365 тестов, `uv run pytest` из `backend/` — на SQLite (`aiosqlite`), Postgres не
+нужен: `conftest.py` подставляет файловый `DB_DSN` на каждый прогон.
 
 ## Запуск
 
@@ -38,8 +55,12 @@ uv sync --group dev
 uv run pytest                                          # тесты, ключи не нужны
 uv run uvicorn avito_reviewer.app.main:app --reload     # http://localhost:8000/docs
 
-docker compose up --build                               # из корня репозитория
+docker compose up --build          # из корня: postgres, redis, backend, worker
 ```
+
+Без docker-compose локально нужен свой Postgres (`DB_DSN`) и, для
+`review/rerun`, Redis (`QUEUE_REDIS_DSN`) — воркер отдельным процессом:
+`uv run arq avito_reviewer.queue.WorkerSettings`.
 
 Без ключей поднимается провайдер `fake`: конвейер проходится целиком, но
 заглушке нечего ответить, и черновик приходит с пометкой «оценить вручную».
@@ -65,6 +86,11 @@ AI_LLM__API_KEY=...
 AI_LLM__TASK_MODELS={"compile": "gpt-5.6-luna-pro"}   # матрица роутинга, §8.3
 AI_LLM__FORCE_LOCAL=false                 # аварийный тумблер: наружу не ходим
 AI_RUBRICS_DIR=rubrics
+
+DB_DSN=postgresql+asyncpg://avito:avito@localhost:5432/avito_reviewer
+QUEUE_REDIS_DSN=redis://localhost:6379/0  # нужен только для review/rerun
+AUTH_JWT_SECRET=...                       # обязательно сменить в проде
+AUTH_SEED_PASSWORD=avito2026              # один пароль на все 3 сеяных логина
 ```
 
 **Почему матрица, а не одна модель.** Задачи разные по цене ошибки. Ревью идёт
@@ -76,19 +102,38 @@ AI_RUBRICS_DIR=rubrics
 
 ## Ручки
 
-| Ручка | Что делает |
-|---|---|
-| `GET /health`, `GET /init` | живость и состав бутстрапа |
-| `POST /ingest` | ссылка → `SubmissionBundle` |
-| `POST /review` | сдача + рубрика → черновик с проверенными цитатами |
-| `POST /detect` | сдача → рекомендательный отчёт о признаках ГенИИ |
-| `GET /rubrics`, `GET /rubrics/{id}` | каталог рубрик |
-| `POST /rubrics/compile` | условие → черновик рубрики (ничего не сохраняет) |
-| `POST /rubrics` | подтверждение методистом: рубрика вступает в силу |
-| `GET /cost` | журнал шлюза: вызовы, токены, рубли |
+Всё, кроме `/health`, `/init` и `/auth/login`, требует `Authorization: Bearer
+<token>`; RBAC — `student < reviewer < admin`, отмечено ролью-минимумом. Роли
+«куратор»/«методист» из архитектуры слиты в `admin`.
 
-`/review` и `/detect` сами тянут сдачу по ссылке и отдают `bundle` вместе с
-результатом: базы ещё нет, поэтому каждый прогон — свежий ingest.
+| Ручка | Роль | Что делает |
+|---|---|---|
+| `GET /health`, `GET /init` | — | живость и состав бутстрапа |
+| `POST /auth/login`, `GET /me` | — / любая | сеяный логин → JWT; кто владеет токеном |
+| `GET /users`, `POST /users` | admin | список аккаунтов; завести новый |
+| `GET/PATCH/DELETE /users/{id}` | admin | карточка, правка роли/пароля, удаление (`409` — за пользователем ещё числятся сдачи) |
+| `POST /ingest` | reviewer | ссылка → `SubmissionBundle` |
+| `POST /review` | reviewer | сдача + рубрика → черновик, **сохраняет `Submission`**; `with_detection` — заодно детектор на тех же bundle/texts |
+| `POST /detect` | reviewer | сдача → рекомендательный отчёт о признаках ГенИИ; ничего не сохраняет |
+| `GET /rubrics`, `GET /rubrics/{id}` | reviewer | каталог рубрик |
+| `POST /rubrics/compile`, `POST /rubrics` | admin | условие → черновик → подтверждение |
+| `DELETE /rubrics/{id}` | admin | снять рубрику из каталога |
+| `GET /cost`, `GET /audit/llm-calls` | admin | журнал шлюза: сводка / построчно |
+| `GET /me/queue` | reviewer | своя очередь; `?all=true` — весь поток (admin) |
+| `GET /submissions/{id}`, `.../artifacts/{path}` | reviewer* | карточка сдачи, текст файла |
+| `GET/PATCH /submissions/{id}/review` | reviewer* | черновик; правка балла/вердикта с пересчётом и авторством |
+| `POST .../review/approve` | reviewer* | утвердить (`409` — уже утверждена) |
+| `POST .../review/rerun` | reviewer* | в очередь на Redis/arq (`503` — очередь недоступна) |
+| `GET .../ai-detection`, `POST .../{span_id}/verdict` | reviewer* | отчёт детектора; подтвердить/отклонить спан (advisory — работает и после утверждения) |
+| `GET/POST /submissions/{id}/chat` | reviewer* | история разговора с моделью; ход — SSE (§6.3) |
+| `POST /submissions/{id}/reassign` | admin | передать сдачу другому ревьюеру |
+| `DELETE /submissions/{id}` | admin | удалить сдачу (каскад — ревизии, чат) |
+
+\* reviewer — только свои сдачи (404, не 403, на чужие); admin — все.
+
+`/review` и `/detect` сами тянут сдачу по ссылке. `review/rerun` — исключение
+из «каждый прогон свежий ingest»: он переиспользует `Submission.bundle`, уже
+сохранённый первым `/review`, и к источнику не ходит вовсе.
 
 ## Решения, которые не надо пересматривать наугад
 
@@ -111,6 +156,12 @@ AI_RUBRICS_DIR=rubrics
 **Рубрика проверяется кодом перед принятием.** Недостижимый порог зачёта,
 минимум выше максимума критерия, повторяющиеся идентификаторы — всё это ломает
 подсчёт не на одной работе, а на каждой до конца курса.
+
+**Сдача помнит свою рубрику, а не ссылку на каталог.** `Submission.rubric_snapshot`
+— полный `Rubric` на момент разбора. Правка балла (`PATCH .../review`) и повтор
+(`review/rerun`) считают против него, а не против `rubrics/<id>.json` заново:
+если методист поправит файл после того, как по нему уже прошли работы,
+выставленные баллы не должны молча пересчитаться по другим весам и порогам.
 
 ## Грабли, на которые уже наступали
 
@@ -142,6 +193,69 @@ AI_RUBRICS_DIR=rubrics
 **`~/.zshrc` не читается неинтерактивной оболочкой.** Если ключ живёт там,
 скриптам нужен явный `source ~/.zshrc`.
 
+**Мутация JSON-колонки на месте не сохраняется без `flag_modified`.** `PATCH
+/submissions/{id}/review` брал `submission.draft`, правил вложенный `dict` по
+месту и переприсваивал его в тот же атрибут — SQLAlchemy сравнивает новое
+значение со старым по той же ссылке, видит «то же самое» и тихо не кладёт
+колонку в `UPDATE`. На SQLite тест зелёный, на Postgres в docker-compose —
+правка исчезает после перезагрузки карточки. Лечится `flag_modified(obj,
+"draft")` из `sqlalchemy.orm.attributes` сразу после присваивания; альтернатива
+не по месту — собирать честно новый `dict`, а не мутировать вложенные списки.
+Тест обязан перечитывать через отдельный `GET`, а не проверять ответ той же
+ручки — только так он ловит именно эту ошибку.
+
+**Postgres не примет tz-aware `datetime` в `TIMESTAMP WITHOUT TIME ZONE`.**
+`SubmissionBundle.submitted_at` приходит от GitHub с `tzinfo`; колонка без
+`DateTime(timezone=True)` — naive, и asyncpg падает на первой же настоящей
+работе. На SQLite ошибки нет вовсе (типы не проверяются), поэтому это не
+всплыло в тестах — только в живом прогоне через `docker compose`. Все
+datetime-колонки `db/models.py` объявлены как `DateTime(timezone=True)` именно
+поэтому.
+
+**`arq.WorkerSettings.redis_settings` должен быть значением, не методом.**
+`arq` читает `__dict__` класса настроек напрямую и ждёт готовый
+`RedisSettings`; `@staticmethod`, возвращающий его, падает `AttributeError`
+при старте воркера — атрибут остаётся объектом дескриптора, а не результатом
+вызова. Присваивайте `redis_settings = RedisSettings.from_dsn(...)` на уровне
+тела класса.
+
+**`redis.exceptions.ConnectionError` не наследуется от builtin `ConnectionError`.**
+`except (ConnectionError, OSError)` вокруг `arq.create_pool` не ловит отказ
+Redis вовсе — нужен `redis.exceptions.RedisError`. Проверено падением: `arq`
+без `retry=0`/`conn_retries=0` на недоступном Redis ещё и виснет секунд на
+пять на дефолтных повторах клиента, прежде чем поднять исключение — ручке,
+которая должна быстро вернуть `503`, нужен свой `RedisSettings(conn_retries=0)`.
+
+**`User.role` — колонка `String`, а не SQLAlchemy `Enum`.** Значение,
+загруженное из базы (`session.get(User, id)`), приходит как обычная `str`, а
+не как `Role`: `user.role is Role.ADMIN` после такой загрузки всегда `False`,
+даже если роль ровно `admin`. Работающий по кодовой базе идиом —
+`Role(user.role) is Role.ADMIN`: конструктор `StrEnum` возвращает канонический
+член, и `is` после явного приведения снова надёжен. Свежесозданный в этом же
+запросе объект (`User(role=body.role)`) этой ловушки не несёт — `body.role` уже
+`Role` из Pydantic-схемы. Поймано на живом стенде: `_require_another_admin`
+(см. ниже) с сырым `user.role is not Role.ADMIN` тихо не срабатывала и
+позволила удалить последний `admin`-аккаунт.
+
+**Можно удалить или разжаловать последнего `admin`.** Сидинг (`seed_users`)
+заполняет только пустую таблицу `users` — если хотя бы один аккаунт остался,
+рестарт контейнера не восстановит удалённый `admin`. `DELETE /users/{id}` и
+`PATCH .../role` теперь проверяют это через `_require_another_admin`
+(`app/routers/users.py`) и возвращают `409`, если это последний admin в
+таблице. Восстановление после того, как это всё же произошло, — только прямой
+INSERT в БД (см. `docs/happy-path.md`, сценарий 7, как воспроизвести
+безопасно — на втором заведённом admin, не на единственном).
+
+**Advisory-сигнал не должен уметь топить основной ответ.** Первая версия
+`with_detection` звала `ai.detect()` без `try/except`: если детектор падал
+(модель ответила не по схеме, сеть легла), исключение улетало наружу и
+`/review` целиком возвращал 500 — вместе с уже честно посчитанным черновиком
+ревью. Отказ необязательного сигнала не повод терять обязательный результат;
+детектор обёрнут в `try/except Exception`, при отказе `detection` просто
+`None`. Проверено тестом, который подменяет `AIService.detect` на функцию,
+бросающую `RuntimeError`, и убеждается, что `/review` всё равно 200 со
+скором > 0.
+
 ## Чего нет
 
 - Format Gate знает только git-канал: шрифт, число страниц и история ревизий
@@ -152,24 +266,36 @@ AI_RUBRICS_DIR=rubrics
 - NER на локальной модели поверх регулярок скраба: `TaskKind.NER` уже заперт в
   локальный маршрут, самой модели нет. Имя без отчества и без маркера авторства
   остаётся риском, и `residual_risk` о нём сообщает.
-- Ни базы, ни очереди: каждый прогон — свежий ingest, рубрики лежат файлами.
-- Assignment Engine, экспорт в Sheets, чат ревьюера с моделью.
+- Рубрики по-прежнему лежат файлами, не в БД — добавить курс значит положить
+  JSON рядом, менять это не планируется без реальной необходимости в редакторе.
+- Assignment Engine (и всё, что от него зависит: дашборд координатора,
+  автораспределение, курсы/назначения как сущности API), экспорт в Sheets,
+  комментарий в PR через GitHub API.
+- Классификатор артефактов (`solution`/`evidence`/`tooling`/`noise`), парсеры
+  docx/xlsx/pdf, GitHub webhook (сейчас только явный `POST /review` по ссылке).
 
 ## Где что лежит
 
 ```
 backend/src/avito_reviewer/
-  config.py              все настройки, читаются из окружения
+  config.py              AppConfig — единая точка сборки настроек, читаются из окружения
+  queue.py               review/rerun: arq-задача + WorkerSettings; тоже прогоняет миграции
+  db/                    users, submissions, review_revisions, chat_messages — SQLAlchemy 2 (async)
+    migrate.py           run_migrations(): alembic upgrade head, вызывается в lifespan
   ingest/                ссылка → SubmissionBundle; резолвер content_ref
   ai/
-    content.py           тексты артефактов и флаг partial
+    content.py           тексты артефактов, флаг partial, стриппинг ноутбуков
     rubric.py            схема рубрики, проверка, каталог
     compiler.py          условие → черновик рубрики
     gate.py              формальные проверки без токенов
+    chat.py              ReAct-цикл чата ревьюера с моделью (§6.3)
     llm/                 PrivacyGateway — единственный выход к моделям
     review/              промпт, валидатор цитат, агрегатор
     detection/           ансамбль сигналов ГенИИ
   app/                   HTTP-слой
+    auth.py              JWT + RBAC: seed_users, get_current_user, require_role
+    routers/             base, auth, ingest, review, submissions, users
+backend/migrations/       Alembic (async шаблон), env.py берёт DSN из DatabaseConfig
 backend/rubrics/         рубрики как данные: добавить курс = добавить JSON
 backend/scripts/fixtures/  записанные сдачи и условия для прогонов без сети
 ```

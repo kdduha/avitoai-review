@@ -46,6 +46,18 @@ class ReviewRequest(SubmissionRequest):
         default_factory=list,
         description="Факты Format Gate: проверены кодом, модель их не пересчитывает",
     )
+    with_detection: bool = Field(
+        default=False,
+        description=(
+            "Заодно прогнать детектор ГенИИ на том же bundle/texts — без второго "
+            "похода к источнику сдачи. Закрывает двойной ingest между /review и "
+            "/detect, задокументированный как проблема в docs/handover-frontend.md."
+        ),
+    )
+    reviewer_username: str | None = Field(
+        default=None,
+        description="Назначить сдачу конкретному ревьюеру вместо себя — только для admin.",
+    )
 
     @model_validator(mode="after")
     def _one_rubric(self) -> ReviewRequest:
@@ -109,6 +121,10 @@ class ReviewResponse(BaseModel):
     bundle: SubmissionBundle
     files: list[ArtifactTextOut]
     draft: ReviewDraft
+    detection: DetectionReport | None = Field(
+        default=None, description="Заполнено только при `with_detection: true`"
+    )
+    submission_id: UUID = Field(description="Карточка сдачи целиком — GET /submissions/{id}")
 
 
 class DetectResponse(BaseModel):

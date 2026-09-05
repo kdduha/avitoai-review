@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 import json
+from uuid import uuid4
 
 import pytest
+from conftest import as_role
 from factories import GO_MAIN, artifact, go_bundle, go_rubric, partial_artifact
 from fastapi.testclient import TestClient
 
@@ -58,7 +60,11 @@ class StubIngest:
         self.calls += 1
         if self.error:
             raise self.error
-        return self.bundle
+        # Настоящий провайдер выдаёт новый `submission_id` на каждый ingest —
+        # это не производное от содержимого PR, а метка одного прогона.
+        # Двойник обязан вести себя так же: иначе повторный /review на одном
+        # и том же стабе бьётся о уникальность первичного ключа `submissions`.
+        return self.bundle.model_copy(update={"submission_id": uuid4()})
 
     async def fetch_content(self, content_ref):
         return None
@@ -73,7 +79,7 @@ class StubIngest:
 
 @pytest.fixture
 def make_client(tmp_path):
-    def build(*, ingest=None, responses=None, rubrics=True, writable=False):
+    def build(*, ingest=None, responses=None, rubrics=True, writable=False, role="admin"):
         app = create_app()
         client = TestClient(app)
         client.__enter__()
@@ -85,6 +91,11 @@ def make_client(tmp_path):
         if writable:
             # Каталог на запись: подтверждение рубрики не должно трогать рабочий.
             app.state.rubrics = RubricStore(tmp_path)
+        if role is not None:
+            # `admin` по умолчанию: у него есть доступ и к тому, что видит
+            # ревьюер, и к тому, что видит только admin (рубрики, /cost) —
+            # большинству тестов ниже нужен не конкретный уровень, а «пропустят».
+            as_role(client, role)
         return client, provider
 
     return build
@@ -177,6 +188,46 @@ def test_partial_files_are_visible_in_the_response(make_client):
 
 
 # --------------------------------------------------------------------------- #
+# with_detection — один ingest на review и детектор
+# --------------------------------------------------------------------------- #
+
+def test_with_detection_runs_the_detector_off_the_same_ingest(make_client):
+    ingest = StubIngest()
+    client, _ = make_client(ingest=ingest, responses=[VERDICTS, '{"findings": []}'])
+    body = client.post(
+        "/review", json={"link": LINK, "rubric_id": "go-task1", "with_detection": True}
+    ).json()
+
+    assert body["detection"] is not None
+    assert body["detection"]["advisory"] is True
+    assert ingest.calls == 1, "второй поход к источнику сдачи не нужен — bundle уже есть"
+
+
+def test_with_detection_false_by_default_leaves_detection_empty(make_client):
+    client, _ = make_client()
+    body = client.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).json()
+    assert body["detection"] is None
+
+
+def test_a_failing_detector_does_not_lose_the_review_draft(make_client):
+    """Advisory-сигнал необязателен: его отказ не должен стоить уже посчитанного черновика."""
+    client, _ = make_client()
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("детектор упал")
+
+    client.app.state.ai.detect = _raise
+
+    response = client.post(
+        "/review", json={"link": LINK, "rubric_id": "go-task1", "with_detection": True}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["draft"]["score"] > 0
+    assert body["detection"] is None
+
+
+# --------------------------------------------------------------------------- #
 # детектор
 # --------------------------------------------------------------------------- #
 
@@ -236,6 +287,7 @@ def test_the_app_produces_a_draft_on_its_default_config():
     app = create_app()
     with TestClient(app) as client:
         app.state.ingest = StubIngest()
+        as_role(client, "admin")
         body = client.post("/review", json={"link": LINK, "rubric_id": "go-task1"}).json()
         cost = client.get("/cost").json()
 
@@ -447,3 +499,26 @@ def test_compile_then_confirm_is_one_road(make_client):
     assert "Подтверждено: методист" in note
     # Метка черновика снята: рубрика не может ждать подтверждения и быть подтверждённой.
     assert "Подлежит подтверждению" not in note
+
+
+# --------------------------------------------------------------------------- #
+# удаление рубрики
+# --------------------------------------------------------------------------- #
+
+def test_delete_rubric_requires_admin(make_client):
+    client, _ = make_client(writable=True, role="reviewer")
+    assert client.delete("/rubrics/go-task1").status_code == 403
+
+
+def test_delete_removes_it_from_the_catalogue(make_client):
+    client, _ = make_client(writable=True)
+    client.post("/rubrics", json={"rubric": CONFIRMED, "confirmed_by": "методист"})
+    assert client.get("/rubrics/lab1").status_code == 200
+
+    assert client.delete("/rubrics/lab1").status_code == 204
+    assert client.get("/rubrics/lab1").status_code == 404
+
+
+def test_delete_unknown_rubric_is_404(make_client):
+    client, _ = make_client(writable=True)
+    assert client.delete("/rubrics/нет-такой").status_code == 404

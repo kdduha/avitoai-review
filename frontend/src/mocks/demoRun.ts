@@ -52,6 +52,7 @@ const BUNDLE: SubmissionBundle = {
 } as unknown as SubmissionBundle
 
 export const DEMO_REVIEW: ReviewResponse = {
+  submission_id: 'demo-run',
   bundle: BUNDLE,
   files: DEMO_FILES.map((file) => ({
     path: file.path,

@@ -10,7 +10,17 @@ import { StudentPage } from '@/features/students/StudentPage'
 import { useSession } from './session'
 
 export function App() {
-  const { role } = useSession()
+  const { role, authReady } = useSession()
+
+  if (!authReady) {
+    // Вход в один из сеяных бэкенд-аккаунтов занимает один быстрый запрос —
+    // рендерить экраны раньше него значит поймать 401 на первом же useQuery.
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <span className="text-[13px] text-faint">Выполняется вход…</span>
+      </div>
+    )
+  }
 
   return (
     <Routes>

@@ -1,51 +1,71 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, Play } from 'lucide-react'
-import { api } from '@/lib/api'
-import { demoRunForCourse } from '@/lib/runs'
-import { plural } from '@/lib/format'
+import { AlertTriangle, ArrowRight, CircleAlert, Play } from 'lucide-react'
+import { ApiError, backend, type SubmissionStatus } from '@/lib/backend'
+import { prLabel } from '@/lib/workspace'
+import { formatDateTime, plural } from '@/lib/format'
 import { useSession } from '@/app/session'
-import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { MockNotice } from '@/components/ui/MockNotice'
+
+const STATUS_LABEL: Record<SubmissionStatus, string> = {
+  draft_ready: 'черновик готов',
+  analyzing: 'считается заново',
+  in_review: 'на проверке',
+  approved: 'утверждена',
+  failed: 'сбой разбора',
+}
+
+const STATUS_TONE: Record<SubmissionStatus, 'neutral' | 'good' | 'warn' | 'critical' | 'mark'> = {
+  draft_ready: 'mark',
+  analyzing: 'neutral',
+  in_review: 'neutral',
+  approved: 'good',
+  failed: 'critical',
+}
 
 export function QueuePage() {
-  const { curatorId } = useSession()
+  const { role } = useSession()
+  const seeAll = role === 'head'
 
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: api.me })
-  const { data: assignments = [] } = useQuery({ queryKey: ['assignments'], queryFn: () => api.assignments() })
-
-  const streamIds = me?.streamIds ?? []
-  const { data: students = [] } = useQuery({
-    queryKey: ['students', streamIds],
-    queryFn: async () => (await Promise.all(streamIds.map((id) => api.students(id)))).flat(),
-    enabled: streamIds.length > 0,
+  const queue = useQuery({
+    queryKey: ['queue', seeAll],
+    queryFn: () => backend.myQueue(seeAll),
+    retry: false,
   })
-  const { data: grades = [] } = useQuery({
-    queryKey: ['grades', streamIds],
-    queryFn: async () => (await Promise.all(streamIds.map((id) => api.grades(id)))).flat(),
-    enabled: streamIds.length > 0,
-  })
+  const rubrics = useQuery({ queryKey: ['rubrics'], queryFn: backend.rubrics, retry: false })
 
-  const mine = new Set(students.filter((student) => student.curatorId === curatorId).map((s) => s.id))
-  const queue = grades
-    .filter((grade) => mine.has(grade.studentId))
-    .filter((grade) => grade.status === 'draft_ready' || grade.status === 'in_review')
-    .map((grade) => ({
-      grade,
-      assignment: assignments.find((item) => item.id === grade.assignmentId),
-    }))
-    .filter((row) => Boolean(demoRunForCourse(row.assignment?.courseId)))
-    .slice(0, 6)
+  const rubricById = new Map((rubrics.data ?? []).map((item) => [item.assignment_id, item]))
+
+  if (queue.isError) {
+    return (
+      <div className="mx-auto max-w-[720px] px-6 py-7">
+        <div className="flex items-start gap-2.5 rounded-card border border-[#f0d3d3] bg-critical-wash px-4 py-3">
+          <CircleAlert size={15} strokeWidth={1.8} className="mt-0.5 shrink-0 text-critical" />
+          <div>
+            <div className="text-[13px] font-medium text-critical-ink">Очередь не загрузилась</div>
+            <p className="mt-1 max-w-[60ch] text-[12.5px] leading-[1.55] text-ink-soft">
+              {queue.error instanceof ApiError ? queue.error.message : 'Бэкенд недоступен'}
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const rows = queue.data ?? []
 
   return (
     <div className="mx-auto max-w-[880px] px-6 py-7">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Мои проверки</h1>
+          <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">
+            {seeAll ? 'Все проверки' : 'Мои проверки'}
+          </h1>
           <p className="mt-1 text-[13.5px] text-muted">
-            {queue.length} {plural(queue.length, 'работа', 'работы', 'работ')} с готовым черновиком.
+            {queue.isLoading
+              ? 'Загружаю…'
+              : `${rows.length} ${plural(rows.length, 'сдача', 'сдачи', 'сдач')}${seeAll ? ' по всему потоку' : ''}.`}
           </p>
         </div>
         <Link to="/check">
@@ -55,37 +75,47 @@ export function QueuePage() {
         </Link>
       </div>
 
-      <div className="mt-5">
-        <MockNotice>
-          Очередь синтетическая: у бэкенда нет хранилища сдач, он работает от ссылки на pull request.
-          В ней только программы, для которых есть рубрика, и карточка открывает демонстрационный
-          разбор этой программы. Настоящий разбор запускается кнопкой «Проверить работу».
-        </MockNotice>
-      </div>
-
-      <div className="space-y-2">
-        {queue.map(({ grade, assignment }) => {
-          const student = students.find((item) => item.id === grade.studentId)
+      <div className="mt-5 space-y-2">
+        {rows.map((submission) => {
+          const rubric = rubricById.get(submission.assignment_id)
           return (
             <Link
-              key={`${grade.studentId}-${grade.assignmentId}`}
-              to={`/review/${demoRunForCourse(assignment?.courseId)}`}
+              key={submission.id}
+              to={`/review/${submission.id}`}
               className="group flex items-center gap-4 rounded-card border border-line bg-surface px-4 py-3.5 transition-colors hover:border-[#d6d7d1] hover:bg-raised"
             >
-              <Avatar name={student?.name ?? '—'} size={32} />
-
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <Badge tone="neutral">{assignment?.code}</Badge>
-                  <span className="truncate text-[14px] font-medium text-ink">{assignment?.title}</span>
+                  <Badge tone="neutral">{rubric?.course ?? submission.assignment_id}</Badge>
+                  <span className="truncate text-[14px] font-medium text-ink">
+                    {rubric?.title ?? submission.assignment_id}
+                  </span>
+                  {submission.needs_human_attention ? (
+                    <AlertTriangle size={13} strokeWidth={1.9} className="shrink-0 text-warn" />
+                  ) : null}
                 </div>
-                <div className="mt-1 text-[12.5px] text-muted">
-                  {student?.name}
-                  <span className="ml-2 font-mono text-[11.5px] text-faint">{grade.studentId}</span>
+                <div className="mt-1 flex items-center gap-2 text-[12.5px] text-muted">
+                  <span>{prLabel(submission.origin_url)}</span>
+                  {seeAll && submission.reviewer_username ? (
+                    <>
+                      <span className="text-faint">·</span>
+                      <span>{submission.reviewer_username}</span>
+                    </>
+                  ) : null}
+                  {submission.submitted_at ? (
+                    <>
+                      <span className="text-faint">·</span>
+                      <span>{formatDateTime(submission.submitted_at)}</span>
+                    </>
+                  ) : null}
                 </div>
               </div>
 
-              <Badge tone="mark">черновик готов</Badge>
+              <span className="shrink-0 text-[13px] tabular-nums text-ink-soft">
+                {submission.score.toFixed(1)} / {submission.max_score.toFixed(1)}
+              </span>
+
+              <Badge tone={STATUS_TONE[submission.status]}>{STATUS_LABEL[submission.status]}</Badge>
 
               <ArrowRight
                 size={16}
@@ -95,6 +125,12 @@ export function QueuePage() {
             </Link>
           )
         })}
+
+        {!queue.isLoading && rows.length === 0 ? (
+          <p className="rounded-card border border-line bg-surface px-4 py-6 text-center text-[13px] text-muted">
+            {seeAll ? 'Пока ни одной сдачи в потоке.' : 'В вашей очереди пока пусто.'}
+          </p>
+        ) : null}
       </div>
     </div>
   )

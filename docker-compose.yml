@@ -1,19 +1,83 @@
+x-backend-env: &backend-env
+  INGEST_GITHUB__TOKEN: ${INGEST_GITHUB__TOKEN:-}
+  # Без ключа поднимается провайдер `fake`: весь путь проходится,
+  # модель не вызывается.
+  AI_LLM__PROVIDER: ${AI_LLM__PROVIDER:-fake}
+  AI_LLM__API_KEY: ${AI_LLM__API_KEY:-}
+  AI_LLM__BASE_URL: ${AI_LLM__BASE_URL:-https://api.aitunnel.ru/v1}
+  AI_LLM__MODEL: ${AI_LLM__MODEL:-deepseek-v4-flash}
+  AI_LLM__LOCAL_BASE_URL: ${AI_LLM__LOCAL_BASE_URL:-http://host.docker.internal:11434/v1}
+  AI_LLM__FORCE_LOCAL: ${AI_LLM__FORCE_LOCAL:-false}
+  # Матрица роутинга: задаче — своя модель. JSON-строкой, например
+  # {"compile": "gpt-5.6-luna-pro"}. Пусто — все задачи на AI_LLM__MODEL.
+  AI_LLM__TASK_MODELS: ${AI_LLM__TASK_MODELS:-}
+  DB_DSN: postgresql+asyncpg://avito:avito@postgres:5432/avito_reviewer
+  QUEUE_REDIS_DSN: redis://redis:6379/0
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: avito
+      POSTGRES_PASSWORD: avito
+      POSTGRES_DB: avito_reviewer
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U avito -d avito_reviewer"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   backend:
     build: ./backend
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      INGEST_GITHUB__TOKEN: ${INGEST_GITHUB__TOKEN:-}
-      # Без ключа поднимается провайдер `fake`: весь путь проходится,
-      # модель не вызывается.
-      AI_LLM__PROVIDER: ${AI_LLM__PROVIDER:-fake}
-      AI_LLM__API_KEY: ${AI_LLM__API_KEY:-}
-      AI_LLM__BASE_URL: ${AI_LLM__BASE_URL:-https://api.aitunnel.ru/v1}
-      AI_LLM__MODEL: ${AI_LLM__MODEL:-deepseek-v4-flash}
-      AI_LLM__LOCAL_BASE_URL: ${AI_LLM__LOCAL_BASE_URL:-http://host.docker.internal:11434/v1}
-      AI_LLM__FORCE_LOCAL: ${AI_LLM__FORCE_LOCAL:-false}
-      # Матрица роутинга: задаче — своя модель. JSON-строкой, например
-      # {"compile": "gpt-5.6-luna-pro"}. Пусто — все задачи на AI_LLM__MODEL.
-      AI_LLM__TASK_MODELS: ${AI_LLM__TASK_MODELS:-}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      <<: *backend-env
+      # Меняйте в проде: подписывает выданные токены. Пароль ниже — общий на
+      # все три сеяных аккаунта (student/reviewer/admin),
+      # хакатон-вариант авторизации (см. AuthConfig).
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-only-change-me-in-production-please}
+      AUTH_SEED_PASSWORD: ${AUTH_SEED_PASSWORD:-avito2026}
+
+  worker:
+    build: ./backend
+    command: ["uv", "run", "--no-dev", "arq", "avito_reviewer.queue.WorkerSettings"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment: *backend-env
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

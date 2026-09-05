@@ -32,8 +32,34 @@ export type ReviewResponse = S['ReviewResponse']
 export type DetectResponse = S['DetectResponse']
 export type ReviewRequest = S['ReviewRequest']
 export type DetectRequest = S['DetectRequest']
+export type CompileRubricResponse = S['CompileRubricResponse']
+
+export type LoginRequest = S['LoginRequest']
+export type TokenResponse = S['TokenResponse']
+export type MeResponse = S['MeResponse']
+export type SubmissionSummary = S['SubmissionSummary']
+export type SubmissionDetail = S['SubmissionDetail']
+export type SubmissionStatus = S['SubmissionStatus']
+export type CriterionPatch = S['CriterionPatch']
+export type ReviewPatchRequest = S['ReviewPatchRequest']
+export type DetectionVerdictRequest = S['DetectionVerdictRequest']
+export type ReassignRequest = S['ReassignRequest']
+export type RerunResponse = S['RerunResponse']
+export type ChatMessage = S['ChatMessageOut']
+export type ChatRequest = S['ChatRequest']
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
+
+/** Токен живёт в памяти вкладки, не в `localStorage`: если бэкенд перезапустят
+ *  и пересеет учётки, старый токен из хранилища выглядел бы валидным (тот же
+ *  JWT-секрет), но принадлежал бы уже не тому пользователю после рестарта с
+ *  другой солью. Он и не нужен дольше жизни вкладки — `useAuth` перелогинивает
+ *  при каждой смене роли и при заходе. */
+let authToken: string | null = null
+
+export function setAuthToken(token: string | null): void {
+  authToken = token
+}
 
 export class ApiError extends Error {
   constructor(
@@ -67,7 +93,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${BASE}${path}`, {
       ...init,
-      headers: { 'content-type': 'application/json', ...init?.headers },
+      headers: {
+        'content-type': 'application/json',
+        ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+        ...init?.headers,
+      },
     })
   } catch {
     throw new ApiError(0, 'Бэкенд недоступен. Поднимите его на :8000 и повторите.')
@@ -84,10 +114,16 @@ export const backend = {
   rubric: (assignmentId: string) => request<Rubric>(`/rubrics/${encodeURIComponent(assignmentId)}`),
   cost: () => request<CostSummary>('/cost'),
 
+  login: (body: LoginRequest) =>
+    request<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  me: () => request<MeResponse>('/me'),
+
   /** Условие задания → черновик рубрики. Утверждает методист, поэтому ответ
-   *  несёт не только критерии, но и оговорки с открытыми вопросами. */
+   *  несёт не только критерии, но и оговорки с открытыми вопросами —
+   *  `grounded_share` рядом с ним показывает, какая доля критериев
+   *  подтверждена дословной цитатой из условия, а не пересказана. */
   compileRubric: (body: CompileRubricRequest) =>
-    request<RubricDraft>('/rubrics/compile', { method: 'POST', body: JSON.stringify(body) }),
+    request<CompileRubricResponse>('/rubrics/compile', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Подтверждение методистом: черновик становится рубрикой потока. */
   confirmRubric: (body: ConfirmRubricRequest) =>
@@ -98,4 +134,90 @@ export const backend = {
 
   detect: (body: DetectRequest) =>
     request<DetectResponse>('/detect', { method: 'POST', body: JSON.stringify(body) }),
+
+  myQueue: (all?: boolean) => request<SubmissionSummary[]>(`/me/queue${all ? '?all=true' : ''}`),
+  submission: (id: string) => request<SubmissionDetail>(`/submissions/${encodeURIComponent(id)}`),
+
+  /** Правка баллов/вердиктов ревьюером — пересчитывает итог на сервере и
+   *  пишет `review_revisions` с авторством; локально его не досчитать
+   *  (веса, шаг шкалы, обязательные минимумы, штраф за срок). */
+  patchReview: (submissionId: string, body: ReviewPatchRequest) =>
+    request<ReviewDraft>(`/submissions/${encodeURIComponent(submissionId)}/review`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  approveReview: (submissionId: string) =>
+    request<SubmissionSummary>(`/submissions/${encodeURIComponent(submissionId)}/review/approve`, {
+      method: 'POST',
+    }),
+
+  rerunReview: (submissionId: string) =>
+    request<RerunResponse>(`/submissions/${encodeURIComponent(submissionId)}/review/rerun`, {
+      method: 'POST',
+    }),
+
+  setDetectionVerdict: (submissionId: string, spanId: string, body: DetectionVerdictRequest) =>
+    request<DetectionReport>(
+      `/submissions/${encodeURIComponent(submissionId)}/ai-detection/${encodeURIComponent(spanId)}/verdict`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  reassign: (submissionId: string, body: ReassignRequest) =>
+    request<SubmissionSummary>(`/submissions/${encodeURIComponent(submissionId)}/reassign`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  chatHistory: (submissionId: string) =>
+    request<ChatMessage[]>(`/submissions/${encodeURIComponent(submissionId)}/chat`),
+
+  /** Один ход чата — SSE-эндпоинт, но не токен за токеном: сервер считает весь
+   *  ход (возможные вызовы тулов плюс финальный ответ), сохраняет каждый шаг
+   *  и только потом отдаёт их последовательностью `data:`-событий. `onStep`
+   *  вызывается по мере разбора каждого события — раньше, чем ответ целиком
+   *  дочитан, но не раньше, чем модель его посчитала. */
+  sendChat: async (submissionId: string, message: string, onStep: (step: ChatMessage) => void): Promise<void> => {
+    let response: Response
+    try {
+      response = await fetch(`${BASE}/submissions/${encodeURIComponent(submissionId)}/chat`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          ...(authToken ? { authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({ message } satisfies ChatRequest),
+      })
+    } catch {
+      throw new ApiError(0, 'Бэкенд недоступен. Поднимите его на :8000 и повторите.')
+    }
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      throw new ApiError(response.status, readDetail(payload, response.status))
+    }
+    if (!response.body) return
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) return
+      buffer += decoder.decode(value, { stream: true })
+
+      let boundary = buffer.indexOf('\n\n')
+      while (boundary !== -1) {
+        const block = buffer.slice(0, boundary)
+        buffer = buffer.slice(boundary + 2)
+        for (const line of block.split('\n')) {
+          if (line.startsWith('data: ') && line !== 'data: {}') {
+            onStep(JSON.parse(line.slice('data: '.length)) as ChatMessage)
+          }
+        }
+        boundary = buffer.indexOf('\n\n')
+      }
+    }
+  },
 }

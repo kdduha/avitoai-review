@@ -4,6 +4,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
+from avito_reviewer.app.auth import RequireReviewer
 from avito_reviewer.app.schemas.ingest import IngestRequest
 from avito_reviewer.ingest import (
     IngestContext,
@@ -24,7 +25,7 @@ router = APIRouter(tags=["ingest"])
     summary="Fetch a submission and return its canonical bundle",
     response_description="The canonical SubmissionBundle for the linked submission",
 )
-async def ingest_submission(body: IngestRequest, request: Request) -> SubmissionBundle:
+async def ingest_submission(body: IngestRequest, request: Request, user: RequireReviewer) -> SubmissionBundle:
     """Resolve ``source`` to a provider, fetch the submission behind ``link`` and
     return the ``SubmissionBundle``: the change under review plus a compact repo map,
     sized to hand to an LLM. Full file bodies are not inlined — an agent pulls them
