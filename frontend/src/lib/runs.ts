@@ -26,7 +26,16 @@ import { DEMO_DETECT, DEMO_REVIEW, DEMO_RUN_ID } from '@/mocks/demoRun'
 export { DEMO_RUN_ID }
 import { DEMO_BACKEND_DETECT, DEMO_BACKEND_ID, DEMO_BACKEND_REVIEW } from '@/mocks/demoBackend'
 import { DEMO_SYSDESIGN_DETECT, DEMO_SYSDESIGN_ID, DEMO_SYSDESIGN_REVIEW } from '@/mocks/demoSysdesign'
-import { DEMO_RUBRIC, DEMO_RUBRIC_BACKEND, DEMO_RUBRIC_SYSDESIGN } from '@/mocks/rubric'
+import { DEMO_FRAUD_DETECT, DEMO_FRAUD_ID, DEMO_FRAUD_REVIEW } from '@/mocks/demoFraud'
+import { DEMO_GO_WEAK_DETECT, DEMO_GO_WEAK_ID, DEMO_GO_WEAK_REVIEW } from '@/mocks/demoGoWeak'
+import { DEMO_QA_DETECT, DEMO_QA_ID, DEMO_QA_REVIEW } from '@/mocks/demoQa'
+import {
+  DEMO_RUBRIC,
+  DEMO_RUBRIC_BACKEND,
+  DEMO_RUBRIC_FRAUD,
+  DEMO_RUBRIC_QA,
+  DEMO_RUBRIC_SYSDESIGN,
+} from '@/mocks/rubric'
 
 const runs = new Map<string, Workspace>()
 
@@ -56,7 +65,36 @@ function demoBackend(): Workspace {
   }
 }
 
+/** Слабое решение по Go — та же рубрика, что у `demo`, но работа заметно хуже:
+ *  на демо видно, что разбор различает уровни, а не хвалит всё подряд. */
+function demoGoWeak(): Workspace {
+  return {
+    ...buildWorkspace(DEMO_GO_WEAK_ID, DEMO_GO_WEAK_REVIEW, DEMO_GO_WEAK_DETECT.report, DEMO_RUBRIC),
+    live: false,
+    submissionId: null,
+  }
+}
+
+function demoQa(): Workspace {
+  return {
+    ...buildWorkspace(DEMO_QA_ID, DEMO_QA_REVIEW, DEMO_QA_DETECT.report, DEMO_RUBRIC_QA),
+    live: false,
+    submissionId: null,
+  }
+}
+
+function demoFraud(): Workspace {
+  return {
+    ...buildWorkspace(DEMO_FRAUD_ID, DEMO_FRAUD_REVIEW, DEMO_FRAUD_DETECT.report, DEMO_RUBRIC_FRAUD),
+    live: false,
+    submissionId: null,
+  }
+}
+
 runs.set(DEMO_RUN_ID, demo())
+runs.set(DEMO_GO_WEAK_ID, demoGoWeak())
+runs.set(DEMO_QA_ID, demoQa())
+runs.set(DEMO_FRAUD_ID, demoFraud())
 runs.set(DEMO_SYSDESIGN_ID, demoSysdesign())
 runs.set(DEMO_BACKEND_ID, demoBackend())
 
@@ -66,6 +104,8 @@ const DEMO_BY_COURSE: Record<string, string> = {
   go: DEMO_RUN_ID,
   'system-design': DEMO_SYSDESIGN_ID,
   backend: DEMO_BACKEND_ID,
+  qa: DEMO_QA_ID,
+  fraud: DEMO_FRAUD_ID,
 }
 
 /** Записанные ветки разговора — свои у каждого демо-прогона. */
@@ -112,6 +152,8 @@ const DEMO_BY_RUBRIC: Record<string, string> = {
   'go-task1': DEMO_RUN_ID,
   'sysdesign-lab1': DEMO_SYSDESIGN_ID,
   'backend-task1': DEMO_BACKEND_ID,
+  'qa-task1': DEMO_QA_ID,
+  'fraud-task1': DEMO_FRAUD_ID,
 }
 
 export function demoRunForRubric(rubricId: string | undefined): string {

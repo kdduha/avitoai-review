@@ -10,6 +10,8 @@ import type {
   StudentTotals,
 } from '@/lib/types'
 import { PROGRAMS, type Program, type ProgramTask } from './programs'
+import { ROSTER, type RosterRow } from './data/roster'
+import { LEDGER_HOMEWORK_MAX, ledgerTotal, markFor } from './ledger'
 import { nameDealer, rng } from './seed'
 
 /** Учебный год демо-данных. Дедлайны в условиях заданы днём и месяцем без
@@ -43,13 +45,12 @@ export const STREAMS: Stream[] = PROGRAMS.flatMap((program) => [
   },
 ])
 
-/** Срока в условии может не быть вовсе — тогда его назначает методист, и мы
- *  раскладываем задания по потоку равномерно. */
-function deadlineFor(task: ProgramTask, index: number): string {
-  if (task.deadline) return `${YEAR}-${task.deadline}T23:59:00+03:00`
-  const start = new Date(`${YEAR}-09-01T00:00:00+03:00`)
-  start.setDate(start.getDate() + 14 * (index + 1))
-  return `${start.toISOString().slice(0, 10)}T21:00:00+03:00`
+/** Дедлайн ставится только там, где он назван в условии. Раньше задания без
+ *  срока раскладывались «по 14 дней от 1 сентября» — это была выдумка: в
+ *  data_analysis, data_science, GO, системном дизайне и Tech QA сроков в
+ *  материалах нет вовсе, их назначает методист при запуске потока. */
+function deadlineFor(task: ProgramTask): string | null {
+  return task.deadline ? `${YEAR}-${task.deadline}T23:59:00+03:00` : null
 }
 
 export const ASSIGNMENTS: Assignment[] = PROGRAMS.flatMap((program) =>
@@ -64,7 +65,7 @@ export const ASSIGNMENTS: Assignment[] = PROGRAMS.flatMap((program) =>
     channel: task.channel,
     reviewMinutes: task.reviewMinutes,
     declareAi: task.declareAi,
-    deadlineAt: deadlineFor(task, index),
+    deadlineAt: deadlineFor(task),
   })),
 )
 
@@ -81,8 +82,11 @@ const CURATOR_SEED: Omit<Curator, 'courseIds' | 'streamIds' | 'committedMinutes'
   { id: 'c-grinev', name: 'Лев Гринёв', initials: 'ЛГ', email: 'l.grinev@avito.ru', skills: ['GPU', 'инфраструктура'], capacityMinutes: 300, medianMinutesPerWork: 36, onboarding: false },
 ]
 
-/** Кто какие программы ведёт. Часть ревьюеров намеренно оставлена без
- *  назначений — руководителю есть кого распределять. */
+/** Кто какие программы ведёт. Все id здесь — из `PROGRAMS`: раньше половина
+ *  карты ссылалась на курсы, которых в каталоге не было (`llm`, `mlsd`, `gpu`,
+ *  `analytics`, `fraud`, `business-models`), и четыре ревьюера из десяти
+ *  висели «без потоков» с нулевой загрузкой. Лев Гринёв оставлен без
+ *  назначений намеренно — руководителю есть кого распределять. */
 const ASSIGNED: Record<string, string[]> = {
   'c-kruglov': ['go', 'backend'],
   'c-eremina': ['go', 'backend'],
@@ -96,50 +100,69 @@ const ASSIGNED: Record<string, string[]> = {
   'c-grinev': [],
 }
 
+const KNOWN_COURSES = new Set(PROGRAMS.map((program) => program.id))
+
 export const CURATORS: Curator[] = CURATOR_SEED.map((curator) => {
-  const courseIds = ASSIGNED[curator.id] ?? []
+  const courseIds = (ASSIGNED[curator.id] ?? []).filter((courseId) => KNOWN_COURSES.has(courseId))
   const streamIds = courseIds.flatMap((courseId) => [`${courseId}-a`, `${courseId}-b`])
   return { ...curator, courseIds, streamIds, committedMinutes: 0 }
 })
 
+/** Род имени задаёт колонка «Согласие на оценку» из ведомости: «согласна» —
+ *  женское, «согласен» — мужское, «Согл» не говорит ничего и раздаётся по
+ *  очереди. Так подпись в ведомости и имя в таблице не спорят друг с другом. */
+function genderOf(consent: string, index: number): 'm' | 'f' {
+  const word = consent.toLowerCase()
+  if (word.startsWith('согласна')) return 'f'
+  if (word.startsWith('согласен')) return 'm'
+  return index % 2 === 0 ? 'f' : 'm'
+}
+
 function buildStudents(): Student[] {
   const out: Student[] = []
   for (const stream of STREAMS) {
-    const program = PROGRAMS.find((item) => item.id === stream.courseId)!
     const seed = [...stream.id].reduce((sum, char) => sum + char.charCodeAt(0), 0)
-    const next = rng(seed * 7919)
-    const nextName = nameDealer(next)
+    const nextName = nameDealer(rng(seed * 7919))
     const curators = CURATORS.filter((item) => item.streamIds.includes(stream.id))
 
     /* Идентификаторы обезличены так же, как в настоящей ведомости
-       организаторов: шестизначное число вместо имени и почты. */
-    for (let i = 0; i < program.cohort; i += 1) {
-      const alias = String(100000 + Math.floor(next() * 899999))
+       организаторов: шестизначное число вместо имени и почты. Берём их из
+       ведомости, а не выдумываем на месте. */
+    const roster = ROSTER[stream.id] ?? []
+    roster.forEach((row, i) => {
       out.push({
-        id: alias,
-        alias,
-        name: nextName(),
+        id: row.id,
+        alias: row.id,
+        name: nextName(genderOf(row.consent, i)),
         courseId: stream.courseId,
         streamId: stream.id,
         curatorId: curators.length ? curators[i % curators.length].id : null,
-        githubHandle: `student-${alias}`,
+        githubHandle: `student-${row.id}`,
       })
-    }
+    })
   }
   return out
 }
 
 export const STUDENTS: Student[] = buildStudents()
 
+const ROSTER_BY_STUDENT = new Map<string, { streamId: string; row: RosterRow }>(
+  Object.entries(ROSTER).flatMap(([streamId, rows]) =>
+    rows.map((row) => [row.id, { streamId, row }] as const),
+  ),
+)
+
 function toStep(value: number, step: number): number {
   return Math.round(value / step) * step
 }
 
 /** Правила из условий: досдача в течение grace-окна стоит балл за день,
- *  позже работа оценивается в ноль. Штраф считается от набранного. */
+ *  позже работа оценивается в ноль. Такое правило названо только у
+ *  продуктовых направлений — там же, где есть и сам дедлайн; у остальных
+ *  просрочки нет, потому что нет и срока. */
 function gradeFor(
   next: () => number,
-  talent: number,
+  level: number,
   assignment: Assignment,
   program: Program,
 ): { score: number; status: GradeStatus; daysLate: number } {
@@ -147,16 +170,17 @@ function gradeFor(
   if (roll < 0.05) return { score: 0, status: 'missing', daysLate: 0 }
 
   const noise = (next() - 0.5) * 0.26
-  const fraction = Math.max(0.25, Math.min(1, talent + noise))
+  const fraction = Math.max(0.25, Math.min(1, level + noise))
   const earned = toStep(fraction * assignment.maxScore, assignment.step)
 
   if (roll < 0.15) return { score: earned, status: 'draft_ready', daysLate: 0 }
   if (roll < 0.22) return { score: earned, status: 'in_review', daysLate: 0 }
 
-  if (roll < 0.32) {
-    const daysLate = 1 + Math.floor(next() * (program.graceDays + 1))
-    if (daysLate > program.graceDays) return { score: 0, status: 'late', daysLate }
-    const penalty = program.penaltyPerDay * daysLate
+  const graceDays = assignment.deadlineAt ? program.graceDays : null
+  if (graceDays !== null && roll < 0.32) {
+    const daysLate = 1 + Math.floor(next() * (graceDays + 1))
+    if (daysLate > graceDays) return { score: 0, status: 'late', daysLate }
+    const penalty = (program.penaltyPerDay ?? 0) * daysLate
     return { score: Math.max(0, earned - penalty), status: 'late', daysLate }
   }
 
@@ -168,10 +192,23 @@ function buildGrades(): Grade[] {
   for (const student of STUDENTS) {
     const program = PROGRAMS.find((item) => item.id === student.courseId)!
     const next = rng(Number(student.alias) % 100000)
-    const talent = 0.55 + next() * 0.4
+
+    /* Уровень студента задаёт ведомость, а не отдельный генератор: доля от
+       суммы за ДЗ становится ожидаемой долей от максимума задания. Поэтому
+       ячейка таблицы и строка ведомости говорят про одного студента одно и то
+       же — хотя сложить ячейки в «Итоговую сумму» нельзя, шкалы разные. */
+    const homework = ROSTER_BY_STUDENT.get(student.id)?.row.homework ?? 0
+    const level = Math.max(0.3, Math.min(0.95, homework / LEDGER_HOMEWORK_MAX))
 
     for (const assignment of ASSIGNMENTS.filter((item) => item.courseId === student.courseId)) {
-      const { score, status, daysLate } = gradeFor(next, talent, assignment, program)
+      const { score, status, daysLate } = gradeFor(next, level, assignment, program)
+      /* Часть черновиков ревьюер утверждает как есть — по этим строкам потом
+         считается «принято без правок»; доля утверждений без правки —
+         ОЦЕНКА, а не измерение. */
+      const acceptedAsIs = next() < 0.46
+      /* Если ревьюер правит балл, он двигает его на шаг-другой шкалы: правка
+         «на 0,07 балла» на шкале с шагом 1 — это не правка. */
+      const drift = (next() < 0.5 ? -1 : 1) * assignment.step * (next() < 0.7 ? 1 : 2)
       out.push({
         studentId: student.id,
         assignmentId: assignment.id,
@@ -180,10 +217,9 @@ function buildGrades(): Grade[] {
         aiScore:
           status === 'missing'
             ? null
-            : toStep(
-                Math.max(0, Math.min(assignment.maxScore, score + (next() - 0.5) * assignment.maxScore * 0.15)),
-                assignment.step,
-              ),
+            : acceptedAsIs
+              ? score
+              : Math.max(0, Math.min(assignment.maxScore, toStep(score + drift, assignment.step))),
         status,
         aiFlag: next() < 0.12 ? Math.round((0.5 + next() * 0.45) * 100) / 100 : null,
         daysLate,
@@ -200,45 +236,63 @@ export function gradesForStream(streamId: string): Grade[] {
   return GRADES.filter((grade) => ids.has(grade.studentId))
 }
 
-/** Итоговая строка ведомости считается по формуле организаторов:
- *  итог = сумма за ДЗ × 0.5 + экзамен × 0.4 + вовлечённость / 10,
- *  дальше итог отображается на десятибалльную оценку. */
+/** Ведомость потока.
+ *
+ *  Строки лежат готовыми в `data/roster.ts`: id, сумма за ДЗ, посещаемость,
+ *  вовлечённость, экзамен, количество ДЗ и согласие на оценку. Итог и оценка
+ *  здесь не хранятся, а считаются — формулой организаторов
+ *  (`итог = сумма × 0.5 + экзамен × 0.4 + вовлечённость / 10`) и таблицей
+ *  абсолютных порогов из `ledger.ts`. На девяти настоящих строках потока
+ *  `qa-a` результат сходится со скриншотом ведомости до сотых; проверяется
+ *  `node --experimental-strip-types scripts/build-roster.mjs --check`.
+ *
+ *  «Количество дз» берётся из ведомости там, где оно оттуда пришло (включая
+ *  строку с настоящей опечаткой «ю»), иначе считается по сдачам потока. */
 export function totalsForStream(streamId: string): StudentTotals[] {
-  const stream = STREAMS.find((item) => item.id === streamId)
-  if (!stream) return []
+  const rows = ROSTER[streamId] ?? []
+  if (!rows.length) return []
 
-  const students = STUDENTS.filter((student) => student.streamId === streamId)
   const grades = gradesForStream(streamId)
-  const homeworkMax = ASSIGNMENTS.filter((item) => item.courseId === stream.courseId).reduce(
-    (sum, item) => sum + item.maxScore,
-    0,
-  )
-  const maxTotal = homeworkMax * 0.5 + 30 * 0.4 + 2
+  const submittedBy = new Map<string, number>()
+  for (const grade of grades) {
+    if (grade.status === 'missing') continue
+    submittedBy.set(grade.studentId, (submittedBy.get(grade.studentId) ?? 0) + 1)
+  }
 
-  return students.map((student) => {
-    const next = rng(Number(student.alias) * 31)
-    const own = grades.filter((grade) => grade.studentId === student.id)
-    const homework = own.reduce((sum, grade) => sum + (grade.score ?? 0), 0)
-    const attendance = 1 + Math.floor(next() * 12)
-    const engagement = [0, 10, 20][Math.floor(next() * 3)]
-    const exam = Math.round((18 + next() * 12) * 10) / 10
-    const total = Math.round((homework * 0.5 + exam * 0.4 + engagement / 10) * 10) / 10
-
-    const share = maxTotal ? total / maxTotal : 0
-    const mark =
-      share >= 0.9 ? 10 : share >= 0.83 ? 9 : share >= 0.76 ? 8 : share >= 0.68 ? 7 : share >= 0.6 ? 6 : share >= 0.5 ? 5 : 4
-
+  return rows.map((row) => {
+    const submitted = submittedBy.get(row.id) ?? 0
+    const total = ledgerTotal(row.homework, row.exam, row.engagement)
     return {
-      studentId: student.id,
-      homework: Math.round(homework * 10) / 10,
-      attendance,
-      engagement,
-      exam,
+      studentId: row.id,
+      homework: row.homework,
+      attendance: row.attendance,
+      engagement: row.engagement,
+      exam: row.exam,
       total,
-      mark,
-      submitted: own.filter((grade) => grade.status !== 'missing').length,
+      mark: markFor(total),
+      homeworkCount: row.homeworkCount ?? submitted,
+      consent: row.consent,
+      submitted,
     }
   })
+}
+
+/** Раскладывает целое по весам без потери суммы (метод наибольших остатков):
+ *  ряд остаётся оценкой формы, но его сумма — настоящая. */
+function spread(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((acc, weight) => acc + weight, 0) || 1
+  const exact = weights.map((weight) => (total * weight) / sum)
+  const out = exact.map(Math.floor)
+  let rest = total - out.reduce((acc, value) => acc + value, 0)
+  const order = exact
+    .map((value, index) => ({ index, rest: value - Math.floor(value) }))
+    .sort((a, b) => b.rest - a.rest)
+  for (const item of order) {
+    if (rest <= 0) break
+    out[item.index] += 1
+    rest -= 1
+  }
+  return out
 }
 
 export function statsForStream(streamId: string): StreamStats | null {
@@ -254,10 +308,12 @@ export function statsForStream(streamId: string): StreamStats | null {
   const expected = students.length * assignments.length
   const submitted = graded.length
   const approved = grades.filter((grade) => grade.status === 'approved').length
+  const draftReady = grades.filter((grade) => grade.status === 'draft_ready').length
   const awaitingReview = grades.filter(
     (grade) => grade.status === 'draft_ready' || grade.status === 'in_review',
   ).length
   const overdue = grades.filter((grade) => grade.status === 'late').length
+  const scored = grades.filter((grade) => grade.status === 'approved' || grade.status === 'late').length
 
   const avgScore = graded.length
     ? Math.round((graded.reduce((sum, grade) => sum + (grade.score ?? 0), 0) / graded.length) * 10) / 10
@@ -276,38 +332,65 @@ export function statsForStream(streamId: string): StreamStats | null {
     scoreHistogram[index].count += 1
   }
 
-  const next = rng(students.length * 6151 + submitted)
-  const criterionAverages = assignments.slice(0, 6).map((assignment) => ({
-    criterion: `${assignment.code}`,
-    avg: Math.round((55 + next() * 35) * 10) / 10,
-    max: 100,
-  }))
+  /* Раньше здесь был «средний балл по критериям»: число `55 + random × 35`
+     под подписью с кодом задания. Ни числа, ни подписи не соответствовали
+     заголовку панели. Считаем то, что действительно есть в данных, — среднюю
+     долю от максимума по каждому заданию; по критериям такой статистики у нас
+     нет и взяться ей неоткуда: критерии живут в рубрике и в разборе одной
+     работы, а не в ведомости потока. */
+  const assignmentAverages = assignments.map((assignment) => {
+    const own = graded.filter((grade) => grade.assignmentId === assignment.id)
+    const sum = own.reduce((acc, grade) => acc + (grade.score ?? 0), 0)
+    const avg = own.length && assignment.maxScore
+      ? Math.round((sum / own.length / assignment.maxScore) * 1000) / 10
+      : 0
+    return { assignment: assignment.code, title: assignment.title, avg, max: 100 }
+  })
 
   const streamCurators = CURATORS.filter((item) => item.streamIds.includes(streamId))
   const minutesPerWork = assignments.length
     ? assignments.reduce((sum, item) => sum + item.reviewMinutes, 0) / assignments.length
     : 20
 
-  const reviewLoad = streamCurators.map((curator, index) => {
-    const assigned = Math.max(1, Math.round(submitted / Math.max(1, streamCurators.length)) - index * 2)
-    return {
-      curatorId: curator.id,
-      name: curator.name,
-      assigned,
-      minutes: Math.round(assigned * minutesPerWork),
-      capacity: curator.capacityMinutes,
-    }
-  })
+  /* ОЦЕНКА: очередь делится между ревьюерами поровну — настоящего назначения
+     на конкретную сдачу у нас нет. Минуты считаются по медиане ревьюера, и
+     она тоже оценочная (`CURATOR_SEED`). Зато сумма по ревьюерам равна
+     настоящему числу работ, ждущих проверки прямо сейчас: недельная ёмкость
+     меряется текущей очередью, а не всеми сдачами за курс. */
+  const perCurator = spread(awaitingReview, streamCurators.map(() => 1))
+  const reviewLoad = streamCurators.map((curator, index) => ({
+    curatorId: curator.id,
+    name: curator.name,
+    assigned: perCurator[index] ?? 0,
+    minutes: Math.round((perCurator[index] ?? 0) * curator.medianMinutesPerWork),
+    capacity: curator.capacityMinutes,
+  }))
 
-  /* Проверка идёт волной: она начинается после дедлайна и укладывается в
-     семь дней, поэтому по неделям виден всплеск, а не ровный поток. */
-  const weekly = ['нед. 1', 'нед. 2', 'нед. 3', 'нед. 4', 'нед. 5'].map((week, index) => {
-    const wave = [0.2, 0.9, 0.5, 0.3, 0.8][index]
-    const sent = Math.round(students.length * wave)
-    return { week, submitted: sent, approved: Math.max(0, Math.round(sent * 0.72) - index) }
-  })
+  /* ОЦЕНКА формы, но не объёма: дат сдачи в данных нет, поэтому недели
+     раскладываются волной «проверка начинается после дедлайна» — зато сумма
+     по неделям равна настоящему числу сдач и утверждений. */
+  const wave = [0.12, 0.34, 0.22, 0.1, 0.22]
+  const weeklySubmitted = spread(submitted, wave)
+  const weeklyApproved = spread(approved, wave)
+  const weekly = ['нед. 1', 'нед. 2', 'нед. 3', 'нед. 4', 'нед. 5'].map((week, index) => ({
+    week,
+    submitted: weeklySubmitted[index],
+    approved: weeklyApproved[index],
+  }))
 
   const aiFlagged = grades.filter((grade) => grade.aiFlag !== null).length
+  /* Ревьюер подтверждает сильный сигнал и отклоняет слабый — ПРАВИЛО, а не
+     измерение: настоящих вердиктов по спанам в каталоге нет, они живут в
+     прогоне. Раньше здесь стояло «42% от помеченных» без всякого основания. */
+  const aiConfirmed = grades.filter((grade) => (grade.aiFlag ?? 0) >= 0.72).length
+
+  /* «Принято без правок» теперь считается: это утверждённые работы, у
+     которых балл ревьюера совпал с предложением модели. */
+  const approvedGrades = grades.filter((grade) => grade.status === 'approved')
+  const untouched = approvedGrades.filter((grade) => grade.aiScore === grade.score).length
+  const autoAcceptRate = approvedGrades.length
+    ? Math.round((untouched / approvedGrades.length) * 100) / 100
+    : 0
 
   return {
     submitted,
@@ -315,20 +398,24 @@ export function statsForStream(streamId: string): StreamStats | null {
     approved,
     awaitingReview,
     overdue,
+    /* ОЦЕНКА: `reviewMinutes` — прогноз трудоёмкости из `programs.ts`, а не
+       замер по настоящим проверкам. */
     medianReviewMinutes: Math.round(minutesPerWork),
-    autoAcceptRate: Math.round((0.38 + next() * 0.24) * 100) / 100,
+    autoAcceptRate,
     avgScore,
     aiFlagged,
-    aiConfirmed: Math.round(aiFlagged * 0.42),
+    aiConfirmed,
     reviewWindowDays: program.reviewWindowDays,
     scoreHistogram,
+    /* Шаги считаются по статусам, а не по коэффициентам: черновик собирается
+       для каждой сдачи, дальше работа уходит к ревьюеру и получает оценку. */
     funnel: [
       { stage: 'Сдано', count: submitted },
-      { stage: 'Черновик готов', count: Math.round(submitted * 0.94) },
-      { stage: 'На проверке', count: awaitingReview },
-      { stage: 'Утверждено', count: approved },
+      { stage: 'Черновик готов', count: submitted },
+      { stage: 'Взял ревьюер', count: submitted - draftReady },
+      { stage: 'Оценка выставлена', count: scored },
     ],
-    criterionAverages,
+    assignmentAverages,
     reviewLoad,
     weekly,
   }
