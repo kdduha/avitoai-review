@@ -6,12 +6,22 @@ import { ApiError, type DetectionSpan, type Evidence } from '@/lib/backend'
 import { approveRun, demoThread, getRun, loadSubmission, setScore, setSpanVerdict } from '@/lib/runs'
 import { formatDateTime, timeLeft } from '@/lib/format'
 import { withPatchedDraft } from '@/lib/workspace'
+import { cn } from '@/lib/cn'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Tabs } from '@/components/ui/Tabs'
 import { ChatDock } from './ChatDock'
 import { DetectionPanel } from './DetectionPanel'
 import { DraftPanel } from './DraftPanel'
 import { WorkPanel, type Highlight } from './WorkPanel'
+
+type Panel = 'work' | 'draft' | 'detection'
+
+const PANELS = [
+  { id: 'work', label: 'Работа' },
+  { id: 'draft', label: 'Черновик' },
+  { id: 'detection', label: 'Признаки ГенИИ' },
+]
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -33,6 +43,7 @@ export function ReviewPage() {
   const [approved, setApproved] = useState(() => workspace?.status === 'approved')
   const [actionError, setActionError] = useState<string | null>(null)
   const [shownRunId, setShownRunId] = useState(runId)
+  const [panel, setPanel] = useState<Panel>('draft')
 
   /* Роутер переиспользует компонент между прогонами: без сброса на экране
      остались бы баллы предыдущей работы. */
@@ -46,6 +57,7 @@ export function ReviewPage() {
     setActiveSpanId(null)
     setApproved(next?.status === 'approved')
     setActionError(null)
+    setPanel('draft')
   }
 
   // Открытие по прямой ссылке или из очереди: эта вкладка сама ничего не
@@ -98,7 +110,14 @@ export function ReviewPage() {
     )
   }
 
+  /* Ниже `lg` три панели не помещаются рядом и встают в столбик, а связка
+     «цитата → подсветка в коде» — главное, ради чего этот экран существует.
+     В столбике она молча ломается: код уезжает на пол-экрана вверх, внутренний
+     `scrollIntoView` страницу не двигает, и клик по цитате выглядит как
+     промах. Поэтому на узком экране панели переключаются, а переход по цитате
+     или спану сам открывает работу. На `lg` и шире всё как было. */
   const openEvidence = (evidence: Evidence) => {
+    setPanel('work')
     setActivePath(evidence.artifact)
     setActiveQuote(evidence.quote)
     setActiveSpanId(null)
@@ -111,6 +130,7 @@ export function ReviewPage() {
   }
 
   const openSpan = (span: DetectionSpan) => {
+    setPanel('work')
     setActivePath(span.artifact)
     setActiveSpanId(span.id)
     setActiveQuote(null)
@@ -123,7 +143,7 @@ export function ReviewPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-plane lg:h-screen">
+    <div className="flex h-screen flex-col bg-plane">
       <header className="shrink-0 border-b border-line bg-surface px-5 py-3">
         <div className="flex items-center justify-between gap-4">
           <Link
@@ -177,7 +197,12 @@ export function ReviewPage() {
         </div>
       </header>
 
+      <div className="shrink-0 border-b border-line bg-surface px-4 lg:hidden">
+        <Tabs items={PANELS} value={panel} onChange={(next) => setPanel(next as Panel)} />
+      </div>
+
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)_minmax(0,0.8fr)]">
+        <div className={cn(panel === 'work' ? 'contents' : 'hidden', 'lg:contents')}>
         <WorkPanel
           files={workspace.files}
           activePath={activePath ?? workspace.files[0]?.path ?? ''}
@@ -186,6 +211,8 @@ export function ReviewPage() {
           link={workspace.link}
           prLabel={workspace.prLabel}
         />
+        </div>
+        <div className={cn(panel === 'draft' ? 'contents' : 'hidden', 'lg:contents')}>
         <DraftPanel
           workspace={workspace}
           approved={approved}
@@ -212,6 +239,8 @@ export function ReviewPage() {
             }
           }}
         />
+        </div>
+        <div className={cn(panel === 'detection' ? 'contents' : 'hidden', 'lg:contents')}>
         <DetectionPanel
           report={workspace.detection}
           error={workspace.detectionError}
@@ -226,6 +255,7 @@ export function ReviewPage() {
             }
           }}
         />
+        </div>
       </div>
 
       <ChatDock
