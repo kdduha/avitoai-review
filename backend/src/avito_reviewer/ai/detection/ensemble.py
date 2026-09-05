@@ -75,7 +75,7 @@ def combine(
     # разные события, и ревьюер должен увидеть второе первым.
     report.spans = sorted(spans, key=lambda s: (not s.ai_sensitive, -s.score))
 
-    report.limitations.extend(_standard_limitations(available))
+    report.limitations.extend(_reliability_note(available))
     return report
 
 
@@ -188,14 +188,19 @@ def _name(kind: SignalKind) -> str:
     }[kind]
 
 
-def _standard_limitations(available: list[SignalResult]) -> list[str]:
-    limits = [
-        "Фрагменты короче 200 символов не оцениваются: на них статистика не работает.",
-        "Шаблонный и сгенерированный инструментами код исключён из анализа.",
-    ]
+def _reliability_note(available: list[SignalResult]) -> list[str]:
+    """Ограничение этого прогона, а не постоянная методологическая сноска.
+
+    Раньше сюда же попадали две фразы про минимальную длину фрагмента и про
+    исключение шаблонного кода. Они повторялись дословно в каждом отчёте, а
+    названный в них порог («короче 200 символов») не совпадал ни с одним
+    порогом в коде: у перплексии MIN_CHARS = 800, у стилометрии
+    MIN_TEXT_CHARS = 400 и MIN_CODE_LINES = 40. Постоянная сноска — тем более
+    неверная — это документация, а не ограничение прогона.
+    """
     if len(available) < 3:
-        limits.append(
+        return [
             f"Вывод построен всего на {len(available)} сигнале(ах) из четырёх — "
             f"надёжность ниже обычной."
-        )
-    return limits
+        ]
+    return []

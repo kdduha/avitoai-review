@@ -1084,11 +1084,6 @@ export interface components {
              */
             advisory: boolean;
             /**
-             * Advisory Note
-             * @default Сигнал носит рекомендательный характер, не является доказательством нарушения и не влияет на балл автоматически. Решение принимает ревьюер.
-             */
-            advisory_note: string;
-            /**
              * Mismatch
              * @description Сигнал есть, а декларации нет — главный случай для ревьюера.
              *

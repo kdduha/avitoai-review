@@ -258,7 +258,6 @@ def test_detect_returns_an_advisory_report(make_client):
 
     assert body["report"]["advisory"] is True
     assert body["report"]["limitations"]
-    assert "не влияет на балл" in body["report"]["advisory_note"]
 
 
 def test_detect_spans_are_addressable(make_client):
