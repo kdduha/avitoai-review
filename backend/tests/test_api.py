@@ -189,7 +189,9 @@ def test_gate_facts_reach_the_model(make_client):
         json={"link": LINK, "rubric_id": "go-task1",
               "gate_facts": ["Тест-кейсов: ожидалось 21, фактически 18."]},
     )
-    assert "фактически 18" in provider.last_prompt
+    # Не `last_prompt`: последним идёт итоговый отзыв, а факты гейта нужны
+    # там, где оценивают критерии.
+    assert any("фактически 18" in call[-1]["content"] for call in provider.calls)
 
 
 def test_partial_files_are_visible_in_the_response(make_client):
@@ -345,7 +347,10 @@ def test_init_reports_the_model_route_and_rubrics(make_client):
 
 def test_cost_accumulates_across_runs(make_client):
     """Журнал общий на приложение: счёт за поток работ складывается из прогонов."""
-    client, _ = make_client(responses=[VERDICTS] * 4)
+    # На прогон: два батча критериев и следом итоговый отзыв. Пустой JSON —
+    # валидное «резюме не собралось», лишь бы очередь ответов не кончилась
+    # раньше и не спровоцировала ремонтный запрос.
+    client, _ = make_client(responses=[VERDICTS, VERDICTS, "{}"] * 2)
     client.post("/review", json={"link": LINK, "rubric_id": "go-task1"})
     after_first = client.get("/cost").json()
     client.post("/review", json={"link": LINK, "rubric_id": "go-task1"})

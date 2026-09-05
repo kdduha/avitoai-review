@@ -89,6 +89,34 @@ class CriterionBatch(BaseModel):
     verdicts: list[CriterionVerdict]
 
 
+class ReviewSummary(BaseModel):
+    """Связное слово о работе целиком: что удалось, что нет, и что дальше.
+
+    Отдельный шаг после того, как критерии уже оценены и цитаты сверены, —
+    и это главное ограничение: резюме пересказывает **уже подтверждённые
+    вердикты**, а не работу. Файлов ему не показывают вовсе, поэтому новых
+    утверждений о коде оно физически сделать не может: соврать можно только
+    про то, что видишь.
+
+    Балл резюме не трогает: его считает агрегатор, а модель здесь пишет текст.
+    """
+
+    strengths: list[str] = Field(
+        default_factory=list, description="что в работе сделано хорошо, по пунктам"
+    )
+    improvements: list[str] = Field(
+        default_factory=list, description="что именно доработать, по пунктам"
+    )
+    encouragement: str = Field(
+        default="",
+        description="одно-два предложения студенту: по-человечески и без снисходительности",
+    )
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.strengths or self.improvements or self.encouragement)
+
+
 class ReviewDraft(BaseModel):
     """Черновик, который увидит ревьюер."""
 
@@ -102,6 +130,11 @@ class ReviewDraft(BaseModel):
     passed: bool = False
     pass_explanation: str = ""
     late_explanation: str = ""
+
+    summary: ReviewSummary | None = None
+    """Разбор словами. `None` — модель до него не дошла: работа не принята по
+    формату, или шаг резюме не удался. Пустое место честнее выдуманного
+    абзаца, поэтому заглушки здесь нет."""
 
     gate_facts: list[str] = Field(default_factory=list)
     gate: GateReport | None = None

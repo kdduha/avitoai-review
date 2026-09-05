@@ -100,7 +100,9 @@ def test_rerun_refreshes_the_draft_and_marks_it_ready(ctx):
     submission = asyncio.run(fetch())
     assert submission.status == SubmissionStatus.DRAFT_READY
     assert submission.draft["score"] > 0
-    assert len(provider.calls) == 1
+    # Два вызова: критерии и следом итоговый отзыв. Проверяем, что модель
+    # позвали заново, а не что она позвана ровно однажды.
+    assert len(provider.calls) == 2
 
 
 def test_rerun_on_a_vanished_submission_is_reported_not_raised(ctx):

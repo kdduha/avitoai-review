@@ -91,6 +91,27 @@ def full_marks(texts: list[ArtifactText], rubric: Rubric, batch_size: int) -> li
                 }
             )
         out.append(json.dumps({"verdicts": verdicts}, ensure_ascii=False))
+
+    # Последним идёт итоговый отзыв: он пересказывает уже проставленные
+    # вердикты, поэтому и записан здесь, а не выдуман отдельно от них.
+    out.append(
+        json.dumps(
+            {
+                "strengths": [
+                    "Раскладка соответствует golang-standards: точка входа в cmd, "
+                    "внутренние пакеты в internal.",
+                    "Веб-сервер поднимается и корректно завершается по сигналу.",
+                    "Эндпоинты /ping и /healthcheck на месте и отвечают.",
+                ],
+                "improvements": [],
+                "encouragement": (
+                    "Работа собрана аккуратно и по условию — так и держи "
+                    "на следующем этапе."
+                ),
+            },
+            ensure_ascii=False,
+        )
+    )
     return out
 
 

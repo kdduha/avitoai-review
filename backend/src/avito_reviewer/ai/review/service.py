@@ -36,8 +36,8 @@ from avito_reviewer.config import ReviewOptions
 
 from .aggregate import ScoreBreakdown, aggregate
 from .evidence import EvidenceValidator
-from .prompts import batch_criteria, build_messages
-from .schema import CriterionBatch, CriterionVerdict, ReviewDraft
+from .prompts import batch_criteria, build_messages, summary_messages
+from .schema import CriterionBatch, CriterionVerdict, ReviewDraft, ReviewSummary
 
 log = logging.getLogger(__name__)
 
@@ -87,23 +87,30 @@ class ReviewService:
                     criterion = rubric.criterion(verdict.criterion_id)
                     draft.verdicts.append(validator.validate_verdict(verdict, criterion))
 
-        self._fill_missing(draft, criteria)
+            self._fill_missing(draft, criteria)
 
-        breakdown = aggregate(
-            draft.verdicts, rubric, submitted_at=submitted_at, deadline_at=deadline_at
-        )
-        _apply(draft, breakdown)
-
-        draft.attention_reasons = [
-            f"{v.criterion_id}: {v.attention_reason}"
-            for v in draft.verdicts
-            if v.needs_human_attention and v.attention_reason
-        ]
-        if draft.partial_artifacts:
-            draft.attention_reasons.append(
-                "показаны не целиком: " + ", ".join(draft.partial_artifacts)
+            breakdown = aggregate(
+                draft.verdicts, rubric, submitted_at=submitted_at, deadline_at=deadline_at
             )
-        draft.needs_human_attention = bool(draft.attention_reasons) or bool(draft.failed_criteria)
+            _apply(draft, breakdown)
+
+            draft.attention_reasons = [
+                f"{v.criterion_id}: {v.attention_reason}"
+                for v in draft.verdicts
+                if v.needs_human_attention and v.attention_reason
+            ]
+            if draft.partial_artifacts:
+                draft.attention_reasons.append(
+                    "показаны не целиком: " + ", ".join(draft.partial_artifacts)
+                )
+            draft.needs_human_attention = (
+                bool(draft.attention_reasons) or bool(draft.failed_criteria)
+            )
+
+            # Резюме — последним: оно пересказывает готовые вердикты и знает
+            # итог. Внутри того же блока учёта, иначе его токены не попали бы
+            # в стоимость прогона и разбор выглядел бы дешевле, чем обошёлся.
+            draft.summary = self._summarise(draft, rubric, identities)
 
         summary = self.gateway.audit.summary(spend)
         draft.tokens_in = summary["tokens_in"]
@@ -186,6 +193,34 @@ class ReviewService:
                 # Модель придумала критерий или перепутала идентификатор.
                 log.warning("модель вернула лишний критерий %s", verdict.criterion_id)
         return verdicts
+
+    def _summarise(
+        self, draft: ReviewDraft, rubric: Rubric, identities: Sequence[Identity]
+    ) -> ReviewSummary | None:
+        """Связный отзыв по уже проставленным вердиктам.
+
+        Не удалось — возвращаем `None`, и черновик приезжает без резюме. Это
+        последний шаг, критерии к этому моменту разобраны и подтверждены
+        цитатами; ронять из-за него весь прогон было бы обменом целого на
+        украшение. Заглушки тоже нет: пустое место честнее выдуманного абзаца.
+        """
+        if not draft.verdicts:
+            return None
+        try:
+            result, _ = complete_json(
+                self.gateway,
+                summary_messages(draft, rubric),
+                ReviewSummary,
+                task=TaskKind.REVIEW,
+                data_class=DataClass.CONTAINS_PD,
+                temperature=self.options.temperature,
+                max_tokens=self.options.max_tokens,
+                identities=identities,
+            )
+        except (StructuredError, LLMError, LLMUnavailable) as exc:
+            log.warning("итоговый отзыв не собран: %s", exc)
+            return None
+        return None if result.is_empty else result
 
     def _fill_missing(self, draft: ReviewDraft, criteria: list[Criterion]) -> None:
         """Пропущенные критерии — тоже результат, и он должен быть виден.

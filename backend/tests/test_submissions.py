@@ -366,7 +366,7 @@ def _sse_events(response) -> list[dict]:
 
 def test_chat_reply_is_streamed_and_persisted(make_client):
     reply = json.dumps({"action": "reply", "reply": "балл посчитан агрегатором"})
-    client = make_client(responses=[VERDICTS, VERDICTS, reply])
+    client = make_client(responses=[VERDICTS, VERDICTS, "{}", reply])
     submission_id = _review(client)["submission_id"]
 
     response = client.post(f"/submissions/{submission_id}/chat", json={"message": "почему такой балл?"})
@@ -387,7 +387,7 @@ def test_chat_tool_call_result_is_visible_in_the_transcript(make_client):
         {"action": "tool", "tool": "get_file", "args": {"path": "cmd/main.go"}, "reply": "смотрю"}
     )
     final = json.dumps({"action": "reply", "reply": "теперь понятно"})
-    client = make_client(responses=[VERDICTS, VERDICTS, tool_step, final])
+    client = make_client(responses=[VERDICTS, VERDICTS, "{}", tool_step, final])
     submission_id = _review(client)["submission_id"]
 
     events = _sse_events(
@@ -407,7 +407,7 @@ def test_chat_propose_patch_carries_the_proposal_but_does_not_apply_it(make_clie
             "reply": "предлагаю снизить c1",
         }
     )
-    client = make_client(responses=[VERDICTS, VERDICTS, step])
+    client = make_client(responses=[VERDICTS, VERDICTS, "{}", step])
     submission_id = _review(client)["submission_id"]
     before = client.get(f"/submissions/{submission_id}/review").json()["score"]
 
@@ -435,7 +435,7 @@ def test_the_student_handle_never_reaches_the_model_from_the_chat(make_client):
     один и тот же текст работы и одна и та же внешняя модель.
     """
     reply = json.dumps({"action": "reply", "reply": "смотрю"})
-    client = make_client(responses=[VERDICTS, VERDICTS, reply])
+    client = make_client(responses=[VERDICTS, VERDICTS, "{}", reply])
     submission_id = _review(client)["submission_id"]
 
     client.post(f"/submissions/{submission_id}/chat", json={"message": "что сдал octocat?"})
@@ -479,7 +479,7 @@ def test_the_transcript_keeps_the_order_of_two_turns(make_client):
     )
     client = make_client(
         responses=[
-            VERDICTS, VERDICTS,
+            VERDICTS, VERDICTS, "{}",
             tool, json.dumps({"action": "reply", "reply": "первый ответ"}),
             json.dumps({"action": "reply", "reply": "второй ответ"}),
         ]

@@ -113,6 +113,38 @@ export function DraftPanel({
 
       <Gate workspace={workspace} />
 
+      {/* Отзыв словами — до разбора по критериям: ревьюер утверждает не только
+          баллы, но и текст, который прочитает студент. Прятать его под
+          критериями значило бы дать утвердить непрочитанным. */}
+      {workspace.summary ? (
+        <div className="border-b border-line px-5 py-4">
+          <h3 className="text-[12.5px] font-semibold text-ink">Отзыв о работе</h3>
+          {workspace.summary.strengths?.length ? (
+            <ul className="mt-1.5 space-y-1">
+              {workspace.summary.strengths.map((item) => (
+                <li key={item} className="text-[13px] leading-[1.55] text-muted">
+                  + {item}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {workspace.summary.improvements?.length ? (
+            <ul className="mt-1.5 space-y-1">
+              {workspace.summary.improvements.map((item) => (
+                <li key={item} className="text-[13px] leading-[1.55] text-muted">
+                  − {item}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {workspace.summary.encouragement ? (
+            <p className="mt-2 text-[12.5px] leading-[1.5] text-faint">
+              {workspace.summary.encouragement}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {attentionReasons.length ? (
         <div className="border-b border-line bg-warn-wash px-5 py-2.5">
           <div className="flex items-start gap-2">

@@ -1,4 +1,4 @@
-import { Check, Info, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import type { DetectionReport, DetectionSpan, SignalKind, SignalResult } from '@/lib/backend'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
@@ -161,11 +161,11 @@ export function DetectionPanel({ report, error, onSpan, onVerdict, activeSpanId 
           <Signals signals={report.signals ?? []} />
 
           {report.mismatch ? (
+            /* Только факт, без разъяснения. Что нарушение — необъявленный ИИ,
+               а не сам ИИ, ревьюер знает из условий курса; повторять это над
+               каждым сигналом значит превращать вывод в сноску. */
             <div className="mx-5 mb-4 rounded-lg border border-[#f0e2c2] bg-warn-wash px-3 py-2.5">
               <div className="text-[12.5px] font-medium text-warn-ink">Использование ИИ не заявлено</div>
-              <p className="mt-1 text-[12px] leading-[1.5] text-warn-ink/85">
-                По условиям курса нарушение — не сам ИИ, а необъявленный ИИ. {report.declaration_note}
-              </p>
             </div>
           ) : null}
 
@@ -185,22 +185,6 @@ export function DetectionPanel({ report, error, onSpan, onVerdict, activeSpanId 
             )}
           </div>
 
-          {/* Ограничения приезжают только про этот прогон — недоступный сигнал,
-              файл, доступный фрагментом. Постоянной сноски здесь больше нет,
-              поэтому список бывает пустым, и тогда футера быть не должно:
-              рамка с иконкой и без текста читается как потерянный текст. */}
-          {report.limitations?.length ? (
-            <footer className="shrink-0 border-t border-line px-5 py-3.5">
-              <div className="flex gap-2 text-[11.5px] leading-[1.5] text-faint">
-                <Info size={13} strokeWidth={1.7} className="mt-0.5 shrink-0" />
-                <ul className="space-y-0.5">
-                  {report.limitations.map((limit) => (
-                    <li key={limit}>{limit}</li>
-                  ))}
-                </ul>
-              </div>
-            </footer>
-          ) : null}
         </>
       )}
     </section>

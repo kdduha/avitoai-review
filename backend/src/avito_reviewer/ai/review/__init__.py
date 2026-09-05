@@ -13,6 +13,7 @@ from .schema import (
     Evidence,
     EvidenceStatus,
     ReviewDraft,
+    ReviewSummary,
 )
 from .service import ReviewService
 
@@ -24,6 +25,7 @@ __all__ = [
     "EvidenceValidator",
     "ReviewDraft",
     "ReviewService",
+    "ReviewSummary",
     "ScoreBreakdown",
     "aggregate",
     "batch_criteria",
