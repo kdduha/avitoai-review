@@ -1,0 +1,23 @@
+{
+  "id": "c-tarasenko",
+  "name": "Ева Тарасенко",
+  "initials": "ЕТ",
+  "email": "e.tarasenko@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "ML",
+    "эксперименты",
+    "python"
+  ],
+  "capacity_minutes": 480,
+  "median_minutes_per_work": 38.0,
+  "onboarding": false,
+  "tov": "поддерживающий",
+  "course_ids": [],
+  "stream_ids": [],
+  "assignment_ids": [],
+  "github_handle": "etarasenko",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -28,6 +27,7 @@ from avito_reviewer.config import GitHubConfig
 from avito_reviewer.ingest.content import github_ref, parse_github_locator
 from avito_reviewer.ingest.diff import added_line_ranges
 from avito_reviewer.ingest.errors import InvalidLinkError, ProviderFetchError
+from avito_reviewer.ingest.identity import author_hash
 from avito_reviewer.ingest.models import (
     Artifact,
     ArtifactRole,
@@ -400,4 +400,4 @@ class GitHubProvider(SubmissionProvider):
         )
 
     def _hash(self, value: str) -> str:
-        return hashlib.sha256(f"{self._salt}:{value}".encode()).hexdigest()[:16]
+        return author_hash(value, salt=self._salt)

@@ -1,0 +1,28 @@
+{
+  "id": "c-mustafina",
+  "name": "Регина Мустафина",
+  "initials": "РМ",
+  "email": "r.mustafina@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "антифрод",
+    "риски",
+    "продукт"
+  ],
+  "capacity_minutes": 360,
+  "median_minutes_per_work": 27.0,
+  "onboarding": false,
+  "tov": "строгий",
+  "course_ids": [
+    "product"
+  ],
+  "stream_ids": [
+    "product-a",
+    "product-b"
+  ],
+  "assignment_ids": [],
+  "github_handle": "rmustafina",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

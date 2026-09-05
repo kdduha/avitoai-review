@@ -1,0 +1,27 @@
+{
+  "id": "c-nogovitsyn",
+  "name": "Савелий Ноговицын",
+  "initials": "СН",
+  "email": "s.nogovitsyn@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "QA",
+    "тест-дизайн"
+  ],
+  "capacity_minutes": 300,
+  "median_minutes_per_work": 24.0,
+  "onboarding": false,
+  "tov": "строгий",
+  "course_ids": [
+    "qa"
+  ],
+  "stream_ids": [
+    "qa-a",
+    "qa-b"
+  ],
+  "assignment_ids": [],
+  "github_handle": "snogovitsyn",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

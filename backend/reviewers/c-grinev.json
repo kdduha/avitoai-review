@@ -1,0 +1,22 @@
+{
+  "id": "c-grinev",
+  "name": "Лев Гринёв",
+  "initials": "ЛГ",
+  "email": "l.grinev@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "GPU",
+    "инфраструктура"
+  ],
+  "capacity_minutes": 300,
+  "median_minutes_per_work": 36.0,
+  "onboarding": false,
+  "tov": null,
+  "course_ids": [],
+  "stream_ids": [],
+  "assignment_ids": [],
+  "github_handle": "lgrinev",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

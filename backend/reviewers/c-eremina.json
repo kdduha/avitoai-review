@@ -1,0 +1,31 @@
+{
+  "id": "c-eremina",
+  "name": "Мария Ерёмина",
+  "initials": "МЕ",
+  "email": "m.eremina@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "go",
+    "тестирование",
+    "CI"
+  ],
+  "capacity_minutes": 480,
+  "median_minutes_per_work": 21.0,
+  "onboarding": false,
+  "tov": "поддерживающий",
+  "course_ids": [
+    "go",
+    "backend"
+  ],
+  "stream_ids": [
+    "go-a",
+    "go-b",
+    "backend-a",
+    "backend-b"
+  ],
+  "assignment_ids": [],
+  "github_handle": "meremina",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}
