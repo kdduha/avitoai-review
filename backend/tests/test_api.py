@@ -365,8 +365,13 @@ def test_cost_accumulates_across_runs(make_client):
 # Format Gate в конвейере
 # --------------------------------------------------------------------------- #
 
-def test_blocked_submission_never_reaches_the_model(make_client):
-    """Работа, не принимаемая по формату, не должна стоить ни рубля токенов."""
+def test_a_failed_formal_requirement_is_reported_and_the_review_still_runs(make_client):
+    """Гейт сообщает, а не запрещает.
+
+    Работа без дословной строки в логе раньше не доходила до модели вовсе —
+    экономия на токенах стоила студенту отзыва целиком. Теперь непройденная
+    проверка приезжает фактом в промпт и строкой в карточку, а разбор идёт.
+    """
     bundle = go_bundle(artifacts=[artifact("cmd/main.go", text="package main\nfunc main() {}\n")])
     client, provider = make_client(ingest=StubIngest(bundle))
 
@@ -374,10 +379,11 @@ def test_blocked_submission_never_reaches_the_model(make_client):
         "/review", json={"link": "https://x/pull/1", "rubric_id": "go-task1"}
     ).json()
 
-    assert body["draft"]["gate"]["status"] == "blocked"
-    assert provider.calls == []
-    assert body["draft"]["cost_rub"] == 0
-    assert body["draft"]["needs_human_attention"] is True
+    assert body["draft"]["gate"]["status"] == "warning"
+    assert provider.calls, "модель запускается несмотря на непройденное требование"
+    assert any(
+        "Сообщение о завершении" in fact for fact in body["draft"]["gate_facts"]
+    ), "непройденное требование уходит в модель фактом"
 
 
 def test_gate_facts_are_returned_with_the_draft(make_client):

@@ -1925,7 +1925,7 @@ export interface components {
          * GateStatus
          * @enum {string}
          */
-        GateStatus: "passed" | "warning" | "blocked";
+        GateStatus: "passed" | "warning";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1959,6 +1959,11 @@ export interface components {
             sources: components["schemas"]["SubmissionSource"][];
             /** Llm Provider */
             llm_provider: string;
+            /**
+             * Llm Model
+             * @default
+             */
+            llm_model: string;
             /** Rubrics */
             rubrics: string[];
             /** Reviewers */

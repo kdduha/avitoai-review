@@ -14,5 +14,9 @@ class InitResponse(BaseModel):
     version: str
     sources: list[SubmissionSource]
     llm_provider: str
+    """`fake` / `local` / `external` — куда ходит шлюз, а не чем отвечает."""
+    llm_model: str = ""
+    """Модель, которой отвечают. Провайдера мало: «модель: fake» в интерфейсе
+    читается как имя модели, хотя это способ подключения."""
     rubrics: list[str]
     reviewers: list[str]

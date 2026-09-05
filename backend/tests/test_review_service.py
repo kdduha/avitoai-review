@@ -374,12 +374,3 @@ def test_a_failed_summary_leaves_the_draft_without_one():
 def test_an_empty_summary_is_dropped_rather_than_shown_blank():
     gateway, _ = fake_gateway([batch_response(["c1", "c2", "c3"]), "{}"])
     assert run(gateway).summary is None
-
-
-def test_a_blocked_work_gets_no_summary():
-    """Гейт не пустил работу — модель не запускалась, и пересказывать нечего."""
-    gateway, provider = fake_gateway([])
-    draft = ReviewService(gateway).without_model(go_rubric(), "не принято по формату")
-
-    assert draft.summary is None
-    assert provider.calls == [], "ни одного обращения к модели"

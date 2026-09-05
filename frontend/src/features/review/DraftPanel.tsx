@@ -41,10 +41,13 @@ function Gate({ workspace }: { workspace: Workspace }) {
 
   const failed = outcomes.filter((item) => !item.passed && !item.inconclusive)
   const unclear = outcomes.filter((item) => item.inconclusive)
-  const blocked = workspace.gate?.status === 'blocked'
+  /* Непройденное дословное требование условия. Раньше оно останавливало разбор
+     целиком; теперь это просто самая заметная строка в списке — гейт сообщает,
+     а не запрещает. */
+  const required = failed.filter((item) => item.level === 'blocking')
 
   return (
-    <div className={cn('border-b border-line px-5 py-2.5', blocked ? 'bg-critical-wash' : 'bg-[#f8f9f6]')}>
+    <div className="border-b border-line bg-[#f8f9f6] px-5 py-2.5">
       <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 text-left">
         <ChevronDown
           size={13}
@@ -55,7 +58,7 @@ function Gate({ workspace }: { workspace: Workspace }) {
           Формальные проверки: {outcomes.length - failed.length - unclear.length} из {outcomes.length}
         </span>
         {failed.length ? (
-          <span className={cn('text-[12.5px] font-medium', blocked ? 'text-critical-ink' : 'text-warn-ink')}>
+          <span className="text-[12.5px] font-medium text-warn-ink">
             не прошли {failed.length}
           </span>
         ) : null}
@@ -64,9 +67,10 @@ function Gate({ workspace }: { workspace: Workspace }) {
         ) : null}
       </button>
 
-      {blocked ? (
-        <p className="mt-1.5 pl-5 text-[12.5px] leading-snug text-critical-ink">
-          Работа не принимается по формату, поэтому модель не запускалась — прогон не стоил ни рубля.
+      {required.length ? (
+        <p className="mt-1.5 pl-5 text-[12.5px] leading-snug text-warn-ink">
+          Не выполнено требование условия: {required.map((item) => item.label).join('; ')}. Разбор
+          сделан, балл по критериям это учитывает.
         </p>
       ) : null}
 

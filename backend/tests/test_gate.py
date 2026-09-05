@@ -51,14 +51,19 @@ def test_present_string_passes_and_points_at_the_line():
     assert report.outcomes[0].locations == ["cmd/main.go:4"]
 
 
-def test_missing_blocking_string_blocks_the_submission():
+def test_a_missing_blocking_string_is_reported_but_does_not_stop_the_review():
+    """Непройденное дословное требование — повод рассказать, а не остановить.
+
+    Раньше оно возвращало работу ревьюеру, не запуская модель: студент за одну
+    недостающую строку в логе не получал ни слова о том, что сделано хорошо.
+    """
     report = run_on(
         rubric_with(CONTAINS), artifact("cmd/main.go", text="package main\nfunc main() {}\n")
     )
 
-    assert report.status is GateStatus.BLOCKED
-    assert report.blocked is True
+    assert report.status is GateStatus.WARNING
     assert [o.label for o in report.failures] == ["Сообщение о завершении"]
+    assert [o.level for o in report.failures] == ["blocking"], "важность проверки осталась"
 
 
 def test_absence_in_a_fragment_never_blocks():
@@ -76,7 +81,10 @@ def test_only_listed_suffixes_are_searched():
         rubric_with(CONTAINS),
         artifact("README.md", text="Пишем Shutting down service-courier\n", lang="markdown"),
     )
-    assert report.status is GateStatus.BLOCKED
+    # Строка есть, но в markdown: проверка ищет только в коде, поэтому она не
+    # засчитана — и это видно в статусе, а не в остановленном разборе.
+    assert report.status is GateStatus.WARNING
+    assert [o.label for o in report.failures] == ["Сообщение о завершении"]
 
 
 # --------------------------------------------------------------------------- #
@@ -159,7 +167,6 @@ def test_history_that_never_arrived_is_not_a_missing_history():
 
     assert outcome.inconclusive is True
     assert outcome.passed is False
-    assert report.blocked is False
     assert report.status is GateStatus.WARNING
 
 
@@ -225,7 +232,6 @@ def test_unimplemented_check_goes_to_the_reviewer_instead_of_vanishing():
 
     assert outcome.inconclusive is True
     assert outcome.passed is False
-    # Не блокирует: непроверенное — не то же самое, что проваленное.
-    assert report.blocked is False
+    # Непроверенное — не то же самое, что проваленное, и оба не останавливают.
     assert report.status is GateStatus.WARNING
     assert outcome in report.unresolved

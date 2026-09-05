@@ -243,7 +243,12 @@ export function CheckPage() {
           </Button>
           {status.data ? (
             <span className="ml-auto text-[11.5px] text-faint">
-              модель: {status.data.llm_provider}
+              {/* Показываем модель, а не провайдер. «модель: fake» читалось как
+                  имя модели, хотя fake — это способ подключения: заглушка без
+                  ключа. На заглушке имени модели нет, и врать его незачем. */}
+              {status.data.llm_provider === 'fake'
+                ? 'без ключа: модель не вызывается'
+                : `модель: ${status.data.llm_model || status.data.llm_provider}`}
             </span>
           ) : null}
         </div>

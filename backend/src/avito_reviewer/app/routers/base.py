@@ -30,6 +30,7 @@ async def init(request: Request) -> InitResponse:
         version=__version__,
         sources=ingest.sources,
         llm_provider=ai.config.llm.provider,
+        llm_model=ai.config.llm.model,
         rubrics=rubrics.ids,
         reviewers=reviewers.ids,
     )
