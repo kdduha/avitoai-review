@@ -23,7 +23,11 @@ class StudentAssignment(BaseModel):
 
     id: UUID
     course_key: str
+    course_title: str = ""
+    """Название курса словами. Студент учится на нескольких сразу, и `go` в
+    качестве заголовка группы ему ничего не говорит."""
     stream_key: str
+    stream_title: str = ""
     title: str
     description: str
     max_score: float

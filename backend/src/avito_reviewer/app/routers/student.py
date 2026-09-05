@@ -59,11 +59,16 @@ async def _my_streams(session: AsyncSession, student_id: UUID) -> list[UUID]:
     )
 
 
-async def _where(session: AsyncSession, assignment: Assignment) -> tuple[str, str]:
-    """Курс и поток задания строками — для подписи в кабинете."""
+async def _where(session: AsyncSession, assignment: Assignment) -> tuple[str, str, str, str]:
+    """Курс и поток задания: ключ и название. Ключ для машины, название человеку."""
     stream = await session.get(Stream, assignment.stream_id)
     course = await session.get(Course, stream.course_id) if stream else None
-    return (course.key if course else ""), (stream.key if stream else "")
+    return (
+        course.key if course else "",
+        course.title if course else "",
+        stream.key if stream else "",
+        stream.title if stream else "",
+    )
 
 
 def _rubric_title(rubric: Rubric | None, assignment: Assignment) -> str:
@@ -98,7 +103,9 @@ async def _as_student_submission(
         if submission.assignment_id
         else None
     )
-    course_key, stream_key = await _where(session, assignment) if assignment else ("", "")
+    course_key, _, stream_key, _ = (
+        await _where(session, assignment) if assignment else ("", "", "", "")
+    )
     rubric = Rubric.model_validate(submission.rubric_snapshot)
     approved = submission.status == SubmissionStatus.APPROVED
 
@@ -160,7 +167,7 @@ async def my_assignments(
 
     out = []
     for assignment in rows:
-        course_key, stream_key = await _where(session, assignment)
+        course_key, course_title, stream_key, stream_title = await _where(session, assignment)
         rubric = request.app.state.rubrics.get(assignment.rubric_key)
         attempts = [s for s in mine if s.assignment_id == assignment.id]
         approved = [
@@ -172,7 +179,9 @@ async def my_assignments(
             StudentAssignment(
                 id=assignment.id,
                 course_key=course_key,
+                course_title=course_title,
                 stream_key=stream_key,
+                stream_title=stream_title,
                 title=_rubric_title(rubric, assignment),
                 description=assignment.description,
                 max_score=rubric.scale.total_max if rubric else 0.0,

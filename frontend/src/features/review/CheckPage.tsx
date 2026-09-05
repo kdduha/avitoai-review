@@ -196,10 +196,10 @@ export function CheckPage() {
           />
         </Field>
 
-        <Field
-          label="ФИО студента"
-          hint="в модель не уходит: шлюз вычищает имя вместе с падежами и инициалами"
-        >
+        {/* Поле осталось, объяснение — нет. Что имя не уходит в модель, а
+            вычищается шлюзом, это свойство сервиса, а не подсказка к вводу:
+            место такому тексту в документации, а не над каждым полем. */}
+        <Field label="ФИО студента">
           <input
             value={studentName}
             onChange={(event) => setStudentName(event.target.value)}
@@ -207,11 +207,6 @@ export function CheckPage() {
             className={inputClass}
           />
         </Field>
-        <p className="-mt-2 max-w-[62ch] text-[12px] leading-[1.5] text-faint">
-          В сдаче имени нет намеренно, поэтому без этого поля оно остаётся на общих детекторах ПДн.
-          Назвав его здесь, вы даёте шлюзу вычистить имя прицельно — в том числе там, где студент
-          подписался в README или в комментарии.
-        </p>
 
         <label className="flex cursor-pointer items-start gap-2.5">
           <input

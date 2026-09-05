@@ -10,6 +10,25 @@ import {
 import { Button } from '@/components/ui/Button'
 import { Field, inputClass } from '@/components/ui/Field'
 
+/** Задания по курсам, в порядке первого появления: сортировку по сроку задал
+ *  сервер, и перетасовывать её здесь значило бы спорить с ним. */
+function byCourse(items: StudentAssignment[]): [string, StudentAssignment[]][] {
+  const groups = new Map<string, StudentAssignment[]>()
+  for (const item of items) {
+    const key = item.course_key || '—'
+    groups.set(key, [...(groups.get(key) ?? []), item])
+  }
+  return [...groups.entries()]
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return one
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few
+  return many
+}
+
 function when(value: string | null | undefined, empty = 'срока нет'): string {
   if (!value) return empty
   return new Date(value).toLocaleString('ru-RU', {
@@ -215,18 +234,33 @@ export function StudentHomePage() {
         </div>
       ) : null}
 
-      <h2 className="mt-6 text-[13px] font-semibold text-ink">К сдаче</h2>
+      {/* Группируем по курсу: студент учится на нескольких сразу, и плоский
+          список заданий из четырёх разных курсов читается как свалка. */}
       {assignments.data?.length ? (
-        <ul className="mt-3 space-y-3">
-          {assignments.data.map((item) => (
-            <AssignmentCard key={item.id} assignment={item} />
-          ))}
-        </ul>
+        byCourse(assignments.data).map(([key, group]) => (
+          <section key={key}>
+            <h2 className="mt-6 flex items-baseline gap-2 text-[13px] font-semibold text-ink">
+              {group[0].course_title || key}
+              <span className="text-[12px] font-normal text-faint">
+                поток {group[0].stream_title || group[0].stream_key} · {group.length}{' '}
+                {plural(group.length, 'задание', 'задания', 'заданий')}
+              </span>
+            </h2>
+            <ul className="mt-3 space-y-3">
+              {group.map((item) => (
+                <AssignmentCard key={item.id} assignment={item} />
+              ))}
+            </ul>
+          </section>
+        ))
       ) : !failed ? (
+        <>
+        <h2 className="mt-6 text-[13px] font-semibold text-ink">К сдаче</h2>
         <p className="mt-3 max-w-[64ch] text-[13px] leading-[1.6] text-muted">
           Заданий нет: вы ещё не зачислены ни на один поток, либо методист не выдал потоку ни
           одной рубрики.
         </p>
+        </>
       ) : null}
 
       <h2 className="mt-8 text-[13px] font-semibold text-ink">Сданное</h2>
