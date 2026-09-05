@@ -12,7 +12,7 @@ import { GradesTable } from './GradesTable'
 const TABS = [
   { id: 'grades', label: 'Ведомость' },
   { id: 'dashboard', label: 'Дашборд' },
-  { id: 'curators', label: 'Кураторы' },
+  { id: 'curators', label: 'Ревьюеры' },
 ]
 
 export function CoursePage() {

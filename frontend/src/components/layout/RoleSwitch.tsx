@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn'
 import type { Role } from '@/lib/types'
 
 const OPTIONS: { id: Role; label: string }[] = [
-  { id: 'curator', label: 'Куратор' },
+  { id: 'curator', label: 'Ревьюер' },
   { id: 'head', label: 'Руководитель' },
 ]
 

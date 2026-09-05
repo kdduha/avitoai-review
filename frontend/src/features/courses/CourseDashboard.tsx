@@ -51,7 +51,7 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
           hint={`из ${stats.expected} ожидаемых, ${percent(completion)}`}
         />
         <StatTile
-          label="Ждут куратора"
+          label="Ждут ревьюера"
           value={`${stats.awaitingReview}`}
           hint="черновик готов, оценка не утверждена"
           tone={stats.awaitingReview > 12 ? 'warn' : 'neutral'}
@@ -168,7 +168,7 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Нагрузка кураторов" hint="минуты разбора против недельной ёмкости">
+        <Panel title="Нагрузка ревьюеров" hint="минуты разбора против недельной ёмкости">
           <div className="space-y-3.5">
             {stats.reviewLoad.map((row) => (
               <LoadMeter
@@ -182,14 +182,14 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
           </div>
         </Panel>
 
-        <Panel title="Сигналы ГенИИ" hint="решение по каждому сигналу принимает куратор">
+        <Panel title="Сигналы ГенИИ" hint="решение по каждому сигналу принимает ревьюер">
           <div className="flex gap-8">
             <div>
               <div className="text-[12.5px] text-muted">Работ с сигналом</div>
               <div className="mt-1 text-[24px] font-semibold leading-none text-ink">{stats.aiFlagged}</div>
             </div>
             <div>
-              <div className="text-[12.5px] text-muted">Подтверждено куратором</div>
+              <div className="text-[12.5px] text-muted">Подтверждено ревьюером</div>
               <div className="mt-1 text-[24px] font-semibold leading-none text-warn-ink">{stats.aiConfirmed}</div>
             </div>
             <div>
@@ -200,7 +200,7 @@ export function CourseDashboard({ stats }: { stats: StreamStats }) {
             </div>
           </div>
           <p className="mt-4 max-w-[62ch] text-[12px] leading-[1.55] text-faint">
-            Сигнал не влияет на балл и не является доказательством. Подтверждения и отклонения кураторов
+            Сигнал не влияет на балл и не является доказательством. Подтверждения и отклонения ревьюеров
             копятся как выборка для калибровки порогов.
           </p>
         </Panel>

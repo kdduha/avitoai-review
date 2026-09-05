@@ -8,7 +8,7 @@ import { Modal } from '@/components/ui/Modal'
 const inputClass =
   'h-9 w-full rounded-lg border border-line bg-raised px-3 text-[13.5px] text-ink outline-none placeholder:text-faint focus:border-accent-line'
 
-/** Куратор/руководитель переключаются в один клик (`RoleSwitch`) — сеяным
+/** Ревьюер/руководитель переключаются в один клик (`RoleSwitch`) — сеяным
  *  паролем на один из двух дефолтных аккаунтов. Этот модал — единственный
  *  способ войти под чем-то ещё: вторым ревьюером или вторым admin'ом,
  *  заведённым через `POST /users` (см. `docs/happy-path.md`, сценарий 7). */

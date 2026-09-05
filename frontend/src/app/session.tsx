@@ -26,11 +26,11 @@ const SessionContext = createContext<Session | null>(null)
 const ROLE_KEY = 'avito-reviewer:role'
 
 /** Синтетическая роль интерфейса → один из трёх сеяных бэкенд-аккаунтов
- *  (см. `docs/backend.md`): куратор проверяет работы сам — `reviewer`,
+ *  (см. `docs/backend.md`): ревьюер проверяет работы сам — `reviewer`,
  *  руководитель видит и решает за весь поток — `admin` (бэкенд не заводит
  *  отдельной роли координатора, пока некому дать под неё отдельный аккаунт).
  *  Любой другой аккаунт, заведённый через `/users`, попадает в ту же пару
- *  корзин по своей настоящей роли — `reviewer` → куратор, `admin` → руководитель. */
+ *  корзин по своей настоящей роли — `reviewer` → ревьюер, `admin` → руководитель. */
 const BACKEND_USERNAME: Record<Role, string> = { curator: 'reviewer', head: 'admin' }
 const BACKEND_PASSWORD = (import.meta.env.VITE_BACKEND_PASSWORD as string | undefined) ?? 'avito2026'
 

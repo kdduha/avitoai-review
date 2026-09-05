@@ -240,7 +240,7 @@ export function RubricEditor({ initial, draft = null, groundedShare = null, mode
       <Section title="Паспорт задания">
         <div className="space-y-4 px-5 py-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
-            <Field label="Название" hint="его увидит куратор в списке рубрик">
+            <Field label="Название" hint="его увидит ревьюер в списке рубрик">
               <TextField
                 value={rubric.title}
                 onChange={(title) => patch({ title })}

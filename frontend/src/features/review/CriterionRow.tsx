@@ -77,7 +77,7 @@ export function CriterionRow({ verdict, onScore, onEvidence, activeQuote, scoreS
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-        {verdict.edited ? <Badge tone="accent">Балл поправлен куратором</Badge> : null}
+        {verdict.edited ? <Badge tone="accent">Балл поправлен ревьюером</Badge> : null}
         {verdict.aiSensitive ? (
           <Badge tone="mark">критерий чувствителен к самостоятельности</Badge>
         ) : null}

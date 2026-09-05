@@ -33,7 +33,7 @@ function outcomeIcon(outcome: CheckOutcome) {
 }
 
 /** Format Gate — детерминированная часть проверки. Свёрнут, пока всё сошлось:
- *  куратору важны не пройденные проверки, а те, что не прошли. */
+ *  ревьюеру важны не пройденные проверки, а те, что не прошли. */
 function Gate({ workspace }: { workspace: Workspace }) {
   const [open, setOpen] = useState(false)
   const outcomes = workspace.gate?.outcomes ?? []

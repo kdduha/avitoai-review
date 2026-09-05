@@ -16,7 +16,7 @@ interface Props {
 
 const STATUS_HINT: Record<Grade['status'], string> = {
   approved: 'утверждено',
-  draft_ready: 'черновик готов, ждёт куратора',
+  draft_ready: 'черновик готов, ждёт ревьюера',
   in_review: 'на проверке',
   missing: 'не сдано',
   late: 'сдано с опозданием',
@@ -57,7 +57,7 @@ function GradeCell({
         >
           {grade.score}
         </span>
-        {pending ? <span className="size-1.5 rounded-full bg-mark-rule" title="ждёт куратора" /> : null}
+        {pending ? <span className="size-1.5 rounded-full bg-mark-rule" title="ждёт ревьюера" /> : null}
         {grade.status === 'late' ? <span className="text-[10.5px] text-warn-ink">+{grade.daysLate}д</span> : null}
       {grade.aiFlag !== null ? (
         <Sparkle size={10} strokeWidth={2} className="text-warn" aria-label="сигнал ГенИИ" />
@@ -131,7 +131,7 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
 
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[12px] text-muted">
-            <span className="size-1.5 rounded-full bg-mark-rule" /> ждёт куратора
+            <span className="size-1.5 rounded-full bg-mark-rule" /> ждёт ревьюера
           </span>
           <span className="flex items-center gap-1.5 text-[12px] text-muted">
             <Sparkle size={11} strokeWidth={2} className="text-warn" /> сигнал ГенИИ
@@ -169,7 +169,7 @@ export function GradesTable({ students, assignments, grades, curators, totals }:
                 </button>
               </th>
               <th className="px-3 py-2.5 text-center text-[12.5px] font-medium text-muted">Оценка</th>
-              <th className="px-4 py-2.5 text-[12.5px] font-medium text-muted">Куратор</th>
+              <th className="px-4 py-2.5 text-[12.5px] font-medium text-muted">Ревьюер</th>
             </tr>
           </thead>
           <tbody>

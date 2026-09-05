@@ -92,7 +92,7 @@ export interface Workspace {
   lateExplanation: string
   needsHumanAttention: boolean
   attentionReasons: string[]
-  /** Куратор правил баллы: итог на экране больше не тот, что посчитал сервер. */
+  /** Ревьюер правил баллы: итог на экране больше не тот, что посчитал сервер. */
   edited: boolean
   /** Детектор запускался, но не отработал. */
   detectionError: string | null
