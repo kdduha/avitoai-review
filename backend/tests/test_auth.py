@@ -86,3 +86,42 @@ def test_admin_reaches_everything_reviewer_does(client):
     as_role(client, "admin")
     assert client.get("/me/queue").status_code == 200
     assert client.get("/cost").status_code == 200
+
+
+def test_the_reviewer_roster_becomes_accounts(client):
+    """Каталог ревьюеров — данные; без аккаунтов их некуда приложить.
+
+    Назначить на поток можно только строку `users`, поэтому десять настоящих
+    карточек с навыками и ёмкостью оставались бы невидимыми, а в интерфейсе
+    стояли бы два ревьюера с ёмкостью по умолчанию.
+    """
+    as_role(client, "admin")
+    usernames = {u["username"] for u in client.get("/users").json()}
+
+    assert "c-bahtin" in usernames, "карточка каталога завела аккаунт"
+    assert {"student", "reviewer", "methodist", "admin"} <= usernames, "сеяные никуда не делись"
+
+    roster = client.get("/users").json()
+    card = next(u for u in roster if u["username"] == "c-bahtin")
+    assert card["role"] == "reviewer"
+    assert card["display_name"] == "Данил Бахтин", "имя берётся из карточки, а не из логина"
+
+
+def test_seeding_the_roster_twice_adds_nothing(client):
+    """Идемпотентно по логину: перезапуск не плодит и не переписывает."""
+    import asyncio
+
+    from avito_reviewer.app.auth import seed_roster_reviewers
+    from avito_reviewer.config import AuthConfig
+
+    as_role(client, "admin")
+    before = len(client.get("/users").json())
+
+    app = client.app
+
+    async def again() -> int:
+        async with app.state.sessionmaker() as session:
+            return await seed_roster_reviewers(session, AuthConfig(), app.state.reviewers)
+
+    assert asyncio.run(again()) == 0
+    assert len(client.get("/users").json()) == before

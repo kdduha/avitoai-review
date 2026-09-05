@@ -10,7 +10,7 @@ from fastapi.concurrency import run_in_threadpool
 from avito_reviewer import __version__
 from avito_reviewer.ai import AIService
 from avito_reviewer.ai.rubric import RubricStore
-from avito_reviewer.app.auth import seed_users
+from avito_reviewer.app.auth import seed_roster_reviewers, seed_users
 from avito_reviewer.app.routers import (
     auth_router,
     base_router,
@@ -106,6 +106,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await run_in_threadpool(run_migrations)
         async with sessionmaker() as session:
             await seed_users(session, config.auth)
+            # После сеяных: каталог ревьюеров — данные, и аккаунт под
+            # карточку заводится сам, иначе назначать на поток некого.
+            await seed_roster_reviewers(session, config.auth, app.state.reviewers)
     except OSError as exc:
         # Первая команда в документе запуска — `uvicorn`, а база к этому моменту
         # обычно не поднята. Сырое «Connect call failed» не подсказывает ни

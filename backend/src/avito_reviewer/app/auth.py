@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from avito_reviewer.config import AuthConfig
 from avito_reviewer.db import Role, User, session_dependency
+from avito_reviewer.distribution import ReviewerStore
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +104,40 @@ async def seed_users(session: AsyncSession, config: AuthConfig) -> None:
         )
     await session.commit()
     log.info("auth: seeded %d accounts (%s)", len(SEED_USERS), ", ".join(SEED_USERS.values()))
+
+
+async def seed_roster_reviewers(
+    session: AsyncSession, config: AuthConfig, reviewers: ReviewerStore
+) -> int:
+    """Аккаунт на каждую карточку каталога `backend/reviewers/`.
+
+    Каталог ревьюеров — десять настоящих карточек с навыками, ёмкостью и
+    курсами; на них и держится демонстрация распределения. Без аккаунтов они
+    оставались данными, которые некуда приложить: назначить на поток можно
+    только строку `users`, поэтому в интерфейсе было два ревьюера с ёмкостью
+    по умолчанию вместо десяти с разными.
+
+    Идемпотентно по логину, а не по пустоте таблицы: правило каталога —
+    «добавить ревьюера значит добавить JSON» — должно продолжать работать и
+    после того, как база завелась. Уже существующий аккаунт не трогается:
+    пароль и роль могли поменять руками, и перезапись стёрла бы это молча.
+    """
+    known = set((await session.execute(select(User.username))).scalars().all())
+    password_hash = hash_password(config.seed_password)
+    added = [card for card in reviewers.all() if card.id not in known]
+    for card in added:
+        session.add(
+            User(
+                username=card.id,
+                password_hash=password_hash,
+                role=Role.REVIEWER,
+                display_name=card.name,
+            )
+        )
+    if added:
+        await session.commit()
+        log.info("auth: seeded %d reviewer accounts from the roster", len(added))
+    return len(added)
 
 
 # --------------------------------------------------------------------------- #
