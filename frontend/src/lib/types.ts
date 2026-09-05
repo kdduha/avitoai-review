@@ -3,7 +3,22 @@
  *  `.../ai/detection/schema.py` и схему данных из архитектуры (раздел 10).
  *  Пока их наполняет мок-слой; бэкенд отдаёт те же поля в snake_case. */
 
-export type Role = 'curator' | 'head'
+/** Роли те же, что у бэкенда (`db/models.py::Role`), и называются так же.
+ *  Свой словарь фронта («curator» / «head») разъезжался с сервером молча:
+ *  токен приходил с ролью `admin`, а интерфейс переводил её в `head` и
+ *  обратно на каждом входе. Русские подписи живут в `RoleSwitch`. */
+export type Role = 'student' | 'reviewer' | 'methodist' | 'admin'
+
+/** Лестница прав та же, что на сервере (`app/auth.py::_RANK`): каждая роль
+ *  умеет всё, что умеет предыдущая. Держать её здесь копией, а не выводить из
+ *  токена, можно ровно потому, что она решает, что *показать*; что *разрешить*
+ *  решает сервер, и 403 он вернёт независимо от этого файла. */
+const RANK: Record<Role, number> = { student: 0, reviewer: 1, methodist: 2, admin: 3 }
+
+export function atLeast(role: Role, minimum: Role): boolean {
+  return RANK[role] >= RANK[minimum]
+}
+
 
 export interface Student {
   id: string

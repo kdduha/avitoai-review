@@ -111,6 +111,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Курсы */
+        get: operations["list_courses_courses_get"];
+        put?: never;
+        /** Завести курс */
+        post: operations["create_course_courses_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Потоки */
+        get: operations["list_streams_streams_get"];
+        put?: never;
+        /** Завести поток */
+        post: operations["create_stream_streams_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams/{stream_id}/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Зачислить студентов на поток
+         * @description Связать уже заведённые аккаунты с потоком.
+         *
+         *     Людей эта ручка не создаёт: аккаунт заводится через `POST /users`, и
+         *     зачислять можно только роль `student` — ревьюер на потоке появляется
+         *     назначением, а не зачислением.
+         */
+        post: operations["enroll_streams__stream_id__students_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Задания */
+        get: operations["list_assignments_assignments_get"];
+        put?: never;
+        /**
+         * Выдать рубрику потоку
+         * @description Завести задание: какая рубрика, какому потоку, до какого числа.
+         *
+         *     ``404`` — нет такого потока или такой рубрики в каталоге.
+         *     ``409`` — эта рубрика уже выдана этому потоку.
+         */
+        post: operations["create_assignment_assignments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/assignments/{assignment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Одно задание */
+        get: operations["get_assignment_assignments__assignment_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Убрать задание
+         * @description ``409`` — по заданию уже есть сдачи: они ссылаются на него, и удаление
+         *     оставило бы их без объяснения, откуда взялся срок.
+         */
+        delete: operations["delete_assignment_assignments__assignment_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Поправить задание или срок
+         * @description Правка срока действует только на будущие разборы.
+         *
+         *     Уже сохранённые сдачи хранят `deadline_at` в своей строке и в бандле, и
+         *     пересчёт по ним не запускается: работа была оценена против того срока,
+         *     который стоял в момент сдачи, и менять её балл задним числом нельзя —
+         *     ровно по той же причине, по которой рубрика замораживается снимком.
+         */
+        patch: operations["patch_assignment_assignments__assignment_id__patch"];
+        trace?: never;
+    };
     "/rubrics": {
         parameters: {
             query?: never;
@@ -281,6 +396,69 @@ export interface paths {
         get: operations["cost_cost_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/work-profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Describe a submission and estimate the review effort
+         * @description Собрать профиль работы: о чём она и сколько займёт её проверка.
+         *
+         *     Единственный вызов модели во всём распределении. Дальше решает код:
+         *     `/distribute` к модели не ходит вовсе, потому что координатор обязан уметь
+         *     объяснить студенту, почему его проверяет именно этот человек, а
+         *     вероятностный ответ на такой вопрос не годится.
+         *
+         *     Оценка минут обрезается потолком, и обрезание видно в `profile.warnings`:
+         *     солвер верит ей как факту, и ошибка на порядок молча съела бы ёмкость всего
+         *     потока.
+         *
+         *     ``404`` — рубрика не найдена. ``422`` — ссылка или источник неверны.
+         *     ``502`` — источник сдачи или модель не ответили.
+         */
+        post: operations["work_profile_work_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/distribute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Lay submissions out across reviewers
+         * @description Разложить работы по ревьюерам и объяснить каждое назначение.
+         *
+         *     К модели не обращается ни разу: раскладка не стоит ни одного токена и
+         *     воспроизводима — один и тот же пул даёт побитово один и тот же план, иначе
+         *     координатор, увидевший в 10:00 и в 10:05 разное, перестанет ей пользоваться.
+         *
+         *     Исчерпание ёмкости — это результат, а не ошибка: работы, которые никто не
+         *     смог взять, приходят в `unassigned` с поимённым списком отказавших.
+         *
+         *     ``404`` — распределять не между кем: пул не передан, а каталог пуст.
+         *     ``422`` — пустой или противоречивый пул, либо `reviewer_ids` с идентификатором,
+         *     которого в каталоге нет.
+         */
+        post: operations["distribute_submissions_distribute_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -597,6 +775,42 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Allocation */
+        Allocation: {
+            /** Item Id */
+            item_id: string;
+            /** Reviewer Id */
+            reviewer_id: string;
+            /** Reviewer Name */
+            reviewer_name: string;
+            /** Est Review Minutes */
+            est_review_minutes: number;
+            /** Score */
+            score: number;
+            /** Explain */
+            explain?: components["schemas"]["ScoreTerm"][];
+            /** Alternatives */
+            alternatives?: components["schemas"]["Alternative"][];
+            /**
+             * Round
+             * @default 1
+             */
+            round: number;
+            /**
+             * Pinned
+             * @default false
+             */
+            pinned: boolean;
+        };
+        /** Alternative */
+        Alternative: {
+            /** Reviewer Id */
+            reviewer_id: string;
+            /** Reviewer Name */
+            reviewer_name: string;
+            /** Score */
+            score: number;
+        };
         /**
          * Artifact
          * @description One reviewable unit of the submission: a source file, a notebook, a document.
@@ -682,6 +896,102 @@ export interface components {
             /** Text */
             text: string;
         };
+        /**
+         * AssignmentIn
+         * @description Рубрика, выданная потоку в срок.
+         */
+        AssignmentIn: {
+            /**
+             * Stream Id
+             * Format: uuid
+             */
+            stream_id: string;
+            /** Rubric Key */
+            rubric_key: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Opens At */
+            opens_at?: string | null;
+            /** Deadline At */
+            deadline_at?: string | null;
+        };
+        /** AssignmentOut */
+        AssignmentOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Stream Id
+             * Format: uuid
+             */
+            stream_id: string;
+            /** Stream Key */
+            stream_key: string;
+            /** Course Key */
+            course_key: string;
+            /** Rubric Key */
+            rubric_key: string;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Opens At */
+            opens_at: string | null;
+            /** Deadline At */
+            deadline_at: string | null;
+            /**
+             * Rubric Title
+             * @default
+             */
+            rubric_title: string;
+            /**
+             * Max Score
+             * @default 0
+             */
+            max_score: number;
+            /**
+             * Criteria
+             * @default 0
+             */
+            criteria: number;
+            /**
+             * Submissions
+             * @default 0
+             */
+            submissions: number;
+        };
+        /**
+         * AssignmentPatch
+         * @description Правка задания. Не переданное поле не трогается.
+         *
+         *     `deadline_at` при этом надо уметь стереть, а `None` здесь неотличим от
+         *     «не передавали» — поэтому дату снимают отдельным флагом `clear_deadline`.
+         */
+        AssignmentPatch: {
+            /** Title */
+            title?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Opens At */
+            opens_at?: string | null;
+            /** Deadline At */
+            deadline_at?: string | null;
+            /**
+             * Clear Deadline
+             * @default false
+             */
+            clear_deadline: boolean;
+        };
         /** AuditRecordOut */
         AuditRecordOut: {
             /** Request Id */
@@ -710,6 +1020,20 @@ export interface components {
             error: string | null;
             /** At */
             at: string;
+        };
+        /**
+         * Basis
+         * @description На чём держится слагаемое.
+         * @enum {string}
+         */
+        Basis: "measured" | "declared" | "given";
+        /** Blocked */
+        Blocked: {
+            /** Reviewer Id */
+            reviewer_id: string;
+            reason: components["schemas"]["UnassignedReason"];
+            /** Detail */
+            detail: string;
         };
         /**
          * ChangeStatus
@@ -857,6 +1181,30 @@ export interface components {
             redactions: number;
             /** Cost Rub */
             cost_rub: number;
+        };
+        /** CourseIn */
+        CourseIn: {
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+        };
+        /** CourseOut */
+        CourseOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /**
+             * Streams
+             * @default 0
+             */
+            streams: number;
         };
         /** CreateUserRequest */
         CreateUserRequest: {
@@ -1102,6 +1450,137 @@ export interface components {
              */
             verdict: "confirmed" | "rejected";
         };
+        /** DisabledTerm */
+        DisabledTerm: {
+            term: components["schemas"]["TermName"];
+            /** Label */
+            label: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * DistributeRequest
+         * @description Что распределяем, между кем и с какой текущей загрузкой.
+         */
+        DistributeRequest: {
+            /** Items */
+            items: components["schemas"]["DistributionItem"][];
+            /**
+             * Reviewers
+             * @description Пул вместо каталога. Пусто — берётся каталог
+             */
+            reviewers?: components["schemas"]["Reviewer"][] | null;
+            /**
+             * Reviewer Ids
+             * @description Подмножество каталога. Пусто — весь каталог
+             */
+            reviewer_ids?: string[];
+            /**
+             * Committed Minutes
+             * @description Занятые минуты по ревьюерам на момент запроса. Только отсюда: загрузка меняется каждый час, и в карточке ей не место
+             */
+            committed_minutes?: {
+                [key: string]: number;
+            };
+            /**
+             * Now
+             * @description Отсчёт для риска не успеть к сроку
+             */
+            now?: string | null;
+            weights?: components["schemas"]["Weights"] | null;
+            /** Max Items Per Reviewer */
+            max_items_per_reviewer?: number | null;
+        };
+        /**
+         * DistributionItem
+         * @description Одна работа, которую надо кому-то отдать.
+         */
+        DistributionItem: {
+            /** Item Id */
+            item_id: string;
+            /**
+             * Assignment Id
+             * @default
+             */
+            assignment_id: string;
+            /**
+             * Course Id
+             * @default
+             */
+            course_id: string;
+            /**
+             * Stream Id
+             * @default
+             */
+            stream_id: string;
+            /**
+             * Student Internal Id
+             * @default
+             */
+            student_internal_id: string;
+            /** Author Hashes */
+            author_hashes?: string[];
+            /** Est Review Minutes */
+            est_review_minutes?: number | null;
+            profile?: components["schemas"]["WorkProfile"] | null;
+            /** Last Reviewer Id */
+            last_reviewer_id?: string | null;
+            preferred_tov?: components["schemas"]["Tov"] | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Pinned Reviewer Id */
+            pinned_reviewer_id?: string | null;
+            /** Excluded Reviewer Ids */
+            excluded_reviewer_ids?: string[];
+        };
+        /**
+         * DistributionPlan
+         * @description План распределения.
+         *
+         *     Что гарантируется: детерминированность, соблюдение жёстких ограничений,
+         *     полнота отчёта и глобальный оптимум **внутри каждого раунда**. Что не
+         *     гарантируется: оптимальность плана целиком — задача с бюджетом в минутах
+         *     NP-трудна, а `load_ratio` и `fairness_bonus` меняются по ходу раскладки,
+         *     поэтому оптимум одной большой матрицы был бы оптимумом не той функции.
+         *
+         *     Времени генерации здесь нет намеренно: §9.5 требует, чтобы один и тот же пул
+         *     в 10:00 и в 10:05 давал один и тот же ответ, а поле с часами сделало бы это
+         *     требование буквально невыполнимым.
+         */
+        DistributionPlan: {
+            /** Allocations */
+            allocations?: components["schemas"]["Allocation"][];
+            /** Unassigned */
+            unassigned?: components["schemas"]["Unassigned"][];
+            /** Loads */
+            loads?: components["schemas"]["ReviewerLoad"][];
+            /** Enabled Terms */
+            enabled_terms?: components["schemas"]["TermName"][];
+            /** Disabled Terms */
+            disabled_terms?: components["schemas"]["DisabledTerm"][];
+            /** Limitations */
+            limitations?: string[];
+            /**
+             * Rounds
+             * @default 0
+             */
+            rounds: number;
+            /**
+             * Items
+             * @default 0
+             */
+            items: number;
+            /**
+             * Reviewers
+             * @default 0
+             */
+            reviewers: number;
+        };
+        /** EnrollIn */
+        EnrollIn: {
+            /** Usernames */
+            usernames: string[];
+        };
         /**
          * Evidence
          * @description Цитата, на которую опирается вердикт.
@@ -1152,8 +1631,9 @@ export interface components {
          * FormatCheck
          * @description Формальное требование из условия — проверяется кодом, без единого токена.
          *
-         *     Format Gate ещё не построен; рубрики уже несут его правила, потому что
-         *     вынимать их из условия надо один раз вместе с критериями, а не потом.
+         *     Проверку исполняет `ai.gate`. Требование, для которого обработчика нет,
+         *     не пропадает: оно уходит ревьюеру как непроверенное — иначе «гейт пройден»
+         *     сказало бы о работе, которую никто не смотрел.
          */
         FormatCheck: {
             /** Check */
@@ -1223,6 +1703,8 @@ export interface components {
             llm_provider: string;
             /** Rubrics */
             rubrics: string[];
+            /** Reviewers */
+            reviewers: string[];
         };
         /**
          * LatePolicy
@@ -1486,6 +1968,106 @@ export interface components {
             submission_id: string;
         };
         /**
+         * Reviewer
+         * @description Карточка ревьюера: то, что о нём известно до всякого распределения.
+         *
+         *     Не `ReviewerProfile`: в §9.2 профиль — вычисляемый по истории ревью объект с
+         *     датой пересчёта и вектором сильных тем. Это анкета. Имя профиля держим
+         *     свободным, чтобы, когда история появится, их не спутали.
+         *
+         *     `extra="forbid"` здесь несёт смысл, а не строгость ради строгости: текущая
+         *     занятость меняется каждый час и приходит в запросе. Карточка, в которой
+         *     завелась `committed_minutes`, не разберётся и будет пропущена каталогом с
+         *     записью в лог — это дешевле, чем договорённость, что так писать не надо.
+         */
+        Reviewer: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Initials
+             * @default
+             */
+            initials: string;
+            /**
+             * Email
+             * @default
+             */
+            email: string;
+            /**
+             * Source
+             * @default
+             */
+            source: string;
+            /** Skills */
+            skills?: string[];
+            /**
+             * Capacity Minutes
+             * @default 0
+             */
+            capacity_minutes: number;
+            /**
+             * Median Minutes Per Work
+             * @default 0
+             */
+            median_minutes_per_work: number;
+            /**
+             * Onboarding
+             * @default false
+             */
+            onboarding: boolean;
+            tov?: components["schemas"]["Tov"] | null;
+            /** Course Ids */
+            course_ids?: string[];
+            /** Stream Ids */
+            stream_ids?: string[];
+            /** Assignment Ids */
+            assignment_ids?: string[];
+            /**
+             * Github Handle
+             * @default
+             */
+            github_handle: string;
+            /** Conflict Student Ids */
+            conflict_student_ids?: string[];
+            /** Max Items */
+            max_items?: number | null;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+        };
+        /** ReviewerLoad */
+        ReviewerLoad: {
+            /** Reviewer Id */
+            reviewer_id: string;
+            /** Name */
+            name: string;
+            /** Onboarding */
+            onboarding: boolean;
+            /** Capacity Minutes */
+            capacity_minutes: number;
+            /** Committed Before */
+            committed_before: number;
+            /** Items */
+            items: number;
+            /** Minutes Assigned */
+            minutes_assigned: number;
+            /** Load Ratio Before */
+            load_ratio_before: number;
+            /** Load Ratio After */
+            load_ratio_after: number;
+            /** Remaining Minutes */
+            remaining_minutes: number;
+            /**
+             * Tight
+             * @default false
+             */
+            tight: boolean;
+        };
+        /**
          * ReviewerVerdict
          * @enum {string}
          */
@@ -1519,18 +2101,22 @@ export interface components {
         };
         /**
          * Role
-         * @description RBAC roles: three, not the four in the architecture doc (§2).
+         * @description RBAC roles: four, matching the words the organisers actually use.
          *
-         *     The doc splits `coordinator` (runs the stream: reassign, rubrics, cost)
-         *     from `admin` (config, integrations). One project, one methodist, no
-         *     separate coordinator headcount yet — `admin` does both jobs until that
-         *     split earns its own account. `student` has no API surface today (per the
-         *     doc: "в MVP не имеет UI") — the value exists so a seeded account and a
-         *     future student-facing token are representable, not because any route
-         *     checks for it yet.
+         *     `methodist` owns what a work is judged against — rubrics, assignment
+         *     descriptions, deadlines. `reviewer` judges works against it. Splitting
+         *     them is not bureaucracy: a deadline change silently rescores every late
+         *     submission on the stream, and that is not a call the person grading one
+         *     work should be able to make mid-review.
+         *
+         *     Rights are a ladder — student < reviewer < methodist < admin — so a
+         *     methodist can also grade. That is deliberate and matches the courses: the
+         *     person who wrote the rubric is the one who reviews the disputed work. The
+         *     ladder is not a claim that the roles are interchangeable, only that each
+         *     step keeps what the one below it could do.
          * @enum {string}
          */
-        Role: "student" | "reviewer" | "admin";
+        Role: "student" | "reviewer" | "methodist" | "admin";
         /** Rubric */
         Rubric: {
             /** Assignment Id */
@@ -1625,6 +2211,27 @@ export interface components {
             step: number;
         };
         /**
+         * ScoreTerm
+         * @description Одно слагаемое скора — строка карточки «почему так».
+         */
+        ScoreTerm: {
+            term: components["schemas"]["TermName"];
+            /** Label */
+            label: string;
+            /** Weight */
+            weight: number;
+            /** Value */
+            value: number;
+            /** Contribution */
+            contribution: number;
+            basis: components["schemas"]["Basis"];
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /**
          * SignalKind
          * @enum {string}
          */
@@ -1707,6 +2314,50 @@ export interface components {
             reviewer_verdict: components["schemas"]["ReviewerVerdict"];
             /** Id */
             readonly id: string;
+        };
+        /** StreamIn */
+        StreamIn: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Key */
+            key: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** StreamOut */
+        StreamOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Course Key */
+            course_key: string;
+            /** Key */
+            key: string;
+            /** Title */
+            title: string;
+            /**
+             * Assignments
+             * @default 0
+             */
+            assignments: number;
+            /**
+             * Students
+             * @default 0
+             */
+            students: number;
         };
         /**
          * StudentRef
@@ -1850,6 +2501,11 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * TermName
+         * @enum {string}
+         */
+        TermName: "topic_affinity" | "skills_cover" | "continuity" | "tov_fit" | "load_ratio" | "deadline_risk" | "fairness_bonus" | "onboarding_penalty";
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -1863,6 +2519,36 @@ export interface components {
             /** Display Name */
             display_name: string;
         };
+        /**
+         * Tov
+         * @description Тон обратной связи. Значения — дословно из §9.2.
+         * @enum {string}
+         */
+        Tov: "строгий" | "поддерживающий" | "разговорный";
+        /**
+         * Unassigned
+         * @description Работа, которую не взял никто, — с поимённым списком отказавших.
+         *
+         *     Тихо потерянная работа — худший из возможных исходов распределения:
+         *     координатор узнает о ней от студента через неделю. Поэтому
+         *     `len(allocations) + len(unassigned)` всегда равно числу поданных работ.
+         */
+        Unassigned: {
+            /** Item Id */
+            item_id: string;
+            /** Est Review Minutes */
+            est_review_minutes: number;
+            reason: components["schemas"]["UnassignedReason"];
+            /** Detail */
+            detail: string;
+            /** Blocked By */
+            blocked_by?: components["schemas"]["Blocked"][];
+        };
+        /**
+         * UnassignedReason
+         * @enum {string}
+         */
+        UnassignedReason: "no_reviewers" | "conflict" | "capacity" | "not_eligible" | "excluded" | "pin_infeasible";
         /**
          * UpdateUserRequest
          * @description Все поля необязательные — правится только то, что указано.
@@ -1904,6 +2590,158 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /**
+         * Weights
+         * @description Веса слагаемых из §9.3.
+         *
+         *     `skills_cover` сознательно не наследует вес 1.0 мёртвого косинуса: это
+         *     лексическое пересечение множеств, а не семантическая близость, и притворяться
+         *     сильным сигналом ему нечем. Появится провайдер эмбеддингов — `topic_affinity`
+         *     встанет на своё место, знаменатель перенормируется, формула не изменится.
+         */
+        Weights: {
+            /**
+             * Topics
+             * @default 1
+             */
+            topics: number;
+            /**
+             * Skills
+             * @default 0.6
+             */
+            skills: number;
+            /**
+             * Continuity
+             * @default 0.4
+             */
+            continuity: number;
+            /**
+             * Tov
+             * @default 0.3
+             */
+            tov: number;
+            /**
+             * Load
+             * @default -0.8
+             */
+            load: number;
+            /**
+             * Deadline
+             * @default -0.5
+             */
+            deadline: number;
+            /**
+             * Fairness
+             * @default 0.2
+             */
+            fairness: number;
+            /**
+             * Onboarding
+             * @default -0.7
+             */
+            onboarding: number;
+        };
+        /**
+         * WorkProfile
+         * @description Что это за работа и во сколько она обойдётся ревьюеру. Строит модель (§9.2).
+         *
+         *     Вектора тем здесь нет намеренно. §9.3 хочет косинус между сильными темами
+         *     ревьюера и темами работы, но провайдера эмбеддингов в системе не существует,
+         *     а поле `list[float]`, которое всегда пустое, хуже отсутствующего: его
+         *     начинают считать заполненным.
+         */
+        WorkProfile: {
+            /** Submission Id */
+            submission_id?: string | null;
+            /**
+             * Origin Url
+             * @default
+             */
+            origin_url: string;
+            /** Topics */
+            topics?: string[];
+            /** Stack */
+            stack?: string[];
+            /**
+             * Complexity
+             * @default 0
+             */
+            complexity: number;
+            /** Risk Criteria */
+            risk_criteria?: string[];
+            /** Special Needs */
+            special_needs?: string[];
+            /**
+             * Est Review Minutes
+             * @default 0
+             */
+            est_review_minutes: number;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /** Warnings */
+            warnings?: string[];
+            /**
+             * Tokens In
+             * @default 0
+             */
+            tokens_in: number;
+            /**
+             * Tokens Out
+             * @default 0
+             */
+            tokens_out: number;
+            /**
+             * Cost Rub
+             * @default 0
+             */
+            cost_rub: number;
+        };
+        /**
+         * WorkProfileRequest
+         * @description Ссылка на сдачу, из которой нужно собрать профиль работы.
+         */
+        WorkProfileRequest: {
+            /** Link */
+            link: string;
+            /** @default github_pr */
+            source: components["schemas"]["SubmissionSource"];
+            /** Assignment Id */
+            assignment_id?: string | null;
+            /** Deadline At */
+            deadline_at?: string | null;
+            /** Student Internal Id */
+            student_internal_id?: string | null;
+            /**
+             * Student Name
+             * @description ФИО студента, если платформа его знает. Не уходит в модель: шлюз вычищает его вместе с падежами и инициалами. В бандле имени нет намеренно, поэтому без этого поля оно остаётся на общих детекторах.
+             */
+            student_name?: string | null;
+            /**
+             * Rubric Id
+             * @description Идентификаторы критериев, чтобы `risk_criteria` ссылались на настоящую рубрику, а не на выдуманные номера
+             */
+            rubric_id?: string | null;
+            /**
+             * Condition Text
+             * @default
+             */
+            condition_text: string;
+        };
+        /**
+         * WorkProfileResponse
+         * @description Профиль и готовая к распределению работа.
+         *
+         *     `item` отдаётся собранным намеренно: `author_hashes` — внутреннее правило
+         *     псевдонимизации, и просить клиента его воспроизвести значило бы раздать
+         *     наружу то, что должно жить в одном месте.
+         */
+        WorkProfileResponse: {
+            profile: components["schemas"]["WorkProfile"];
+            item: components["schemas"]["DistributionItem"];
         };
     };
     responses: never;
@@ -2027,6 +2865,319 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubmissionBundle"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_courses_courses_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseOut"][];
+                };
+            };
+        };
+    };
+    create_course_courses_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CourseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_streams_streams_get: {
+        parameters: {
+            query?: {
+                course_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_stream_streams_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StreamIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_streams__stream_id__students_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_assignments_assignments_get: {
+        parameters: {
+            query?: {
+                stream_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_assignment_assignments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assignment_assignments__assignment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assignment_assignments__assignment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_assignment_assignments__assignment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignmentPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignmentOut"];
                 };
             };
             /** @description Validation Error */
@@ -2268,6 +3419,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostSummary"];
+                };
+            };
+        };
+    };
+    work_profile_work_profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    distribute_submissions_distribute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DistributeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DistributionPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

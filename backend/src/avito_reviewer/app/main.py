@@ -18,6 +18,7 @@ from avito_reviewer.app.routers import (
     ingest_router,
     review_router,
     submissions_router,
+    teaching_router,
     users_router,
 )
 from avito_reviewer.config import AppConfig
@@ -141,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(base_router)
     app.include_router(auth_router)
     app.include_router(ingest_router)
+    app.include_router(teaching_router)
     app.include_router(review_router)
     app.include_router(distribution_router)
     app.include_router(submissions_router)

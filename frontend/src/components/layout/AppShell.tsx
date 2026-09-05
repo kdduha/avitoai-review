@@ -1,6 +1,14 @@
 import { Link, Outlet } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { useSession } from '@/app/session'
+import type { Role } from '@/lib/types'
+
+const ROLE_TITLE: Record<Role, string> = {
+  student: 'студент',
+  reviewer: 'ревьюер',
+  methodist: 'методист',
+  admin: 'руководитель программы',
+}
 import { LoginModal } from './LoginModal'
 import { RoleSwitch } from './RoleSwitch'
 import { Sidebar } from './Sidebar'
@@ -24,7 +32,7 @@ export function AppShell() {
             <div className="leading-tight">
               <div className="text-[13px] font-medium text-ink">{name}</div>
               <div className="text-[11.5px] text-faint">
-                {username} · {role === 'head' ? 'руководитель программы' : 'ревьюер'}
+                {username} · {ROLE_TITLE[role]}
               </div>
             </div>
           </div>

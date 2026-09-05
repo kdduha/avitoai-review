@@ -33,6 +33,7 @@ export function CheckPage() {
   const client = useQueryClient()
 
   const [link, setLink] = useState('')
+  const [assignmentId, setAssignmentId] = useState('')
   const [rubricId, setRubricId] = useState('')
   const [deadline, setDeadline] = useState('')
   const [student, setStudent] = useState('')
@@ -41,14 +42,20 @@ export function CheckPage() {
 
   const status = useQuery({ queryKey: ['init'], queryFn: backend.init, retry: false })
   const rubrics = useQuery({ queryKey: ['rubrics'], queryFn: backend.rubrics, retry: false })
+  const assignments = useQuery({
+    queryKey: ['assignments'],
+    queryFn: () => backend.assignments(),
+    retry: false,
+  })
   const cost = useQuery({ queryKey: ['cost'], queryFn: backend.cost, retry: false })
 
   const run = useMutation({
     mutationFn: () =>
       startRun({
         link: link.trim(),
-        rubricId: rubricId || rubrics.data?.[0]?.assignment_id || '',
-        deadlineAt: deadline ? new Date(deadline).toISOString() : undefined,
+        rubricId: assignment ? assignment.rubric_key : chosen,
+        assignmentId: assignment?.id,
+        deadlineAt: assignment ? undefined : deadline ? new Date(deadline).toISOString() : undefined,
         studentInternalId: student.trim() || undefined,
         studentName: studentName.trim() || undefined,
         withDetection,
@@ -61,6 +68,11 @@ export function CheckPage() {
   })
 
   const offline = status.isError
+  /* Задания — основной путь: методист выдал рубрику потоку и назвал срок.
+     Пока каталог пуст, форма откатывается на прямой выбор рубрики: проверить
+     работу надо уметь и до того, как заведён первый поток. */
+  const planned = assignments.data ?? []
+  const assignment = planned.find((item) => item.id === assignmentId) ?? planned[0]
   const chosen = rubricId || rubrics.data?.[0]?.assignment_id || ''
   const rubric = rubrics.data?.find((item) => item.assignment_id === chosen)
 
@@ -100,50 +112,89 @@ export function CheckPage() {
           />
         </Field>
 
-        <Field label="Рубрика" hint="против чего ставится каждый вердикт">
-          <select
-            value={chosen}
-            onChange={(event) => setRubricId(event.target.value)}
-            disabled={!rubrics.data?.length}
-            className={cn(inputClass, 'appearance-none disabled:text-faint')}
-          >
-            {rubrics.data?.length ? (
-              rubrics.data.map((item) => (
-                <option key={item.assignment_id} value={item.assignment_id}>
-                  {item.title}
-                </option>
-              ))
-            ) : (
-              <option>Рубрики не загрузились</option>
-            )}
-          </select>
+        {planned.length ? (
+          <>
+            <Field label="Задание" hint="поток, рубрика и срок — из настроек методиста">
+              <select
+                value={assignment?.id ?? ''}
+                onChange={(event) => setAssignmentId(event.target.value)}
+                className={cn(inputClass, 'appearance-none')}
+              >
+                {planned.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.course_key}/{item.stream_key} — {item.title}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {assignment ? (
+              <p className="text-[12px] text-faint">
+                {assignment.criteria} критериев, максимум {assignment.max_score}
+                {'. '}
+                {assignment.deadline_at
+                  ? `Срок: ${new Date(assignment.deadline_at).toLocaleString('ru-RU', {
+                      day: 'numeric',
+                      month: 'long',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}`
+                  : 'Срока нет — просрочки не бывает'}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <Field label="Рубрика" hint="против чего ставится каждый вердикт">
+              <select
+                value={chosen}
+                onChange={(event) => setRubricId(event.target.value)}
+                disabled={!rubrics.data?.length}
+                className={cn(inputClass, 'appearance-none disabled:text-faint')}
+              >
+                {rubrics.data?.length ? (
+                  rubrics.data.map((item) => (
+                    <option key={item.assignment_id} value={item.assignment_id}>
+                      {item.title}
+                    </option>
+                  ))
+                ) : (
+                  <option>Рубрики не загрузились</option>
+                )}
+              </select>
+            </Field>
+
+            {rubric ? (
+              <p className="text-[12px] text-faint">
+                {rubric.course}, {rubric.criteria} критериев, максимум {rubric.total_max}
+                {rubric.pass_threshold ? `, порог зачёта ${rubric.pass_threshold}` : ''}
+              </p>
+            ) : null}
+
+            <Field label="Дедлайн" hint="нужен для штрафа за просрочку">
+              <input
+                type="datetime-local"
+                value={deadline}
+                onChange={(event) => setDeadline(event.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <p className="-mt-2 max-w-[62ch] text-[12px] leading-[1.5] text-faint">
+              Заданий на потоках пока нет, поэтому рубрику и срок приходится называть здесь.
+              Когда методист выдаст рубрику потоку и поставит дату, оба поля отсюда уйдут:
+              срок принадлежит заданию, а не отдельной проверке.
+            </p>
+          </>
+        )}
+
+        <Field label="Внутренний id студента" hint="необязательно">
+          <input
+            value={student}
+            onChange={(event) => setStudent(event.target.value)}
+            placeholder="171345"
+            className={inputClass}
+          />
         </Field>
-
-        {rubric ? (
-          <p className="text-[12px] text-faint">
-            {rubric.course}, {rubric.criteria} критериев, максимум {rubric.total_max}
-            {rubric.pass_threshold ? `, порог зачёта ${rubric.pass_threshold}` : ''}
-          </p>
-        ) : null}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Дедлайн" hint="нужен для штрафа за просрочку">
-            <input
-              type="datetime-local"
-              value={deadline}
-              onChange={(event) => setDeadline(event.target.value)}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Внутренний id студента" hint="необязательно">
-            <input
-              value={student}
-              onChange={(event) => setStudent(event.target.value)}
-              placeholder="171345"
-              className={inputClass}
-            />
-          </Field>
-        </div>
 
         <Field
           label="ФИО студента"

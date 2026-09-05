@@ -26,7 +26,7 @@ const STATUS_TONE: Record<SubmissionStatus, 'neutral' | 'good' | 'warn' | 'criti
 
 export function QueuePage() {
   const { role } = useSession()
-  const seeAll = role === 'head'
+  const seeAll = role === 'admin'
 
   const queue = useQuery({
     queryKey: ['queue', seeAll],

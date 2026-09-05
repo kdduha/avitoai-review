@@ -101,7 +101,7 @@ export function CuratorsTab({ stream, courseTitle }: Props) {
             ? `${onStream.length} ${plural(onStream.length, 'ревьюер', 'ревьюера', 'ревьюеров')} на потоке`
             : 'На поток пока никого не назначили'}
         </p>
-        {role === 'head' ? (
+        {role === 'admin' ? (
           <Button size="sm" onClick={openDialog} icon={<UserPlus size={13} strokeWidth={1.8} />}>
             Назначить ревьюеров
           </Button>
@@ -124,7 +124,7 @@ export function CuratorsTab({ stream, courseTitle }: Props) {
             Работы этого потока некому распределить. Назначьте ревьюеров — после этого движок
             распределения сможет разложить сдачи по ним.
           </p>
-          {role === 'head' ? (
+          {role === 'admin' ? (
             <Button variant="primary" size="sm" className="mt-3" onClick={openDialog}>
               Назначить ревьюеров
             </Button>

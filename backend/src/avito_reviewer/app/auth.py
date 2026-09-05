@@ -77,6 +77,7 @@ def decode_access_token(token: str, config: AuthConfig) -> dict:
 SEED_USERS: dict[Role, str] = {
     Role.STUDENT: "student",
     Role.REVIEWER: "reviewer",
+    Role.METHODIST: "methodist",
     Role.ADMIN: "admin",
 }
 
@@ -132,12 +133,16 @@ async def get_current_user(
 CurrentUser = Annotated[User, Depends(get_current_user)]
 
 _RANK: dict[str, int] = {
-    Role.STUDENT.value: 0, Role.REVIEWER.value: 1, Role.ADMIN.value: 2,
+    Role.STUDENT.value: 0,
+    Role.REVIEWER.value: 1,
+    Role.METHODIST.value: 2,
+    Role.ADMIN.value: 3,
 }
 
 
 def require_role(minimum: Role):
-    """Dependency factory: at least `minimum` on the student < reviewer < admin ladder."""
+    """Dependency factory: at least `minimum` on the
+    student < reviewer < methodist < admin ladder."""
 
     async def _check(user: CurrentUser) -> User:
         if _RANK[str(user.role)] < _RANK[minimum.value]:
@@ -151,4 +156,6 @@ def require_role(minimum: Role):
 
 
 RequireReviewer = Annotated[User, Depends(require_role(Role.REVIEWER))]
+RequireMethodist = Annotated[User, Depends(require_role(Role.METHODIST))]
+"""Кто задаёт, против чего оценивают: рубрики, задания, дедлайны."""
 RequireAdmin = Annotated[User, Depends(require_role(Role.ADMIN))]

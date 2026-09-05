@@ -31,13 +31,29 @@ const ROLE_KEY = 'avito-reviewer:role'
  *  отдельной роли координатора, пока некому дать под неё отдельный аккаунт).
  *  Любой другой аккаунт, заведённый через `/users`, попадает в ту же пару
  *  корзин по своей настоящей роли — `reviewer` → ревьюер, `admin` → руководитель. */
-const BACKEND_USERNAME: Record<Role, string> = { curator: 'reviewer', head: 'admin' }
+/** Роль из прошлой сессии, но только если она ещё существует.
+
+ *  Словарь ролей менялся (`curator` / `head` → имена бэкенда), и сохранённое
+ *  в localStorage значение переживает обновление интерфейса. Без проверки
+ *  `BACKEND_USERNAME[role]` давал `undefined`, вход молча не проходил, и все
+ *  запросы уходили без токена: экран выглядел как «бэкенд не отвечает», хотя
+ *  бэкенд отвечал. Неизвестная роль — это не ошибка пользователя, поэтому
+ *  просто откатываемся к ревьюеру. */
+function storedRole(): Role {
+  const saved = localStorage.getItem(ROLE_KEY)
+  return saved !== null && saved in BACKEND_USERNAME ? (saved as Role) : 'reviewer'
+}
+
+const BACKEND_USERNAME: Record<Role, string> = {
+  student: 'student',
+  reviewer: 'reviewer',
+  methodist: 'methodist',
+  admin: 'admin',
+}
 const BACKEND_PASSWORD = (import.meta.env.VITE_BACKEND_PASSWORD as string | undefined) ?? 'avito2026'
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [role, setRoleState] = useState<Role>(
-    () => (localStorage.getItem(ROLE_KEY) as Role | null) ?? 'curator',
-  )
+  const [role, setRoleState] = useState<Role>(storedRole)
   const [username, setUsername] = useState(BACKEND_USERNAME[role])
   const [name, setName] = useState('—')
   const [authReady, setAuthReady] = useState(false)
@@ -56,7 +72,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAuthToken(token.access_token)
     setUsername(nextUsername)
     setName(token.display_name)
-    const nextRole: Role = token.role === 'admin' ? 'head' : 'curator'
+    // Роль берётся из токена как есть: сервер — источник правды о правах,
+    // и любой перевод здесь был бы вторым мнением о том, что человеку можно.
+    const nextRole = token.role as Role
     setRoleState(nextRole)
     localStorage.setItem(ROLE_KEY, nextRole)
     setAuthReady(true)

@@ -61,8 +61,22 @@ class ReviewRequest(SubmissionRequest):
 
     @model_validator(mode="after")
     def _one_rubric(self) -> ReviewRequest:
+        """Рубрику называют либо заданием, либо напрямую — но не дважды.
+
+        С `assignment_id` рубрика и срок берутся из задания: ревьюер их не
+        вводит, и не должен иметь возможности ввести. Разрешить здесь ещё и
+        `rubric_id` значило бы допустить работу, оценённую не по той рубрике,
+        которую поток выдал.
+        """
+        if self.assignment_id is not None:
+            if self.rubric_id is not None or self.rubric is not None:
+                raise ValueError(
+                    "с assignment_id рубрика берётся из задания — "
+                    "не указывайте rubric_id или rubric"
+                )
+            return self
         if (self.rubric_id is None) == (self.rubric is None):
-            raise ValueError("укажите ровно одно: rubric_id или rubric")
+            raise ValueError("укажите assignment_id либо ровно одно: rubric_id или rubric")
         return self
 
 

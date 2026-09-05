@@ -1,9 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
+import { CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 
 function Section({ children }: { children: string }) {
   return <div className="px-3 pb-1.5 pt-5 text-[11.5px] font-medium text-faint">{children}</div>
@@ -31,7 +32,7 @@ export function Sidebar() {
         <Play size={15} strokeWidth={1.7} className="text-faint" />
         Проверить работу
       </NavLink>
-      {role === 'curator' ? (
+      {atLeast(role, 'reviewer') && role !== 'admin' ? (
         <NavLink to="/queue" className={linkClass}>
           <ClipboardCheck size={15} strokeWidth={1.7} className="text-faint" />
           Мои проверки
@@ -73,11 +74,15 @@ export function Sidebar() {
       </div>
 
       <Section>Программа</Section>
+      <NavLink to="/assignments" className={linkClass}>
+        <CalendarClock size={15} strokeWidth={1.7} className="text-faint" />
+        Задания
+      </NavLink>
       <NavLink to="/rubrics" className={linkClass}>
         <Ruler size={15} strokeWidth={1.7} className="text-faint" />
         Рубрики
       </NavLink>
-      {role === 'head' ? (
+      {role === 'admin' ? (
         <NavLink to="/curators" className={linkClass}>
           <Users size={15} strokeWidth={1.7} className="text-faint" />
           Ревьюеры
