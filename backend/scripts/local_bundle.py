@@ -30,6 +30,7 @@ from avito_reviewer.ingest import (
     SubmissionBundle,
     SubmissionSource,
 )
+from avito_reviewer.ingest.classify import classify
 
 TEXT_SUFFIXES = frozenset({
     ".go", ".py", ".js", ".ts", ".tsx", ".java", ".rs", ".sql", ".sh", ".md", ".txt",
@@ -41,9 +42,6 @@ SKIP_DIRS = frozenset({
     ".git", ".venv", "venv", "node_modules", "vendor", "__pycache__", "mlruns",
     "wandb", ".idea", ".vscode", "dist", "build",
 })
-NOISE_NAMES = frozenset({"go.sum", "package-lock.json", "poetry.lock", "yarn.lock", ".ds_store"})
-TOOLING_NAMES = frozenset({"dockerfile", "makefile", "docker-compose.yml", "docker-compose.yaml"})
-TOOLING_DIRS = frozenset({".github", "ci", "deploy", "migrations"})
 
 LANGS = {
     ".go": "go", ".py": "python", ".js": "javascript", ".ts": "typescript",
@@ -56,12 +54,8 @@ MAX_FILES = 200
 
 
 def _role(relative: PurePosixPath) -> ArtifactRole:
-    name = relative.name.lower()
-    if name in NOISE_NAMES:
-        return ArtifactRole.NOISE
-    if name in TOOLING_NAMES or set(relative.parts[:-1]) & TOOLING_DIRS:
-        return ArtifactRole.TOOLING
-    return ArtifactRole.SOLUTION
+    """Роль та же, что поставил бы боевой провайдер: демо идёт по общему пути."""
+    return classify(str(relative))
 
 
 def _added_diff(text: str) -> str:
