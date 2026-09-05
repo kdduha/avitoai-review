@@ -189,10 +189,15 @@ async def main() -> int:
         if enrolled is None:
             session.add(Enrollment(stream_id=stream.id, student_id=student.id))
 
+        # Сеяный `reviewer`, а не карточка каталога: под этим логином входит
+        # переключатель ролей, и показательная сдача должна открываться там,
+        # где её будут смотреть. Назначенная на `c-kruglov`, она была видна
+        # только руководителю — остальным `_load` отдаёт 404, потому что
+        # чужая сдача не должна существовать даже как факт.
         reviewer = (
-            await session.execute(select(User).where(User.username == "c-kruglov"))
-        ).scalar_one_or_none() or (
             await session.execute(select(User).where(User.username == "reviewer"))
+        ).scalar_one_or_none() or (
+            await session.execute(select(User).where(User.username == "c-kruglov"))
         ).scalar_one_or_none()
 
         # Настоящий конвейер на записанных ответах: гейт, сверка цитат, агрегатор.
