@@ -1,0 +1,31 @@
+{
+  "id": "c-bahtin",
+  "name": "Данил Бахтин",
+  "initials": "ДБ",
+  "email": "d.bahtin@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "системный дизайн",
+    "docker",
+    "postgres"
+  ],
+  "capacity_minutes": 360,
+  "median_minutes_per_work": 26.0,
+  "onboarding": true,
+  "tov": "разговорный",
+  "course_ids": [
+    "system-design",
+    "go"
+  ],
+  "stream_ids": [
+    "system-design-a",
+    "system-design-b",
+    "go-a",
+    "go-b"
+  ],
+  "assignment_ids": [],
+  "github_handle": "dbahtin",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

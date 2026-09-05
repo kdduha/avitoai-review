@@ -56,7 +56,7 @@
       "check": "revision_history_visible",
       "level": "blocking",
       "params": { "label": "Видна история изменений документа" },
-      "note": "Требование условия для сдачи через Google Docs. В git-канале не исполняется — уходит ревьюеру как непроверенное"
+      "note": "Требование условия для сдачи через Google Docs. В git-канале на него отвечают коммиты pull request'а; для Google Docs нужна Drive Revisions API"
     },
     {
       "check": "font",

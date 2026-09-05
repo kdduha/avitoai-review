@@ -14,6 +14,7 @@ from avito_reviewer.app.auth import seed_users
 from avito_reviewer.app.routers import (
     auth_router,
     base_router,
+    distribution_router,
     ingest_router,
     review_router,
     submissions_router,
@@ -21,6 +22,7 @@ from avito_reviewer.app.routers import (
 )
 from avito_reviewer.config import AppConfig
 from avito_reviewer.db import make_engine, make_sessionmaker, run_migrations
+from avito_reviewer.distribution import ReviewerStore
 from avito_reviewer.ingest import IngestService
 from avito_reviewer.logsetup import configure_logging
 
@@ -67,6 +69,10 @@ _TAGS = [
         "name": "users",
         "description": "Account CRUD — add a second reviewer to test with, change a role, remove one. 🔒 admin+",
     },
+    {
+        "name": "distribution",
+        "description": "Profile a submission and lay a batch of them out across reviewers.",
+    },
 ]
 _log = logging.getLogger(__name__)
 
@@ -80,6 +86,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     app.state.ingest = ingest
     app.state.rubrics = RubricStore(config.ai.rubrics_dir)
+    app.state.reviewers = ReviewerStore(config.ai.reviewers_dir)
     app.state.auth_config = config.auth
     app.state.engine = engine
     app.state.sessionmaker = sessionmaker
@@ -97,10 +104,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await seed_users(session, config.auth)
 
     _log.info(
-        "startup: ingest sources=%s, llm=%s, rubrics=%s",
+        "startup: ingest sources=%s, llm=%s, rubrics=%s, reviewers=%s",
         [s.value for s in ingest.sources],
         config.ai.llm.provider,
         app.state.rubrics.ids or "none",
+        len(app.state.reviewers.ids) or "none",
     )
     try:
         yield
@@ -123,6 +131,7 @@ def create_app() -> FastAPI:
     app.include_router(auth_router)
     app.include_router(ingest_router)
     app.include_router(review_router)
+    app.include_router(distribution_router)
     app.include_router(submissions_router)
     app.include_router(users_router)
     return app

@@ -1,0 +1,31 @@
+{
+  "id": "c-kruglov",
+  "name": "Антон Круглов",
+  "initials": "АК",
+  "email": "a.kruglov@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "go",
+    "бэкенд",
+    "архитектура"
+  ],
+  "capacity_minutes": 600,
+  "median_minutes_per_work": 17.0,
+  "onboarding": false,
+  "tov": "строгий",
+  "course_ids": [
+    "go",
+    "backend"
+  ],
+  "stream_ids": [
+    "go-a",
+    "go-b",
+    "backend-a",
+    "backend-b"
+  ],
+  "assignment_ids": [],
+  "github_handle": "akruglov",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

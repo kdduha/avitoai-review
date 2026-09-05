@@ -12,8 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from avito_reviewer.ai import AIService, Rubric
 from avito_reviewer.ai.compiler import DRAFT_NOTE, CompilerError, RubricCompiler
+from avito_reviewer.ai.content import ArtifactText
+from avito_reviewer.ai.detection import DetectionReport
+from avito_reviewer.ai.review import ReviewDraft
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
 from avito_reviewer.app.auth import RequireAdmin, RequireReviewer
+from avito_reviewer.app.deps import ingest_submission
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
     CompileRubricRequest,
@@ -28,14 +32,7 @@ from avito_reviewer.app.schemas.review import (
     RubricSummary,
 )
 from avito_reviewer.db import Role, Submission, User, session_dependency
-from avito_reviewer.ingest import (
-    IngestContext,
-    IngestService,
-    InvalidLinkError,
-    ProviderFetchError,
-    SubmissionBundle,
-    UnknownSourceError,
-)
+from avito_reviewer.ingest import SubmissionBundle
 
 _log = logging.getLogger(__name__)
 
@@ -44,19 +41,37 @@ router = APIRouter(tags=["review"])
 Session = Annotated[AsyncSession, Depends(session_dependency)]
 
 
-async def _ingest(request: Request, body: DetectRequest | ReviewRequest) -> SubmissionBundle:
-    service: IngestService = request.app.state.ingest
-    context = IngestContext(
-        assignment_id=body.assignment_id,
-        deadline_at=body.deadline_at,
-        student_internal_id=body.student_internal_id,
-    )
+async def _detection(
+    ai: AIService,
+    bundle: SubmissionBundle,
+    texts: list[ArtifactText],
+    rubric: Rubric,
+    draft: ReviewDraft,
+    *,
+    student_name: str | None,
+) -> DetectionReport:
+    """Детектор довеском к ревью: он не имеет права уронить черновик.
+
+    Сигналы деградируют внутри себя — недоступный приходит с пометкой, а не с
+    нулём, — но неожиданный сбой остаётся возможным, и цена ему здесь потерянный
+    отчёт, а не потерянное ревью. Отсюда единственный в сервисе широкий перехват:
+    он ограничен необязательной половиной ответа.
+
+    Работу, не принятую по формату, детектор не смотрит: она и так уходит
+    ревьюеру, а judge стоит денег — то же правило, по которому при
+    заблокированном гейте не запускается и ревью.
+    """
+    if draft.gate is not None and draft.gate.blocked:
+        return DetectionReport.unavailable(
+            "Детектор не запускался: работа не принята по формату."
+        )
     try:
-        return await service.ingest(body.link, body.source, context=context)
-    except (UnknownSourceError, InvalidLinkError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except ProviderFetchError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        return await run_in_threadpool(
+            partial(ai.detect, bundle, texts, rubric, student_name=student_name)
+        )
+    except Exception as exc:
+        _log.warning("детектор не отработал: %s", exc, exc_info=True)
+        return DetectionReport.unavailable(f"Детектор не отработал: {exc}")
 
 
 def _rubric(request: Request, rubric_id: str | None, inline: Rubric | None) -> Rubric:
@@ -217,7 +232,7 @@ async def review(
     """
     rubric = _rubric(request, body.rubric_id, body.rubric)
     reviewer = await _resolve_reviewer(session, user, body.reviewer_username)
-    bundle = await _ingest(request, body)
+    bundle = await ingest_submission(request, body)
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)
@@ -233,17 +248,11 @@ async def review(
         condition_text=body.condition_text,
         student_name=body.student_name,
     )
-    detection = None
-    if body.with_detection:
-        try:
-            detection = await run_in_threadpool(
-                partial(ai.detect, bundle, texts, rubric, student_name=body.student_name)
-            )
-        except Exception:
-            # Реши детектор не отвечать вовсе — это не повод терять уже
-            # посчитанный черновик ревью. Advisory-сигнал и без того необязателен;
-            # его отсутствие ревьюер увидит по пустому `detection` в ответе.
-            _log.exception("with_detection: детектор не отработал, черновик отдаём без него")
+    detection = (
+        await _detection(ai, bundle, texts, rubric, draft, student_name=body.student_name)
+        if body.with_detection
+        else None
+    )
 
     files = [ArtifactTextOut.of(text) for text in texts]
     submission = Submission(
@@ -284,7 +293,7 @@ async def detect(body: DetectRequest, request: Request, user: RequireReviewer) -
     rubric = (
         _rubric(request, body.rubric_id, None) if body.rubric_id else None
     )
-    bundle = await _ingest(request, body)
+    bundle = await ingest_submission(request, body)
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)

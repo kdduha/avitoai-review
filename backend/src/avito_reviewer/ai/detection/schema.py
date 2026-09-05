@@ -110,6 +110,15 @@ class DetectionReport(BaseModel):
         "нарушения и не влияет на балл автоматически. Решение принимает ревьюер."
     )
 
+    @classmethod
+    def unavailable(cls, reason: str) -> DetectionReport:
+        """Отчёт, который честно говорит, что проверки не было.
+
+        Пустой отчёт и отсутствие отчёта — разные события: первое ревьюер
+        должен увидеть с причиной, второе значит «не просили».
+        """
+        return cls(limitations=[reason])
+
     def signal(self, kind: SignalKind) -> SignalResult | None:
         return next((s for s in self.signals if s.kind is kind), None)
 

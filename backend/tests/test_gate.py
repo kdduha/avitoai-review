@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from factories import artifact, go_bundle, go_rubric, partial_artifact, texts_of
 
 from avito_reviewer.ai import gate
 from avito_reviewer.ai.gate import GateStatus
-from avito_reviewer.ai.rubric import FormatCheck, Rubric
+from avito_reviewer.ai.rubric import FormatCheck, Rubric, load_rubric
+
+RUBRICS = Path(__file__).resolve().parents[1] / "rubrics"
 
 GO_MAIN_MIN = 'package main\n\nfunc main() {\n\tlog.Println("Shutting down service-courier")\n}\n'
 
@@ -128,6 +132,49 @@ def test_committed_secret_file_is_caught():
 
 
 # --------------------------------------------------------------------------- #
+# история ревизий
+# --------------------------------------------------------------------------- #
+
+HISTORY = {
+    "check": "revision_history_visible",
+    "level": "blocking",
+    "params": {"label": "Видна история изменений"},
+}
+
+
+def test_git_history_answers_a_check_written_for_google_docs():
+    """Требование про историю изменений написано под Docs, но git на него отвечает."""
+    report = run_on(rubric_with(HISTORY))
+
+    assert report.status is GateStatus.PASSED
+    assert report.outcomes[0].passed is True
+    assert "коммитов: 2" in report.outcomes[0].detail
+
+
+def test_history_that_never_arrived_is_not_a_missing_history():
+    """Pull request без коммитов не бывает: пустота здесь — молчание источника."""
+    bundle = go_bundle(revisions=[])
+    report = gate.run(bundle, texts_of(bundle), rubric_with(HISTORY))
+    outcome = report.outcomes[0]
+
+    assert outcome.inconclusive is True
+    assert outcome.passed is False
+    assert report.blocked is False
+    assert report.status is GateStatus.WARNING
+
+
+def test_the_shipped_sysdesign_rubric_answers_history_and_still_defers_the_font():
+    """На настоящей рубрике каталога: историю закрыли, шрифт остался за git-каналом."""
+    rubric = load_rubric(RUBRICS / "sysdesign-lab1.json")
+    bundle = go_bundle()
+    outcomes = {o.check: o for o in gate.run(bundle, texts_of(bundle), rubric).outcomes}
+
+    assert outcomes["revision_history_visible"].passed is True
+    assert outcomes["revision_history_visible"].inconclusive is False
+    assert outcomes["font"].inconclusive is True
+
+
+# --------------------------------------------------------------------------- #
 # отчёт
 # --------------------------------------------------------------------------- #
 
@@ -165,13 +212,13 @@ def test_empty_gate_is_a_pass():
 def test_unimplemented_check_goes_to_the_reviewer_instead_of_vanishing():
     """Часть требований условия исполняется только другим каналом сдачи.
 
-    Шрифт и история ревизий живут в Google Docs, а не в git. Молча пропустить
+    Шрифт и число страниц живут в Google Docs, а не в git. Молча пропустить
     такую проверку значит выдать «гейт пройден» за работу, которую никто не
     проверял, — а если она блокирующая, то и пропустить её мимо ревьюера.
     """
     rubric = rubric_with(
-        {"check": "revision_history_visible", "level": "blocking",
-         "params": {"label": "Видна история изменений"}}
+        {"check": "font", "level": "blocking",
+         "params": {"family": "Arial", "size_pt": 11, "label": "Шрифт Arial 11"}}
     )
     report = run_on(rubric)
     outcome = report.outcomes[0]

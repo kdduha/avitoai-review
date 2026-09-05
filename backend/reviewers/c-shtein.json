@@ -1,0 +1,23 @@
+{
+  "id": "c-shtein",
+  "name": "Алиса Штейн",
+  "initials": "АШ",
+  "email": "a.shtein@avito.ru",
+  "source": "анкета куратора, 02.2026",
+  "skills": [
+    "LLM",
+    "MLflow",
+    "оценка качества"
+  ],
+  "capacity_minutes": 540,
+  "median_minutes_per_work": 42.0,
+  "onboarding": false,
+  "tov": "строгий",
+  "course_ids": [],
+  "stream_ids": [],
+  "assignment_ids": [],
+  "github_handle": "ashtein",
+  "conflict_student_ids": [],
+  "max_items": null,
+  "active": true
+}

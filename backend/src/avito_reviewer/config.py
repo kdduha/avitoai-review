@@ -140,6 +140,16 @@ class DetectionOptions(BaseModel):
     use_judge: bool = True
 
 
+class DistributionOptions(BaseModel):
+    max_items_per_reviewer: int = 0
+    """0 — предела по числу работ нет, ограничивает только ёмкость в минутах."""
+    max_review_minutes: int = 480
+    """Потолок оценки трудоёмкости. Модель, ошибившаяся на порядок, иначе
+    молча съедает капасити всего потока."""
+    alternatives: int = 2
+    """Сколько запасных ревьюеров показать рядом с назначением."""
+
+
 class AIConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="AI_",
@@ -152,8 +162,10 @@ class AIConfig(BaseSettings):
     content: ContentConfig = Field(default_factory=ContentConfig)
     review: ReviewOptions = Field(default_factory=ReviewOptions)
     detection: DetectionOptions = Field(default_factory=DetectionOptions)
+    distribution: DistributionOptions = Field(default_factory=DistributionOptions)
 
     rubrics_dir: str = "rubrics"
+    reviewers_dir: str = "reviewers"
 
 
 class DatabaseConfig(BaseSettings):
