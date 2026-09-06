@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test'
+import { restoreSession } from './session'
 
 /** Записанный прогон `/review/demo` — без бэкенда, детерминированный: то, на
  *  чём раньше руками проверялись правка балла и переход по цитате. */
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('avito-reviewer:role', 'curator'))
+test.beforeEach(async ({ page, request }) => {
+  await restoreSession(page, request, 'reviewer')
   await page.goto('/review/demo')
 })
 
@@ -19,7 +20,7 @@ test('editing a score marks it as corrected by the reviewer', async ({ page }) =
   await row.getByLabel('Уменьшить балл').click()
   await row.getByText('Готово').click()
 
-  await expect(row.getByText('Балл поправлен куратором')).toBeVisible()
+  await expect(row.getByText('Балл поправлен ревьюером')).toBeVisible()
   const after = await row.locator('.num').first().innerText()
   expect(after).not.toBe(before)
 
