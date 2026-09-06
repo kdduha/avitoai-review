@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
-import { demoRunForRubric, startRun } from '@/lib/runs'
+import { DEMO_RUN_ID, demoRunForRubric, startRun } from '@/lib/runs'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 
@@ -74,6 +74,13 @@ export function CheckPage() {
   const planned = assignments.data ?? []
   const assignment = planned.find((item) => item.id === assignmentId) ?? planned[0]
   const chosen = rubricId || rubrics.data?.[0]?.assignment_id || ''
+  /* Рубрику диктует задание, если оно выбрано: демо-прогон ищем по той же
+     рубрике, против которой пойдёт настоящий разбор. */
+  const rubricKey = assignment ? assignment.rubric_key : chosen
+  const demoRun = demoRunForRubric(rubricKey)
+  const withDemo = (rubrics.data ?? []).filter((item) =>
+    demoRunForRubric(item.assignment_id),
+  ).length
   const rubric = rubrics.data?.find((item) => item.assignment_id === chosen)
 
   return (
@@ -94,9 +101,13 @@ export function CheckPage() {
               <code className="font-mono text-[12px]">cd backend &amp;&amp; uv run uvicorn avito_reviewer.app.main:app</code>
               . Посмотреть интерфейс без бэкенда можно на демо-прогоне.
             </p>
-            <Button size="sm" className="mt-2.5" onClick={() => navigate(`/review/${demoRunForRubric(chosen)}`)}
+            {/* Здесь рубрика ещё не выбрана — каталог не загрузился, — поэтому
+                открывается конкретный записанный прогон, а не «разбор по вашей
+                рубрике». Это не подстановка: обещание кнопки совпадает с тем,
+                что она делает. */}
+            <Button size="sm" className="mt-2.5" onClick={() => navigate(`/review/${DEMO_RUN_ID}`)}
               icon={<FlaskConical size={13} strokeWidth={1.8} />}>
-              Открыть демо-прогон
+              Открыть демо-прогон по Go
             </Button>
           </div>
         </div>
@@ -238,9 +249,17 @@ export function CheckPage() {
           >
             {run.isPending ? 'Разбираю работу' : 'Запустить разбор'}
           </Button>
-          <Button variant="ghost" onClick={() => navigate(`/review/${demoRunForRubric(chosen)}`)}>
-            Открыть демо-прогон
-          </Button>
+          {demoRun ? (
+            <Button variant="ghost" onClick={() => navigate(`/review/${demoRun}`)}>
+              Открыть демо-прогон
+            </Button>
+          ) : (
+            <span className="max-w-[46ch] text-[12px] leading-[1.5] text-faint">
+              Записанного разбора по этой рубрике нет: он есть у {withDemo} из{' '}
+              {rubrics.data?.length ?? 0}. Показывать вместо него чужой — значит показать
+              правдоподобное и неверное.
+            </span>
+          )}
           {status.data ? (
             <span className="ml-auto text-[11.5px] text-faint">
               {/* Показываем модель, а не провайдер. «модель: fake» читалось как

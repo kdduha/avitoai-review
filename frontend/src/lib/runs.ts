@@ -156,8 +156,14 @@ const DEMO_BY_RUBRIC: Record<string, string> = {
   'fraud-task1': DEMO_FRAUD_ID,
 }
 
-export function demoRunForRubric(rubricId: string | undefined): string {
-  return (rubricId && DEMO_BY_RUBRIC[rubricId]) ?? DEMO_RUN_ID
+/** Записанный разбор именно этой рубрики — или `null`.
+ *
+ *  Раньше при промахе возвращался прогон по Go. Выбрали рубрику по системному
+ *  дизайну, открыли «демо-прогон» — и получили разбор чужого сервиса: экран
+ *  выглядел правдоподобно и был неверен. Записанный разбор есть у пяти рубрик
+ *  из пятнадцати, так что промах — обычное дело, а не край. */
+export function demoRunForRubric(rubricId: string | undefined): string | null {
+  return (rubricId && DEMO_BY_RUBRIC[rubricId]) ?? null
 }
 
 export function demoThread(runId: string) {
