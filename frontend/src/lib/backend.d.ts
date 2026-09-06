@@ -2216,11 +2216,8 @@ export interface components {
              * @default 0
              */
             max_score: number;
-            /**
-             * Passed
-             * @default false
-             */
-            passed: boolean;
+            /** Passed */
+            passed?: boolean | null;
             /**
              * Pass Explanation
              * @default
@@ -3175,7 +3172,7 @@ export interface components {
             /** Max Score */
             max_score: number;
             /** Passed */
-            passed: boolean;
+            passed?: boolean | null;
             /** Needs Human Attention */
             needs_human_attention: boolean;
             /** Submitted At */

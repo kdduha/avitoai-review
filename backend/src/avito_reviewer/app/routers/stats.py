@@ -85,6 +85,17 @@ def _approved(submissions: list[Submission]) -> list[Submission]:
     return [s for s in submissions if s.status == SubmissionStatus.APPROVED]
 
 
+def _pass_rate(drafts: list[ReviewDraft]) -> float | None:
+    """Доля зачтённых среди тех, где зачёт вообще решается.
+
+    Рубрика без порога не даёт вердикта (`passed is None`): считать такие
+    работы провалившимися значило бы занижать долю тем, что правило не
+    записано в условии.
+    """
+    decided = [d for d in drafts if d.passed is not None]
+    return round(sum(1 for d in decided if d.passed) / len(decided), 2) if decided else None
+
+
 def _drafts(submissions: list[Submission]) -> list[ReviewDraft]:
     return [ReviewDraft.model_validate(s.draft) for s in submissions]
 
@@ -153,9 +164,7 @@ async def _assignment_stats(
         approved=len(approved),
         late=sum(1 for s in mine if _is_late(s)),
         average_score=_average([d.score for d in drafts]),
-        pass_rate=(
-            round(sum(1 for d in drafts if d.passed) / len(drafts), 2) if drafts else None
-        ),
+        pass_rate=_pass_rate(drafts),
         needs_attention=sum(1 for d in _drafts(mine) if d.needs_human_attention),
         histogram=_histogram(drafts),
     )
@@ -232,9 +241,7 @@ async def stream_stats(
             and s.status != SubmissionStatus.APPROVED
         ),
         average_score=_average([d.score for d in drafts]),
-        pass_rate=(
-            round(sum(1 for d in drafts if d.passed) / len(drafts), 2) if drafts else None
-        ),
+        pass_rate=_pass_rate(drafts),
         by_assignment=[
             await _assignment_stats(
                 session, request, a, submissions, course_key=course_key, stream_key=stream.key

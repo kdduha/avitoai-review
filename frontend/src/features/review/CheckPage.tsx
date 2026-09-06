@@ -95,11 +95,33 @@ export function CheckPage() {
   /* Рубрику диктует задание, если оно выбрано: демо-прогон ищем по той же
      рубрике, против которой пойдёт настоящий разбор. */
   const rubricKey = assignment ? assignment.rubric_key : chosen
+  /* Правило просрочки лежит в самой рубрике, в каталоге его нет — нужен
+     отдельный запрос за полной рубрикой. */
+  const rubricLatePolicy = useQuery({
+    queryKey: ['rubric', rubricKey],
+    queryFn: () => backend.rubric(rubricKey),
+    enabled: Boolean(rubricKey),
+    retry: false,
+  })
   const demoRun = demoRunForRubric(rubricKey)
   const withDemo = (rubrics.data ?? []).filter((item) =>
     demoRunForRubric(item.assignment_id),
   ).length
   const rubric = rubrics.data?.find((item) => item.assignment_id === chosen)
+
+  /* Что рубрика сделает с работой, сданной позже названного срока. Пока это
+     видно только в итоге, ноль читается как «разбор ничего не нашёл». */
+  const latePenalty = ((): string | null => {
+    const at = assignment?.deadline_at ?? (deadline ? new Date(deadline).toISOString() : null)
+    if (!at || new Date(at) >= new Date()) return null
+    const policy = rubricLatePolicy.data?.late_policy
+    if (!policy) return 'Срок в прошлом: работа будет разобрана как просроченная.'
+    if (policy.grace_days === 0 && policy.after_grace === 'zero')
+      return 'Срок в прошлом: по этой рубрике любая просрочка обнуляет балл — итог будет 0 при любом разборе.'
+    if (policy.after_grace === 'zero')
+      return `Срок в прошлом: по этой рубрике −${policy.penalty_per_grace_day ?? 0} за день, позже ${policy.grace_days} дн. — 0 баллов.`
+    return `Срок в прошлом: по этой рубрике −${policy.penalty_per_grace_day ?? 0} за каждый день просрочки.`
+  })()
 
   return (
     <div className="mx-auto max-w-[720px] px-6 py-7">
@@ -209,6 +231,15 @@ export function CheckPage() {
                 className={inputClass}
               />
             </Field>
+            {/* Срок в прошлом обнуляет разбор целиком, и понять это по нулю в
+                итоге невозможно: экран показывал безупречную работу как 0.
+                Правило берём из самой рубрики, а не пересказываем общее. */}
+            {latePenalty ? (
+              <p className="-mt-2 flex items-start gap-1.5 text-[12px] leading-[1.5] text-critical-ink">
+                <CircleAlert size={13} strokeWidth={1.8} className="mt-0.5 shrink-0" />
+                {latePenalty}
+              </p>
+            ) : null}
             <p className="-mt-2 max-w-[62ch] text-[12px] leading-[1.5] text-faint">
               Заданий на потоках пока нет, поэтому рубрику и срок приходится называть здесь.
               Когда методист выдаст рубрику потоку и поставит дату, оба поля отсюда уйдут:

@@ -100,6 +100,32 @@ def test_failed_minimum_blocks_pass_despite_high_total():
     assert "обязательный минимум" in result.pass_explanation
 
 
+def test_without_a_threshold_there_is_no_verdict_at_all():
+    """Порога нет в условии — «зачёт» выдумывать нельзя.
+
+    Раньше здесь стояло `True`, и работа, обнулённая штрафом за просрочку,
+    показывалась ревьюеру и студенту как «зачёт, 0 из 6».
+    """
+    rubric = go_rubric(scale=Scale(total_max=6, pass_threshold=None, step=0.5))
+    bundle = go_bundle()
+    result = aggregate(
+        [CriterionVerdict(criterion_id=cid, score=2.0, verdict="") for cid in ("c1", "c2", "c3")],
+        rubric,
+        submitted_at=bundle.deadline_at + timedelta(days=2),
+        deadline_at=bundle.deadline_at,
+    )
+    assert result.final_score == 0.0, "просрочка обнуляет — это правило рубрики"
+    assert result.passed is None, "порога нет: ни зачёта, ни незачёта"
+    assert "решение за ревьюером" in result.pass_explanation
+
+
+def test_a_failed_minimum_still_decides_without_a_threshold():
+    """Обязательный минимум — правило самой рубрики, оно работает без порога."""
+    rubric = go_rubric(scale=Scale(total_max=6, pass_threshold=None, step=0.5))
+    result = aggregate([CriterionVerdict(criterion_id="c1", score=0.0, verdict="")], rubric)
+    assert result.passed is False
+
+
 def test_late_penalty_applies_to_the_total_not_to_criteria():
     rubric = go_rubric(late_policy=LatePolicy(grace_days=1, penalty_per_grace_day=1))
     bundle = go_bundle()

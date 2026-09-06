@@ -191,6 +191,51 @@ def test_invented_quote_is_rejected(validator):
     assert "такого текста в файле нет" in evidence.note
 
 
+def test_a_quote_stitched_with_ellipses_is_checked_piece_by_piece(validator):
+    """Модель отвечает «строка А ... строка Б», выбрасывая середину.
+
+    Целиком такого текста в файле нет и быть не может, и вердикт помечался
+    непроверяемым, хотя каждый кусок в файле есть. Это другой формат ответа,
+    а не выдумка.
+    """
+    evidence = validator.validate(
+        Evidence(
+            artifact="cmd/main.go",
+            start_line=10,
+            end_line=20,
+            quote='r.Get("/ping", handlePing) ... log.Println("Shutting down service-courier")',
+        )
+    )
+    assert evidence.status is EvidenceStatus.VALID
+    assert "фрагмент" in evidence.note
+
+
+def test_a_stitched_quote_with_one_invented_piece_is_still_refused(validator):
+    """Послабление касается формата, а не содержания."""
+    evidence = validator.validate(
+        Evidence(
+            artifact="cmd/main.go",
+            start_line=10,
+            quote='r.Get("/ping", handlePing) ... r.Delete("/courier", handleDeleteCourier)',
+        )
+    )
+    assert evidence.status is EvidenceStatus.WRONG_LOCATION
+    assert "не найдено 1" in evidence.note
+
+
+def test_an_import_block_from_another_repo_is_refused(validator):
+    """Настоящая галлюцинация из живого прогона: импорты чужого репозитория."""
+    evidence = validator.validate(
+        Evidence(
+            artifact="cmd/main.go",
+            start_line=20,
+            end_line=22,
+            quote='import (\n\t"github.com/Avito-courses/course-go-avito-Turbina0N/internal/handlers"\n)',
+        )
+    )
+    assert evidence.status is EvidenceStatus.WRONG_LOCATION
+
+
 def test_missing_quote_in_a_fragment_is_not_called_a_lie():
     """Мы не видели файла целиком — обвинять модель в выдумке не на чем."""
     validator = EvidenceValidator([PARTIAL()])

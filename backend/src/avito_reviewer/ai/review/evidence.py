@@ -27,6 +27,20 @@ from .schema import CriterionVerdict, Evidence, EvidenceStatus
 LINE_TOLERANCE = 3      # на столько строк модель может промахнуться
 MIN_QUOTE_CHARS = 12    # слишком короткая цитата ничего не подтверждает
 WINDOW_SIZES = (1, 2, 3, 5, 8)
+MIN_FRAGMENT_CHARS = 8  # осколок склеенной цитаты короче этого ничего не значит
+
+_ELLIPSIS = re.compile(r"\s*(?:\.\s*\.\s*\.|…)\s*")
+
+
+def fragments(quote: str) -> list[str]:
+    """Разбить цитату, склеенную многоточием, на куски.
+
+    Модель регулярно отвечает «строка А ... строка Б», выкидывая середину.
+    Целиком такой текст в файле не найдётся никогда, и вердикт помечался
+    непроверяемым, хотя каждый кусок в файле есть. Проверяем куски.
+    """
+    parts = [normalize(p) for p in _ELLIPSIS.split(quote) if p.strip()]
+    return [p for p in parts if len(p) >= MIN_FRAGMENT_CHARS]
 
 
 def normalize(text: str) -> str:
@@ -103,7 +117,30 @@ class EvidenceValidator:
             evidence.status = EvidenceStatus.WRONG_LOCATION
             return evidence
 
-        # 3. Не нашли. Что именно это значит — зависит от того, весь ли файл мы видели.
+        # 3. Цитата склеена многоточием: целиком её в файле нет и быть не
+        #    может, но каждый кусок обязан найтись. Это не галлюцинация, а
+        #    другой формат ответа.
+        pieces = fragments(evidence.quote)
+        if len(pieces) > 1:
+            whole = normalize(artifact.text)
+            missing = [p for p in pieces if p not in whole]
+            if not missing:
+                return self._accept(
+                    evidence,
+                    artifact,
+                    note=f"цитата собрана из {len(pieces)} фрагментов — каждый найден в файле",
+                )
+            evidence.status = (
+                EvidenceStatus.NOT_IN_AVAILABLE_PART
+                if artifact.partial
+                else EvidenceStatus.WRONG_LOCATION
+            )
+            evidence.note = (
+                f"из {len(pieces)} фрагментов цитаты не найдено {len(missing)}"
+            )
+            return evidence
+
+        # 4. Не нашли. Что именно это значит — зависит от того, весь ли файл мы видели.
         if artifact.partial:
             evidence.status = EvidenceStatus.NOT_IN_AVAILABLE_PART
             evidence.note = (

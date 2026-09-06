@@ -89,7 +89,9 @@ export interface Workspace {
   maxScore: number
   /** Шаг шкалы задания: правка балла ходит по нему, а не по единице. */
   scoreStep: number
-  passed: boolean
+  /** `null` — рубрика не задаёт порога зачёта, и решает ревьюер. Сводить
+   *  это к `false` значит объявить незачёт правилом, которого нет. */
+  passed: boolean | null
   passExplanation: string
   lateExplanation: string
   needsHumanAttention: boolean
@@ -188,7 +190,7 @@ function assemble(
     score: draft.score ?? 0,
     maxScore: draft.max_score ?? 0,
     scoreStep: rubric.scale?.step || 1,
-    passed: draft.passed ?? false,
+    passed: draft.passed ?? null,
     passExplanation: draft.pass_explanation ?? '',
     lateExplanation: draft.late_explanation ?? '',
     needsHumanAttention: draft.needs_human_attention ?? false,
@@ -273,7 +275,7 @@ export function withPatchedDraft(workspace: Workspace, draft: ReviewDraft): Work
     }),
     rawScore: draft.raw_score ?? 0,
     score: draft.score ?? 0,
-    passed: draft.passed ?? false,
+    passed: draft.passed ?? null,
     passExplanation: draft.pass_explanation ?? '',
     lateExplanation: draft.late_explanation ?? '',
     needsHumanAttention: draft.needs_human_attention ?? false,
