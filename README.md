@@ -81,6 +81,30 @@ Redis нужен только для `POST /submissions/{id}/review/rerun`.
   периметра. Маршрут задаёт `AI_LLM__PROVIDER`: `external` (OpenAI-совместимый
   API), `local` (Ollama/vLLM) или `fake` по умолчанию.
 
+## Модель данных
+
+![Модель данных и её представления по слоям](docs/datamodel.drawio.png)
+
+Исходники диаграмм — [docs/datamodel.drawio](docs/datamodel.drawio) и
+[docs/pipeline.drawio](docs/pipeline.drawio), открываются в
+[app.diagrams.net](https://app.diagrams.net).
+
+Одна сдача существует в пяти видах, и разница между ними — не техническая:
+
+- **Рубрика лежит файлом, а не строкой в базе.** Завести курс — добавить JSON в
+  `backend/rubrics/`. В `submissions.rubric_snapshot` попадает её копия на
+  момент разбора: правка файла задним числом не меняет уже выставленные баллы.
+- **Пять JSON-колонок `submissions`** — это дословно те же pydantic-модели,
+  которые отдают `POST /review` и `POST /detect`. Хранятся как JSON, чтобы
+  `GET /submissions/{id}` и пересчёт собирали их обратно без похода в GitHub.
+- **`StudentSubmission` усечена намеренно.** Ни цитат, ни уверенности модели,
+  ни сигнала ГенИИ, ни балла до утверждения ревьюером: это кухня проверки, а не
+  обратная связь. Чужая сдача даёт 404, а не 403 — её существование тоже
+  сведение о ней.
+- **Типы фронта генерируются из OpenAPI** (`npm run gen:api`), руками не
+  пишутся: расхождение с сервером ловит компилятор, а не демо. `Workspace`
+  собирается из `SubmissionDetail` в `lib/workspace.ts`.
+
 ## Где что лежит
 
 ```
