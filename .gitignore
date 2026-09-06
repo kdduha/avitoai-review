@@ -48,3 +48,6 @@ Thumbs.db
 homework_examples/
 
 backend/e2e*.db
+
+backend/.venv
+frontend/node_modules
