@@ -90,7 +90,6 @@ class DetectionService:
             report.cost_rub = summary["cost_rub"]
         return report
 
-    # ------------------------------------------------------------------ #
 
     def _note_partial(self, report: DetectionReport, texts: list[ArtifactText]) -> None:
         """Неполные файлы — ограничение проверки, а не деталь реализации."""

@@ -154,6 +154,8 @@ AUTH_SEED_PASSWORD=avito2026              # один пароль на все 3 
 | `POST /rubrics/compile`, `POST /rubrics` | methodist | условие → черновик → подтверждение |
 | `DELETE /rubrics/{id}` | methodist | снять рубрику из каталога |
 | `GET /cost`, `GET /audit/llm-calls` | admin | журнал шлюза: сводка / построчно |
+| `POST /work-profile` | reviewer | сдача → `{profile, item}`: о чём работа и во сколько обойдётся её проверка; единственный вызов модели во всём распределении, `item` собирается с `author_hashes` из бандла |
+| `POST /distribute` | reviewer | `{items, reviewers? \| reviewer_ids?, committed_minutes?, now?}` → план назначений с объяснением по слагаемым и списком отказавших; к модели не ходит вовсе — ноль токенов, воспроизводимый ответ |
 | `GET /me/queue` | reviewer | своя очередь; `?all=true` — весь поток (admin) |
 | `GET /submissions/{id}`, `.../artifacts/{path}` | reviewer* | карточка сдачи, текст файла |
 | `GET/PATCH /submissions/{id}/review` | reviewer* | черновик; правка балла/вердикта с пересчётом и авторством |
@@ -346,28 +348,85 @@ INSERT в БД (см. `docs/happy-path.md`, сценарий 7, как восп�
 - Mermaid и блоки кода из статистических сигналов не исключаются: гранулярность
   исключения — по путям файлов, не по фрагментам внутри файла.
 
-## Где что лежит
+## Демо и ручные скрипты
+
+`scripts/` — ручные примеры и утилиты, не тесты и не часть пакета. По умолчанию
+`scripts/demo.py` берёт `scripts/fixtures/go-task1-pr42.json` — форма, которую ingest
+отдаёт на настоящем PR, включая крупный файл без инлайненного тела; флаги (до
+подкоманды) переключают источник:
+
+```bash
+uv run python scripts/demo.py --repo "homework_examples/GO/Хорошее решение 1-3" review
+uv run python scripts/demo.py --link https://github.com/owner/repo/pull/1 review
+```
+
+`scripts/local_bundle.py` собирает из каталога тот же `SubmissionBundle`, что отдал бы
+провайдер — не оформлен провайдером намеренно: заглушек под нереализованные источники
+в коде не держим. `scripts/ingest_pr_example.py` прогоняет `ingest` на реальном GitHub
+PR и печатает `SubmissionBundle` целиком; работает без токена (60 запросов/час),
+`INGEST_GITHUB__TOKEN` поднимает лимит.
+
+## Структура
 
 ```
-backend/src/avito_reviewer/
-  config.py              AppConfig — единая точка сборки настроек, читаются из окружения
+src/avito_reviewer/
+  config.py              AppConfig — агрегирует IngestConfig / AIConfig / DatabaseConfig / AuthConfig / QueueConfig
   queue.py               review/rerun: arq-задача + WorkerSettings; тоже прогоняет миграции
-  db/                    users, submissions, review_revisions, chat_messages — SQLAlchemy 2 (async)
-    migrate.py           run_migrations(): alembic upgrade head, вызывается в lifespan
-  ingest/                ссылка → SubmissionBundle; резолвер content_ref
+  db/                     users, submissions, review_revisions, chat_messages — SQLAlchemy 2 (async)
+    migrate.py            run_migrations(): alembic upgrade head, вызывается в lifespan
+  app/                    HTTP-слой
+    main.py               create_app(): lifespan (миграции+ingest+seed), роутеры
+    auth.py                JWT + RBAC: seed_users, get_current_user, require_role
+    routers/              APIRouter по доменам; schemas/ — Pydantic-модели, по файлу на роутер
+  ingest/                 ссылка → SubmissionBundle
+    service.py             IngestService: SubmissionSource → провайдер; резолвер content_ref
+    models.py               SubmissionBundle и связанные модели — контракт для слоёв ниже
+    providers/github.py     единственный провайдер, клиент — githubkit
   ai/
-    content.py           тексты артефактов, флаг partial, стриппинг ноутбуков
-    rubric.py            схема рубрики, проверка, каталог
-    compiler.py          условие → черновик рубрики
-    gate.py              формальные проверки без токенов
-    chat.py              ReAct-цикл чата ревьюера с моделью (§6.3)
-    llm/                 PrivacyGateway — единственный выход к моделям
-    review/              промпт, валидатор цитат, агрегатор
-    detection/           ансамбль сигналов ГенИИ
-  app/                   HTTP-слой
-    auth.py              JWT + RBAC: seed_users, get_current_user, require_role
-    routers/             base, auth, ingest, review, submissions, users
-backend/migrations/       Alembic (async шаблон), env.py берёт DSN из DatabaseConfig
-backend/rubrics/         рубрики как данные: добавить курс = добавить JSON
-backend/scripts/fixtures/  записанные сдачи и условия для прогонов без сети
+    content.py              тексты артефактов: excerpt | дозагрузка | дифф, флаг partial; strip_notebook для jupyter
+    rubric.py                схема рубрики, разбор JSON, реестр каталога
+    compiler.py              условие задания → черновик рубрики с цитатами
+    gate.py                  формальные проверки рубрики без единого токена
+    chat.py                  ReAct-цикл чата ревьюера с моделью (§6.3)
+    llm/                     PrivacyGateway — единственный выход к моделям
+    review/                  промпт из рубрики, валидатор цитат, агрегатор баллов
+    detection/               ансамбль сигналов ГенИИ + signals/
+  distribution/             раскладка работ по ревьюерам (§9); hungarian.py — целочисленный венгерский солвер без зависимостей
+rubrics/                   рубрики как данные: добавить курс = добавить JSON
+reviewers/                 ревьюеры как данные; занятость туда не пишут
+migrations/                 Alembic (async шаблон); env.py берёт DSN из DatabaseConfig
+scripts/fixtures/           записанные сдачи и условия для прогонов без сети
 ```
+
+### Границы
+
+`ai` работает только с `SubmissionBundle` и `Rubric` — про источник сдачи не знает
+ничего, эта зависимость заперта в `ingest`. Обратно: схемы `content_ref` разбирает
+только `ingest`, а `ai` ходит за телами файлов через протокол `ContentResolver`,
+которому `IngestService` удовлетворяет структурно.
+
+Наружу к моделям ходит один `PrivacyGateway`; прямые вызовы провайдеров вне `ai/llm`
+запрещены и проверяются тестом `test_llm_calls_leave_only_through_the_gateway` — он же
+разрешает сетевые вызовы в `ingest` и запрещает там SDK моделей.
+
+### Чего в `SubmissionBundle` нет, и что из этого следует
+
+**Полного текста файла может не быть.** Ingest инлайнит `excerpt` только в пределах
+бюджета; крупные файлы едут diff-only. `ai/content.py` сводит `excerpt`, дозагрузку по
+`content_ref` и дифф к одному объекту и помечает неполные флагом `partial`. Дифф файла,
+добавленного этой сдачей, — весь файл, и фрагментом не считается. Дальше по слою: в
+промпте такой файл помечен и системная инструкция запрещает утверждать по нему, что
+чего-то нет; валидатор цитат говорит «не найдено в доступной части», не «такого текста
+нет»; стилометрия и перплексия такие файлы пропускают; список уходит в
+`partial_artifacts` черновика.
+
+**История не хранит списка файлов.** `Revision` несёт время и объём коммита, но не
+пути — GitHub отдаёт их отдельным запросом на каждый коммит. Форензика поэтому не
+обещает «эта строка из того коммита» — она подсвечивает крупные файлы, добавленные
+сдачей, и пишет в обосновании, что связь косвенная.
+
+## Как расширять
+
+- **Новый роутер** — `app/routers/<name>.py` + `app/schemas/<name>.py`, `include_router` в `main.py`.
+- **Новый провайдер ingest** — `SubmissionProvider` в `ingest/providers/<name>.py`, запись в словарь `IngestService`, конфиг в `config.py`, значение в `SubmissionSource`.
+- **Новый домен** (assignment, review, detection) — пакет рядом с `ingest`/`ai`; на входе только `SubmissionBundle`, наружу — сервисный класс, который зовёт роутер.

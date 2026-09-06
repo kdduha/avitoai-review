@@ -35,10 +35,6 @@ router = APIRouter(tags=["teaching"])
 Session = Annotated[AsyncSession, Depends(session_dependency)]
 
 
-# --------------------------------------------------------------------------- #
-# вспомогательное
-# --------------------------------------------------------------------------- #
-
 def _rubric_of(request: Request, rubric_key: str) -> Rubric | None:
     store: RubricStore = request.app.state.rubrics
     return store.get(rubric_key)
@@ -86,10 +82,6 @@ async def _assignment_out(
     )
 
 
-# --------------------------------------------------------------------------- #
-# курсы
-# --------------------------------------------------------------------------- #
-
 @router.get("/courses", summary="Курсы")
 async def list_courses(user: RequireReviewer, session: Session) -> list[CourseOut]:
     courses = (await session.execute(select(Course).order_by(Course.key))).scalars().all()
@@ -116,10 +108,6 @@ async def create_course(body: CourseIn, user: RequireMethodist, session: Session
     await session.commit()
     return CourseOut(id=course.id, key=course.key, title=course.title, streams=0)
 
-
-# --------------------------------------------------------------------------- #
-# потоки
-# --------------------------------------------------------------------------- #
 
 @router.get("/streams", summary="Потоки")
 async def list_streams(
@@ -215,10 +203,6 @@ async def enroll(
     await session.commit()
     return {"enrolled": added, "already": len(users) - added}
 
-
-# --------------------------------------------------------------------------- #
-# задания
-# --------------------------------------------------------------------------- #
 
 @router.get("/assignments", summary="Задания")
 async def list_assignments(

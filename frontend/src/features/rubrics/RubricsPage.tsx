@@ -62,7 +62,7 @@ function CriterionCard({ criterion }: { criterion: Criterion }) {
         {criterion.min_score_for_pass ? (
           <Badge tone="critical">обязательный минимум {criterion.min_score_for_pass}</Badge>
         ) : null}
-        {criterion.auto_verifiable ? <Badge tone="neutral">проверяется кодом</Badge> : null}
+        {criterion.auto_verifiable ? <Badge tone="neutral">проверяется автоматически</Badge> : null}
         {criterion.ai_sensitive ? <Badge tone="mark">важна самостоятельность</Badge> : null}
       </div>
 
@@ -124,9 +124,8 @@ export function RubricsPage() {
         <div className="flex items-start gap-2.5 rounded-card border border-[#f0d3d3] bg-critical-wash px-4 py-3">
           <CircleAlert size={15} strokeWidth={1.8} className="mt-0.5 shrink-0 text-critical" />
           <p className="text-[13px] leading-[1.55] text-ink-soft">
-            Каталог рубрик не загрузился — бэкенд не отвечает. Рубрики лежат в{' '}
-            <code className="font-mono text-[12px]">backend/rubrics/</code>: добавить курс значит
-            положить туда ещё один JSON.
+            Каталог рубрик не загрузился — бэкенд не отвечает. Попробуйте обновить страницу
+            позже.
           </p>
         </div>
       </div>

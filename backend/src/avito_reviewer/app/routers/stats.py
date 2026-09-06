@@ -69,10 +69,6 @@ _DEFAULT_CAPACITY_MINUTES = 300
 подставлена молча: заявленное должно быть отличимо от измеренного."""
 
 
-# --------------------------------------------------------------------------- #
-# вспомогательное
-# --------------------------------------------------------------------------- #
-
 async def _stream_or_404(session: AsyncSession, stream_id: UUID) -> Stream:
     stream = await session.get(Stream, stream_id)
     if stream is None:
@@ -164,10 +160,6 @@ async def _assignment_stats(
         histogram=_histogram(drafts),
     )
 
-
-# --------------------------------------------------------------------------- #
-# статистика
-# --------------------------------------------------------------------------- #
 
 @router.get("/stats/streams/{stream_id}", summary="Статистика потока")
 async def stream_stats(
@@ -278,10 +270,6 @@ async def assignment_stats(
         stream_key=stream.key,
     )
 
-
-# --------------------------------------------------------------------------- #
-# ревьюеры на потоке
-# --------------------------------------------------------------------------- #
 
 def _roster_card(request: Request, account: User) -> Reviewer | None:
     """Карточка каталога, если она есть.
@@ -398,10 +386,6 @@ async def unassign_reviewer(
     await session.delete(link)
     await session.commit()
 
-
-# --------------------------------------------------------------------------- #
-# раскладка работ
-# --------------------------------------------------------------------------- #
 
 @router.post("/streams/{stream_id}/distribute", summary="Разложить нераспределённые работы")
 async def distribute_stream(

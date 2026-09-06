@@ -53,7 +53,6 @@ class EvidenceValidator:
             # модель часто указывает только имя файла
             self._by_path.setdefault(text.path.split("/")[-1].lower(), text)
 
-    # ------------------------------------------------------------------ #
 
     def _find(self, path: str) -> ArtifactText | None:
         key = path.strip().lower()
@@ -128,7 +127,6 @@ class EvidenceValidator:
             evidence.char_start, evidence.char_end = _offsets(artifact.text, evidence.quote)
         return evidence
 
-    # ------------------------------------------------------------------ #
 
     def validate_verdict(
         self, verdict: CriterionVerdict, criterion: Criterion | None
@@ -165,8 +163,6 @@ class EvidenceValidator:
 
         return verdict
 
-
-# --------------------------------------------------------------------------- #
 
 def _offsets(text: str, quote: str) -> tuple[int | None, int | None]:
     """Смещения цитаты в тексте артефакта — для подсветки в интерфейсе."""

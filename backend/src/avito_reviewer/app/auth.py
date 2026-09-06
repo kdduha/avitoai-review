@@ -71,10 +71,6 @@ def decode_access_token(token: str, config: AuthConfig) -> dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="токен недействителен") from exc
 
 
-# --------------------------------------------------------------------------- #
-# seeding — the hackathon variant of user management
-# --------------------------------------------------------------------------- #
-
 SEED_USERS: dict[Role, str] = {
     Role.STUDENT: "student",
     Role.REVIEWER: "reviewer",
@@ -139,10 +135,6 @@ async def seed_roster_reviewers(
         log.info("auth: seeded %d reviewer accounts from the roster", len(added))
     return len(added)
 
-
-# --------------------------------------------------------------------------- #
-# FastAPI dependencies
-# --------------------------------------------------------------------------- #
 
 async def get_current_user(
     request: Request,

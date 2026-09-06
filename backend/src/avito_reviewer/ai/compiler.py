@@ -272,8 +272,6 @@ class CompilerError(RuntimeError):
     """Условие не удалось разобрать в рубрику."""
 
 
-# --------------------------------------------------------------------------- #
-
 def _assemble(
     output: CompilerOutput, condition_text: str, *, assignment_id: str, course: str
 ) -> RubricDraft:

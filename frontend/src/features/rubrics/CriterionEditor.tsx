@@ -188,7 +188,7 @@ export function CriterionEditor({
             {criterion.min_score_for_pass != null ? (
               <Badge tone="critical">обязательный минимум {criterion.min_score_for_pass}</Badge>
             ) : null}
-            {criterion.auto_verifiable ? <Badge tone="neutral">проверяется кодом</Badge> : null}
+            {criterion.auto_verifiable ? <Badge tone="neutral">проверяется автоматически</Badge> : null}
             {criterion.ai_sensitive ? <Badge tone="mark">важна самостоятельность</Badge> : null}
             {!criterion.evidence_required ? <Badge tone="neutral">без обязательной цитаты</Badge> : null}
           </div>
@@ -298,7 +298,7 @@ export function CriterionEditor({
             <CheckboxField
               checked={criterion.auto_verifiable}
               onChange={(auto_verifiable) => onChange({ auto_verifiable })}
-              label="Проверяется кодом"
+              label="Проверяется автоматически"
               hint="Format Gate или тесты, а не модель"
             />
             <CheckboxField

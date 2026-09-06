@@ -1,7 +1,7 @@
 """Engine and session factory.
 
 No Alembic here on purpose: the hackathon shape has three tables and no data
-worth migrating yet (`docs/backend.md`'s TODO list already says so under
+worth migrating yet (`docs/handover-backend.md`'s TODO list already says so under
 "Инфраструктура"). Startup runs `Base.metadata.create_all` and that is the
 whole migration story until there is a schema worth versioning.
 """

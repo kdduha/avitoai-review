@@ -467,7 +467,7 @@ export function RubricEditor({ initial, draft = null, groundedShare = null, mode
           ))
         ) : (
           <p className="px-5 py-8 text-center text-[13px] text-muted">
-            Формальных проверок нет — всё, что можно было проверить кодом, уйдёт в модель за деньги.
+            Формальных проверок нет — всё, что можно было проверить автоматически, уйдёт в модель за деньги.
           </p>
         )}
       </Section>

@@ -68,7 +68,6 @@ class PrivacyGateway:
         self.task_models = task_models or {}
         """Матрица роутинга: какой задаче какая модель. Пусто — модель провайдера."""
 
-    # ------------------------------------------------------------------ #
 
     def complete(
         self,
@@ -166,7 +165,6 @@ class PrivacyGateway:
             truncated=response.truncated,
         )
 
-    # ------------------------------------------------------------------ #
 
     def _pick(self, route: RoutePolicy, task: TaskKind) -> Provider:
         if route is RoutePolicy.LOCAL_ONLY:

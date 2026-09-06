@@ -144,8 +144,6 @@ def analyse(bundle: SubmissionBundle, weight: float = 0.35) -> SignalResult:
     return result
 
 
-# --------------------------------------------------------------------------- #
-
 def _candidate_spans(bundle: SubmissionBundle, score: float, reason: str) -> list[Span]:
     """Файлы, на которые указывает подозрительная история — без обещания точности.
 

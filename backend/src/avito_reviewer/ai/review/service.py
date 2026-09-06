@@ -47,7 +47,6 @@ class ReviewService:
         self.gateway = gateway
         self.options = options or ReviewOptions()
 
-    # ------------------------------------------------------------------ #
 
     def review(
         self,

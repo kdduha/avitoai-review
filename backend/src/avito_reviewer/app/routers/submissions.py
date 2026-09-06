@@ -103,10 +103,6 @@ async def _summary(session: AsyncSession, submission: Submission) -> SubmissionS
     )
 
 
-# --------------------------------------------------------------------------- #
-# очередь и карточка
-# --------------------------------------------------------------------------- #
-
 @router.get("/me/queue", summary="The current reviewer's queue")
 async def my_queue(
     user: RequireReviewer,
@@ -176,10 +172,6 @@ async def get_artifact(
             return ArtifactTextOut.model_validate(file)
     raise HTTPException(status_code=404, detail=f"файл {path!r} не входит в разбор этой сдачи")
 
-
-# --------------------------------------------------------------------------- #
-# черновик ревью
-# --------------------------------------------------------------------------- #
 
 @router.get("/submissions/{submission_id}/review", summary="Stored review draft")
 async def get_review(submission_id: UUID, user: RequireReviewer, session: Session) -> ReviewDraft:
@@ -307,10 +299,6 @@ def _redis_settings():
     return settings
 
 
-# --------------------------------------------------------------------------- #
-# детектор
-# --------------------------------------------------------------------------- #
-
 @router.get("/submissions/{submission_id}/ai-detection", summary="Stored AI-detection report")
 async def get_detection(submission_id: UUID, user: RequireReviewer, session: Session) -> DetectionReport:
     submission = await _load(submission_id, session, user)
@@ -360,10 +348,6 @@ async def set_detection_verdict(
     return DetectionReport.model_validate(submission.detection)
 
 
-# --------------------------------------------------------------------------- #
-# переназначение
-# --------------------------------------------------------------------------- #
-
 @router.post("/submissions/{submission_id}/reassign", summary="Hand a submission to another reviewer")
 async def reassign(
     submission_id: UUID, body: ReassignRequest, user: RequireAdmin, session: Session
@@ -396,10 +380,6 @@ async def reassign(
     return await _summary(session, submission)
 
 
-# --------------------------------------------------------------------------- #
-# аудит
-# --------------------------------------------------------------------------- #
-
 @router.get("/audit/llm-calls", summary="Raw audit log of every model call")
 async def audit_llm_calls(user: RequireAdmin, request: Request) -> list[AuditRecordOut]:
     """Everything `GET /cost` totals, one row per call — route, model, tokens,
@@ -417,10 +397,6 @@ async def audit_llm_calls(user: RequireAdmin, request: Request) -> list[AuditRec
         for r in records
     ]
 
-
-# --------------------------------------------------------------------------- #
-# чат ревьюера с моделью (§6.3)
-# --------------------------------------------------------------------------- #
 
 def _texts_from_stored(files: list[dict]) -> list[ArtifactText]:
     """Rebuild the tool-facing `ArtifactText` view from what `/review` stored.

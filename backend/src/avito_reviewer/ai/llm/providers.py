@@ -68,8 +68,6 @@ class Provider(Protocol):
     ) -> LLMResponse: ...
 
 
-# --------------------------------------------------------------------------- #
-
 @dataclass
 class OpenAICompatibleProvider:
     """Один клиент на оба маршрута.
@@ -166,8 +164,6 @@ class OpenAICompatibleProvider:
         )
 
 
-# --------------------------------------------------------------------------- #
-
 @dataclass
 class FakeProvider:
     """Провайдер для тестов и демо без ключа.
@@ -209,8 +205,6 @@ class FakeProvider:
     def last_prompt(self) -> str:
         return "\n".join(m["content"] for m in self.calls[-1]) if self.calls else ""
 
-
-# --------------------------------------------------------------------------- #
 
 def _host_name(base_url: str) -> str:
     """Короткое имя эндпоинта для журнала: `api.aitunnel.ru` → `aitunnel`."""

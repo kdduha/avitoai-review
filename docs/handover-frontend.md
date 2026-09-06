@@ -70,6 +70,36 @@ cd ../backend && uv run uvicorn avito_reviewer.app.main:app --port 8000
 
 ---
 
+## Где что лежит
+
+```
+src/lib/backend.ts     клиент бэкенда; backend.d.ts генерируется из OpenAPI
+src/lib/workspace.ts   три ответа сервера → один вид для панелей
+src/lib/runs.ts        прогоны проверки: живые (с сохранением на сервере) и записанные
+src/lib/api.ts         данные админки, которых у бэкенда ещё нет
+src/app/session.tsx    роль → авторизация: логин в сеяный аккаунт, токен в lib/backend.ts
+src/mocks/             каталог программ и записанные прогоны
+src/features/review/   Review Workspace и запуск проверки
+src/features/rubrics/  каталог рубрик + CompileRubricPanel (условие → черновик → подтверждение)
+src/features/teaching/ потоки со статистикой и задания со сроками — то, что ведёт методист
+src/features/student/  кабинет студента: что сдавать, что сдано, что получено
+src/features/courses/  ведомость, дашборд, ревьюеры — пока на синтетике
+src/styles/index.css   токены визуального языка
+e2e/                    Playwright: обход маршрутов, правка балла, вход, компилятор рубрик
+```
+
+## Docker
+
+```bash
+docker compose up --build frontend   # из корня — соберёт и бэкенд с базой заодно
+```
+
+Многоступенчатый билд: `npm run build` → статика в nginx (`Dockerfile`, `nginx.conf`).
+`/api/*` nginx проксирует на сервис `backend:8000` — тот же путь, что у `vite.config.ts`
+в dev, только имя хоста другое (докер-сеть, а не localhost).
+
+---
+
 ## Граница живого и синтетики
 
 Бэкенд больше не без состояния: `POST /review` сохраняет `Submission` в

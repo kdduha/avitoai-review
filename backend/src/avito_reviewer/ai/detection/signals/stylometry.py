@@ -92,8 +92,6 @@ def analyse(texts: list[ArtifactText], weight: float = 0.15) -> SignalResult:
     return result
 
 
-# --------------------------------------------------------------------------- #
-
 def _is_code(artifact: ArtifactText) -> bool:
     if artifact.lang:
         return artifact.lang in CODE_LANGS

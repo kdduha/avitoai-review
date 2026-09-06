@@ -136,8 +136,6 @@ def run(
     return report
 
 
-# --------------------------------------------------------------------------- #
-
 def _known_paths(bundle: SubmissionBundle, texts: list[ArtifactText]) -> set[str]:
     """Все пути сдачи, а не только затронутые изменением.
 

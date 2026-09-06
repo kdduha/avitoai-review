@@ -128,8 +128,6 @@ def distribute(
     return plan
 
 
-# --------------------------------------------------------------------------- #
-
 def _aware(moment: datetime | None) -> datetime | None:
     """Наивное время считаем UTC.
 
