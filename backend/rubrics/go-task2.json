@@ -1,0 +1,199 @@
+{
+  "assignment_id": "go-task2",
+  "title": "Подключение базы данных и CRUD API",
+  "course": "Разработка микросервисов на Go",
+  "stage": "ДЗ 2",
+  "source_note": "Скомпилирована из условия задания (GO/task2.md, репозиторий организаторов) и достроена методистом. Шкалы в условии нет: принят балл за каждое названное требование, сумма критериев и есть максимум. Порог зачёта в условии тоже не назван, поэтому не проставлен — выдумывать его за методиста нельзя. Подтверждено: methodist, 2026-09-05.",
+  "ai_policy": "declare_required",
+  "scale": {
+    "total_max": 7.0,
+    "pass_threshold": null,
+    "step": 1.0
+  },
+  "late_policy": {
+    "grace_days": 0,
+    "penalty_per_grace_day": 0.0,
+    "after_grace": "zero"
+  },
+  "format_gate": [
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "pressly/goose|goose",
+        "label": "Миграции через goose"
+      },
+      "note": ""
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "CREATE TABLE couriers|couriers",
+        "label": "Таблица couriers"
+      },
+      "note": ""
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "jackc/pgx|pgxpool",
+        "label": "Подключение через pgx"
+      },
+      "note": ""
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "\\$1|\\$2",
+        "label": "SQL-плейсхолдеры вместо конкатенации"
+      },
+      "note": ""
+    },
+    {
+      "check": "required_paths",
+      "level": "warning",
+      "params": {
+        "paths": [
+          "migrations/"
+        ],
+        "label": "Каталог миграций"
+      },
+      "note": ""
+    },
+    {
+      "check": "token_budget",
+      "level": "info",
+      "params": {
+        "max_tokens": 40000
+      },
+      "note": ""
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c1",
+      "title": "Подключение к базе данных через .env с использованием pgx/pgxpool",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется настройка подключения к PostgreSQL через переменные окружения в .env файле и использование библиотеки jackc/pgx или pgxpool для пула соединений.",
+      "checks": [
+        "Подключение должно настраиваться через `.env` файл (host, port, dbname, user, password).",
+        "Можно использовать библиотеку [`jackc/pgx`](https://github.com/jackc/pgx) или `pgxpool` для пула соединений."
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c2",
+      "title": "Миграции и структура таблицы couriers с использованием goose",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется наличие миграций (с использованием goose) и корректность структуры таблицы couriers согласно спецификации.",
+      "checks": [
+        "Создайте миграции для инициализации базы данных.",
+        "Для миграции используйте https://github.com/pressly/goose.",
+        "Таблица должна как минимум включать: CREATE TABLE couriers ( id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL UNIQUE, status TEXT NOT NULL, created_at TIMESTAMP DEFAULT now(), updated_at TIMESTAMP DEFAULT now() );"
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c3",
+      "title": "GET /courier/{id} — получение данных о курьере",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется корректность реализации эндпоинта получения курьера по ID с правильными HTTP-ответами.",
+      "checks": [
+        "GET /courier/{id} Получить данные о конкретном курьере.",
+        "200 OK — курьер найден",
+        "404 Not Found — если курьер не найден",
+        "400 Bad Request — если id невалидный (не число и т.п.)",
+        "Формат ответа: { id, name, phone, status }"
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c4",
+      "title": "GET /couriers — список всех курьеров",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется реализация эндпоинта получения списка всех курьеров.",
+      "checks": [
+        "GET /couriers Список всех курьеров.",
+        "200 OK",
+        "Формат ответа: массив объектов { id, name, phone, status }"
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c5",
+      "title": "POST /courier — создание нового курьера",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется корректность реализации эндпоинта создания курьера с валидацией и обработкой конфликта.",
+      "checks": [
+        "POST /courier Создание нового курьера.",
+        "201 Created — курьер успешно создан",
+        "400 Bad Request — отсутствуют обязательные поля или телефон невалидный",
+        "409 Conflict — курьер с таким телефоном уже существует",
+        "Тело запроса: { name, phone, status }"
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c6",
+      "title": "PUT /courier — обновление данных о курьере",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется корректность реализации эндпоинта обновления курьера с валидацией и обработкой отсутствия.",
+      "checks": [
+        "PUT /courier Обновление данных о курьере.",
+        "200 OK — успешно обновлено",
+        "404 Not Found — курьер не найден",
+        "400 Bad Request — ошибки валидации",
+        "Тело запроса: { id, name, phone, status }"
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c7",
+      "title": "Использование SQL-плейсхолдеров для защиты от инъекций",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "Проверяется, что во всех SQL-запросах используются плейсхолдеры $1, $2 вместо конкатенации строк.",
+      "checks": [
+        "Используйте SQL-плейсхолдеры `$1`, `$2`, чтобы избежать SQL-инъекций."
+      ],
+      "anchors": {},
+      "evidence_required": true,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    }
+  ]
+}
