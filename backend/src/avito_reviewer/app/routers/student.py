@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Annotated
 from uuid import UUID
 
@@ -40,6 +42,8 @@ from avito_reviewer.db import (
     SubmissionStatus,
     session_dependency,
 )
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["student"])
 
@@ -108,6 +112,7 @@ async def _as_student_submission(
 
     card = StudentSubmission(
         id=submission.id,
+        status=submission.status,
         assignment_title=_rubric_title(rubric, assignment) if assignment else rubric.title,
         course_key=course_key,
         stream_key=stream_key,
@@ -238,10 +243,22 @@ async def submit(
         assignment_id=assignment.id,
         deadline_at=assignment.deadline_at,
     )
+    # Путь сдачи логируется по шагам: он занимает десятки секунд, и когда
+    # студент спрашивает «что с моей работой», ответ должен быть в журнале, а
+    # не в догадках. Ссылка — не ПДн: она и так публичная.
+    started = time.perf_counter()
+    log.info(
+        "сдача %s: студент %s, задание %s (%s) — собираю работу",
+        body.link, user.username, assignment.rubric_key, assignment.id,
+    )
     bundle = await ingest_submission(request, ingest_body)
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)
+    log.info(
+        "сдача %s: собрано за %.1f с, %d файлов — разбираю по рубрике %s",
+        bundle.submission_id, time.perf_counter() - started, len(texts), rubric.assignment_id,
+    )
     draft = await run_in_threadpool(ai.review, bundle, texts, rubric)
 
     submission = Submission(
@@ -261,6 +278,10 @@ async def submit(
     )
     session.add(submission)
     await session.commit()
+    log.info(
+        "сдача %s: готова за %.1f с, статус %s, ревьюер пока не назначен",
+        submission.id, time.perf_counter() - started, submission.status.value,
+    )
     return await _as_student_submission(session, request, submission)
 
 

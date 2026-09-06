@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from uuid import uuid4
 
 import pytest
@@ -705,3 +706,17 @@ def test_delete_removes_it_from_the_catalogue(make_client):
 def test_delete_unknown_rubric_is_404(make_client):
     client, _ = make_client(writable=True)
     assert client.delete("/rubrics/нет-такой").status_code == 404
+
+
+def test_the_apps_own_loggers_survive_startup(make_client):
+    """Миграции на старте гасили логгеры всех модулей.
+
+    `fileConfig` в `migrations/env.py` по умолчанию ставит
+    `disable_existing_loggers=True`, а к моменту старта логгеры уже созданы
+    импортом роутеров. Приложение поднималось и после этого молчало в журнал
+    целиком — ни разбора, ни сдачи, ни ошибок провайдера.
+    """
+    make_client()
+    for name in ("app.routers.student", "app.routers.review", "ai.service", "app.main"):
+        logger = logging.getLogger(f"avito_reviewer.{name}")
+        assert not logger.disabled, f"{name} замолчал после старта"

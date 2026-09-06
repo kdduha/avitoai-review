@@ -165,7 +165,7 @@ AUTH_SEED_PASSWORD=avito2026
 | `DELETE /streams/{id}/students/{username}` | methodist | отчислить; сданные работы остаются |
 | `GET /me/assignments` | любая | задания моих потоков |
 | `POST /me/submissions` | любая | сдать работу ссылкой; ревьюер не назначается |
-| `GET /me/submissions`, `GET /me/submissions/{id}` | любая | свои сдачи; балл и отзыв — только у утверждённых |
+| `GET /me/submissions`, `GET /me/submissions/{id}` | любая | свои сдачи; `status` — на каком шаге работа; балл и отзыв — только у утверждённых |
 | `GET /stats/streams/{id}`, `GET /stats/assignments/{id}` | reviewer | числа по сданным работам |
 | `GET/POST /streams/{id}/reviewers`, `DELETE .../{username}` | reviewer / admin | кто проверяет поток; назначить, снять |
 | `POST /streams/{id}/distribute` | admin | разложить работы без ревьюера и **записать `reviewer_id`** |

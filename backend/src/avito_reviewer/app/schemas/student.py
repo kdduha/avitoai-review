@@ -15,6 +15,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from avito_reviewer.db import SubmissionStatus
 from avito_reviewer.ingest import SubmissionSource
 
 
@@ -89,6 +90,10 @@ class StudentSubmission(BaseModel):
     deadline_at: datetime | None
     created_at: datetime
 
+    status: SubmissionStatus
+    """На каком шаге работа. `approved` не различает «разбор идёт», «ждёт
+    ревьюера» и «разбор сломался» — студент видел одно и то же «на проверке»
+    и в том случае, когда проверять было нечего."""
     approved: bool
     """Утверждена ли оценка человеком. Пока нет — балла нет вовсе."""
     score: float | None = None

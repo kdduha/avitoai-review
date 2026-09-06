@@ -2999,6 +2999,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            status: components["schemas"]["SubmissionStatus"];
             /** Approved */
             approved: boolean;
             /** Score */

@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, CircleAlert, Clock, Send } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { CalendarClock, CircleAlert, Clock, Loader, Send } from 'lucide-react'
 import {
   ApiError,
   backend,
   type StudentAssignment,
   type StudentSubmission,
+  type SubmissionStatus,
 } from '@/lib/backend'
 import { Button } from '@/components/ui/Button'
 import { Field, inputClass } from '@/components/ui/Field'
@@ -39,20 +40,10 @@ function when(value: string | null | undefined, empty = 'срока нет'): st
   })
 }
 
-function SubmitForm({ assignment, onDone }: { assignment: StudentAssignment; onDone: () => void }) {
+/** Поле и кнопка. Что происходит после нажатия, показывает не форма, а список
+ *  «Сданное»: работа обязана появиться там сразу, а не через десятки секунд. */
+function SubmitForm({ onSend, onDone }: { onSend: (link: string) => void; onDone: () => void }) {
   const [link, setLink] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const client = useQueryClient()
-
-  const submit = useMutation({
-    mutationFn: () => backend.submitWork({ assignment_id: assignment.id, link: link.trim(), source: 'github_pr' }),
-    onSuccess: () => {
-      client.invalidateQueries({ queryKey: ['my-submissions'] })
-      client.invalidateQueries({ queryKey: ['my-assignments'] })
-      onDone()
-    },
-    onError: (err) => setError(err instanceof ApiError ? err.message : 'Не удалось сдать работу'),
-  })
 
   return (
     <div className="mt-3 space-y-3 border-t border-line-soft pt-3">
@@ -64,16 +55,15 @@ function SubmitForm({ assignment, onDone }: { assignment: StudentAssignment; onD
           className={inputClass}
         />
       </Field>
-      {error ? <p className="text-[12.5px] text-danger-ink">{error}</p> : null}
       <div className="flex items-center gap-2">
         <Button
           size="sm"
           variant="primary"
-          onClick={() => submit.mutate()}
-          disabled={!link.trim() || submit.isPending}
+          onClick={() => onSend(link.trim())}
+          disabled={!link.trim()}
           icon={<Send size={13} strokeWidth={1.8} />}
         >
-          {submit.isPending ? 'Отправляю' : 'Сдать'}
+          Сдать
         </Button>
         <Button size="sm" variant="ghost" onClick={onDone}>
           Отмена
@@ -86,7 +76,13 @@ function SubmitForm({ assignment, onDone }: { assignment: StudentAssignment; onD
   )
 }
 
-function AssignmentCard({ assignment }: { assignment: StudentAssignment }) {
+function AssignmentCard({
+  assignment,
+  onSend,
+}: {
+  assignment: StudentAssignment
+  onSend: (link: string) => void
+}) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -128,7 +124,68 @@ function AssignmentCard({ assignment }: { assignment: StudentAssignment }) {
         ) : null}
       </div>
 
-      {open ? <SubmitForm assignment={assignment} onDone={() => setOpen(false)} /> : null}
+      {open ? (
+        <SubmitForm
+          onSend={(link) => {
+            onSend(link)
+            setOpen(false)
+          }}
+          onDone={() => setOpen(false)}
+        />
+      ) : null}
+    </li>
+  )
+}
+
+/** Что с работой прямо сейчас. `approved` этого не различал: и «ждёт
+ *  ревьюера», и «разбор сломался» выглядели одинаковым «на проверке». */
+const STATUS: Record<SubmissionStatus, string> = {
+  analyzing: 'Разбор идёт',
+  draft_ready: 'Ждёт ревьюера',
+  in_review: 'У ревьюера',
+  approved: 'Оценена',
+  failed: 'Разбор не удался',
+}
+
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  return <span className="num">{Math.round((now - since) / 1000)} с</span>
+}
+
+/** Отправленная работа до того, как сервер ответил. Запрос идёт десятки
+ *  секунд, и всё это время список «Сданное» выглядел так, будто ничего не
+ *  происходило. Карточка живёт ровно пока идёт запрос — сервер о ней ещё не
+ *  знает, и обещать за него нечего. */
+function SendingCard({ title, link, since }: { title: string; link: string; since: number }) {
+  return (
+    <li className="rounded-card border border-line bg-surface px-5 py-4">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="text-[14px] font-semibold text-ink">{title}</h3>
+        <a href={link} target="_blank" rel="noreferrer" className="text-[12px] text-accent hover:underline">
+          работа
+        </a>
+      </div>
+      <p className="mt-2.5 flex items-center gap-1.5 text-[13px] text-muted">
+        <Loader size={13} strokeWidth={1.7} className="animate-spin text-faint" />
+        Отправляю: собираю работу с GitHub и считаю разбор · <Elapsed since={since} />
+      </p>
+      <p className="mt-1 text-[12px] text-faint">Вкладку лучше не закрывать.</p>
+    </li>
+  )
+}
+
+function FailedCard({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
+  return (
+    <li className="rounded-card border border-[#f0d3d3] bg-critical-wash px-5 py-4">
+      <h3 className="text-[14px] font-semibold text-critical-ink">{title}</h3>
+      <p className="mt-1.5 text-[13px] leading-[1.55] text-ink-soft">Работа не отправилась: {message}</p>
+      <Button size="sm" variant="ghost" className="mt-2" onClick={onRetry}>
+        Скрыть
+      </Button>
     </li>
   )
 }
@@ -238,7 +295,9 @@ function SubmissionCard({ submission }: { submission: StudentSubmission }) {
            не поставил, показывать число значило бы объявить чужое решение. */
         <p className="mt-3 flex items-center gap-1.5 text-[13px] text-muted">
           <Clock size={13} strokeWidth={1.7} className="text-faint" />
-          На проверке у ревьюера — оценка появится, когда он её утвердит.
+          {submission.status === 'failed'
+            ? 'Разбор не удался — работа осталась, скажите ревьюеру, он перезапустит.'
+            : `${STATUS[submission.status]} — оценка появится, когда ревьюер её утвердит.`}
         </p>
       )}
 
@@ -252,8 +311,34 @@ function SubmissionCard({ submission }: { submission: StudentSubmission }) {
 
 /** Кабинет студента: что сдавать, что уже сдано и что за это получено. */
 export function StudentHomePage() {
+  const client = useQueryClient()
   const assignments = useQuery({ queryKey: ['my-assignments'], queryFn: backend.myAssignments })
   const submissions = useQuery({ queryKey: ['my-submissions'], queryFn: backend.mySubmissions })
+
+  /* Отправка живёт на странице, а не в форме под заданием: показать её надо в
+     списке «Сданное», а форма к тому моменту уже закрыта. */
+  const [sending, setSending] = useState<{ title: string; link: string; since: number } | null>(null)
+  const [error, setError] = useState<{ title: string; message: string } | null>(null)
+
+  async function send(assignment: StudentAssignment, link: string): Promise<void> {
+    setError(null)
+    setSending({ title: assignment.title, link, since: Date.now() })
+    try {
+      await backend.submitWork({ assignment_id: assignment.id, link, source: 'github_pr' })
+      client.invalidateQueries({ queryKey: ['my-submissions'] })
+      client.invalidateQueries({ queryKey: ['my-assignments'] })
+    } catch (err) {
+      // Сдача не сохранилась — сервер разбирает её одним синхронным запросом,
+      // и упавший запрос не оставляет строки. Молчать об этом нельзя: работа
+      // просто исчезала бы.
+      setError({
+        title: assignment.title,
+        message: err instanceof ApiError ? err.message : 'бэкенд не ответил',
+      })
+    } finally {
+      setSending(null)
+    }
+  }
 
   const failed = assignments.isError || submissions.isError
 
@@ -286,7 +371,7 @@ export function StudentHomePage() {
             </h2>
             <ul className="mt-3 space-y-3">
               {group.map((item) => (
-                <AssignmentCard key={item.id} assignment={item} />
+                <AssignmentCard key={item.id} assignment={item} onSend={(link) => send(item, link)} />
               ))}
             </ul>
           </section>
@@ -302,9 +387,13 @@ export function StudentHomePage() {
       ) : null}
 
       <h2 className="mt-8 text-[13px] font-semibold text-ink">Сданное</h2>
-      {submissions.data?.length ? (
+      {sending || error || submissions.data?.length ? (
         <ul className="mt-3 space-y-3">
-          {submissions.data.map((item) => (
+          {sending ? <SendingCard {...sending} /> : null}
+          {error ? (
+            <FailedCard {...error} onRetry={() => setError(null)} />
+          ) : null}
+          {submissions.data?.map((item) => (
             <SubmissionCard key={item.id} submission={item} />
           ))}
         </ul>
