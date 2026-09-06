@@ -1,7 +1,10 @@
 import { Link, Outlet } from 'react-router-dom'
+import { LogOut } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
+import { Button } from '@/components/ui/Button'
 import { useSession } from '@/app/session'
 import type { Role } from '@/lib/types'
+import { Sidebar } from './Sidebar'
 
 const ROLE_TITLE: Record<Role, string> = {
   student: 'студент',
@@ -9,12 +12,9 @@ const ROLE_TITLE: Record<Role, string> = {
   methodist: 'методист',
   admin: 'руководитель программы',
 }
-import { LoginModal } from './LoginModal'
-import { RoleSwitch } from './RoleSwitch'
-import { Sidebar } from './Sidebar'
 
 export function AppShell() {
-  const { name, role, username } = useSession()
+  const { name, role, username, signOut } = useSession()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -25,8 +25,6 @@ export function AppShell() {
         </Link>
 
         <div className="flex items-center gap-3">
-          <RoleSwitch />
-          <LoginModal />
           <div className="flex items-center gap-2 pl-1">
             <Avatar name={name} size={28} />
             <div className="leading-tight">
@@ -36,6 +34,14 @@ export function AppShell() {
               </div>
             </div>
           </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<LogOut size={13} strokeWidth={1.9} />}
+            onClick={signOut}
+          >
+            Выйти
+          </Button>
         </div>
       </header>
 

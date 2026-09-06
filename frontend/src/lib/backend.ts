@@ -68,15 +68,46 @@ export type ChatRequest = S['ChatRequest']
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
 
-/** Токен живёт в памяти вкладки, не в `localStorage`: если бэкенд перезапустят
- *  и пересеет учётки, старый токен из хранилища выглядел бы валидным (тот же
- *  JWT-секрет), но принадлежал бы уже не тому пользователю после рестарта с
- *  другой солью. Он и не нужен дольше жизни вкладки — `useAuth` перелогинивает
- *  при каждой смене роли и при заходе. */
-let authToken: string | null = null
+/** Токен переживает перезагрузку вкладки: работа ревьюера — это часы в одной
+ *  очереди, и F5 не повод спрашивать пароль заново. `localStorage`, а не
+ *  `sessionStorage`: очередь открывают в нескольких вкладках сразу и
+ *  возвращаются к ней назавтра, а `sessionStorage` теряется на каждой новой
+ *  вкладке. Риск устаревшего токена (перезапуск бэкенда пересевает учётки, и
+ *  прежний `sub` уже не найдётся) закрыт разбором 401 ниже: сессия сбрасывается
+ *  и человек попадает на экран входа, а не на «бэкенд не отвечает». */
+const TOKEN_KEY = 'avito-reviewer:token'
+
+function storedToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+let authToken: string | null = storedToken()
 
 export function setAuthToken(token: string | null): void {
   authToken = token
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token)
+    else localStorage.removeItem(TOKEN_KEY)
+  } catch {
+    /* Приватный режим без доступа к хранилищу: токен доживёт до перезагрузки. */
+  }
+}
+
+export function hasAuthToken(): boolean {
+  return authToken !== null
+}
+
+/** Единственная реакция на 401 на весь фронт: протухший или чужой токен
+ *  сбрасывает сессию там, где она живёт (`app/session.tsx`), а не оставляет
+ *  экран гадать, почему данные не пришли. */
+let unauthorizedHandler: (() => void) | null = null
+
+export function onUnauthorized(handler: () => void): void {
+  unauthorizedHandler = handler
 }
 
 export class ApiError extends Error {
@@ -125,11 +156,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   const payload = await response.json().catch(() => null)
-  if (!response.ok) {
-    const { message, problems } = readDetail(payload, response.status)
-    throw new ApiError(response.status, message, problems)
-  }
+  if (!response.ok) throw failure(payload, response.status, path)
   return payload as T
+}
+
+/** 401 на `/auth/login` — это «неверный логин или пароль», а не протухшая
+ *  сессия: сбрасывать там нечего, и уводить с экрана входа некуда. */
+function failure(payload: unknown, status: number, path: string): ApiError {
+  if (status === 401 && path !== '/auth/login') {
+    setAuthToken(null)
+    unauthorizedHandler?.()
+  }
+  const { message, problems } = readDetail(payload, status)
+  return new ApiError(status, message, problems)
 }
 
 export const backend = {
@@ -272,8 +311,7 @@ export const backend = {
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null)
-      const { message, problems } = readDetail(payload, response.status)
-      throw new ApiError(response.status, message, problems)
+      throw failure(payload, response.status, `/submissions/${submissionId}/chat`)
     }
     if (!response.body) return
 
