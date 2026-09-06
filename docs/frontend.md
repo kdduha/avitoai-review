@@ -22,11 +22,14 @@ cd ../backend && uv run uvicorn avito_reviewer.app.main:app --port 8000
 переменной `VITE_API_BASE`.
 
 Бэкенд требует Bearer-токен почти везде (см. `docs/backend.md`) — фронт логинится
-сам при старте и при смене роли (`app/session.tsx`), в один из трёх сеяных
-аккаунтов: ревьюер → `reviewer`, руководитель → `admin` (бэкенд не заводит
-отдельной роли координатора — см. `docs/backend.md`). Пароль —
+сам при старте и при смене роли (`app/session.tsx`) в одноимённый сеяный аккаунт.
+Ролей четыре, и во фронте они называются **как на сервере**: `student`,
+`reviewer`, `methodist`, `admin`; русские подписи живут в `RoleSwitch`. Пароль —
 `VITE_BACKEND_PASSWORD` (по умолчанию `avito2026`, тот же, что `AUTH_SEED_PASSWORD`
-на бэкенде). Токен живёт в памяти вкладки (`lib/backend.ts`), не в `localStorage`.
+на бэкенде). Токен живёт в памяти вкладки (`lib/backend.ts`), не в `localStorage`;
+в `localStorage` лежит только выбранная роль, и её значение проверяется на
+существование — словарь ролей уже менялся, а сохранённое значение переживает
+обновление интерфейса.
 
 ## Docker
 
@@ -49,7 +52,9 @@ src/app/session.tsx    роль → авторизация: логин в сея
 src/mocks/             каталог программ и записанные прогоны
 src/features/review/   Review Workspace и запуск проверки
 src/features/rubrics/  каталог рубрик + CompileRubricPanel (условие → черновик → подтверждение)
-src/features/courses/  ведомость, дашборд, ревьюеры
+src/features/teaching/ потоки со статистикой и задания со сроками — то, что ведёт методист
+src/features/student/  кабинет студента: что сдавать, что сдано, что получено
+src/features/courses/  ведомость, дашборд, ревьюеры — пока на синтетике
 src/styles/index.css   токены визуального языка
 e2e/                    Playwright: обход маршрутов, правка балла, вход, компилятор рубрик
 ```
