@@ -1,11 +1,14 @@
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, CircleAlert } from 'lucide-react'
 import { backend } from '@/lib/backend'
 import { Button } from '@/components/ui/Button'
 import { RubricEditor } from './RubricEditor'
+import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 
 export function RubricEditPage() {
+  const { role } = useSession()
   const { assignmentId = '' } = useParams()
 
   const rubric = useQuery({
@@ -14,6 +17,8 @@ export function RubricEditPage() {
     enabled: Boolean(assignmentId),
     retry: false,
   })
+
+  if (!atLeast(role, 'methodist')) return <Navigate to="/" replace />
 
   return (
     <div>

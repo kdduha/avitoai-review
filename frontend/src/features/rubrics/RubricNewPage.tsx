@@ -1,7 +1,9 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { blankRubric } from '@/lib/rubric'
 import { RubricEditor } from './RubricEditor'
+import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 
 /** Рубрика с чистого листа.
  *
@@ -9,6 +11,9 @@ import { RubricEditor } from './RubricEditor'
  *  второй формы для того же здесь нет. Этот путь для случая, когда условия под
  *  рукой нет или методист собирает рубрику сам. */
 export function RubricNewPage() {
+  const { role } = useSession()
+  if (!atLeast(role, 'methodist')) return <Navigate to="/" replace />
+
   return (
     <div>
       <div className="mx-auto max-w-[920px] px-6 pt-6">

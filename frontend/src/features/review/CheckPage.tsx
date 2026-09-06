@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
 import { DEMO_RUN_ID, demoRunForRubric, startRun } from '@/lib/runs'
 import { cn } from '@/lib/cn'
+import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 
 function Field({
@@ -29,6 +31,7 @@ const inputClass =
   'h-9 w-full rounded-lg border border-line bg-raised px-3 text-[13.5px] text-ink outline-none placeholder:text-faint focus:border-accent-line'
 
 export function CheckPage() {
+  const { role } = useSession()
   const navigate = useNavigate()
   const client = useQueryClient()
 
@@ -82,6 +85,8 @@ export function CheckPage() {
     demoRunForRubric(item.assignment_id),
   ).length
   const rubric = rubrics.data?.find((item) => item.assignment_id === chosen)
+
+  if (!atLeast(role, 'reviewer')) return <Navigate to="/" replace />
 
   return (
     <div className="mx-auto max-w-[720px] px-6 py-7">

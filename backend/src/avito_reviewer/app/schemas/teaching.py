@@ -34,6 +34,13 @@ class CourseOut(BaseModel):
     запроса на каждый ряд."""
 
 
+class CoursePatch(BaseModel):
+    """Только название. `key` — то слово, которым курс назван в карточках
+    ревьюеров (`course_ids`), и переименование ключа молча отвязало бы их."""
+
+    title: str = Field(min_length=1, max_length=200)
+
+
 class StreamIn(BaseModel):
     course_id: UUID
     key: str = _KEY
@@ -49,6 +56,19 @@ class StreamOut(BaseModel):
     title: str
     assignments: int = 0
     students: int = 0
+
+
+class StreamPatch(BaseModel):
+    """Не переданное поле не трогается."""
+
+    key: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,63}$")
+    title: str | None = Field(default=None, max_length=200)
+
+
+class StreamStudentRow(BaseModel):
+    id: UUID
+    username: str
+    display_name: str
 
 
 class AssignmentIn(BaseModel):

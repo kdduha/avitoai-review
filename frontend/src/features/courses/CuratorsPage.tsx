@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { api } from '@/lib/api'
@@ -17,8 +18,8 @@ export function CuratorsPage() {
   const [selected, setSelected] = useState<string[]>([])
 
   const { data: curators = [] } = useQuery({ queryKey: ['curators'], queryFn: api.curators })
-  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
-  const { data: allStreams = [] } = useQuery({ queryKey: ['streams'], queryFn: () => api.streams() })
+  const { data: courses = [] } = useQuery({ queryKey: ['mock-courses'], queryFn: api.courses })
+  const { data: allStreams = [] } = useQuery({ queryKey: ['mock-streams'], queryFn: () => api.streams() })
 
   const save = useMutation({
     mutationFn: ({ id, streamIds }: { id: string; streamIds: string[] }) =>
@@ -30,6 +31,8 @@ export function CuratorsPage() {
   })
 
   const current = curators.find((c) => c.id === editing)
+
+  if (role !== 'admin') return <Navigate to="/" replace />
 
   return (
     <div className="mx-auto max-w-[900px] px-6 py-6">

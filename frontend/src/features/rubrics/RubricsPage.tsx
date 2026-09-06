@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, Coins, Pencil, Plus, ShieldCheck, Sparkles } from 'lucide-react'
 import { useSession } from '@/app/session'
@@ -117,6 +117,8 @@ export function RubricsPage() {
     enabled: Boolean(current),
     retry: false,
   })
+
+  if (!atLeast(role, 'reviewer')) return <Navigate to="/" replace />
 
   if (list.isError) {
     return (

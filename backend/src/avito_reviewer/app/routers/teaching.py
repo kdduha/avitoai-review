@@ -16,18 +16,30 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from avito_reviewer.ai.rubric import Rubric, RubricStore
-from avito_reviewer.app.auth import RequireMethodist, RequireReviewer
+from avito_reviewer.app.auth import RequireAdmin, RequireMethodist, RequireReviewer
 from avito_reviewer.app.schemas.teaching import (
     AssignmentIn,
     AssignmentOut,
     AssignmentPatch,
     CourseIn,
     CourseOut,
+    CoursePatch,
     EnrollIn,
     StreamIn,
     StreamOut,
+    StreamPatch,
+    StreamStudentRow,
 )
-from avito_reviewer.db import Assignment, Course, Enrollment, Role, Stream, Submission, User
+from avito_reviewer.db import (
+    Assignment,
+    Course,
+    Enrollment,
+    Role,
+    Stream,
+    StreamReviewer,
+    Submission,
+    User,
+)
 from avito_reviewer.db.session import session_dependency
 
 router = APIRouter(tags=["teaching"])
@@ -44,6 +56,13 @@ async def _count(session: AsyncSession, model, column, value) -> int:
     return int(
         (await session.execute(select(func.count()).select_from(model).where(column == value))).scalar_one()
     )
+
+
+async def _course_or_404(session: AsyncSession, course_id: UUID) -> Course:
+    course = await session.get(Course, course_id)
+    if course is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="курс не найден")
+    return course
 
 
 async def _stream_or_404(session: AsyncSession, stream_id: UUID) -> Stream:
@@ -107,6 +126,35 @@ async def create_course(body: CourseIn, user: RequireMethodist, session: Session
     session.add(course)
     await session.commit()
     return CourseOut(id=course.id, key=course.key, title=course.title, streams=0)
+
+
+@router.patch("/courses/{course_id}", summary="Переименовать курс")
+async def patch_course(
+    course_id: UUID, body: CoursePatch, user: RequireMethodist, session: Session
+) -> CourseOut:
+    course = await _course_or_404(session, course_id)
+    course.title = body.title
+    await session.commit()
+    return CourseOut(
+        id=course.id,
+        key=course.key,
+        title=course.title,
+        streams=await _count(session, Stream, Stream.course_id, course.id),
+    )
+
+
+@router.delete("/courses/{course_id}", summary="Убрать курс", status_code=204)
+async def delete_course(course_id: UUID, user: RequireAdmin, session: Session) -> None:
+    """``409`` — у курса есть потоки: удалить их вместе с ним значило бы снести
+    задания и зачисления, о которых спрашивали не здесь."""
+    course = await _course_or_404(session, course_id)
+    streams = await _count(session, Stream, Stream.course_id, course.id)
+    if streams:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, detail=f"у курса есть потоки ({streams}), удалить нельзя"
+        )
+    await session.delete(course)
+    await session.commit()
 
 
 @router.get("/streams", summary="Потоки")
@@ -202,6 +250,110 @@ async def enroll(
         added += 1
     await session.commit()
     return {"enrolled": added, "already": len(users) - added}
+
+
+@router.patch("/streams/{stream_id}", summary="Переименовать поток")
+async def patch_stream(
+    stream_id: UUID, body: StreamPatch, user: RequireMethodist, session: Session
+) -> StreamOut:
+    """``409`` — такой ключ у этого курса уже занят."""
+    stream = await _stream_or_404(session, stream_id)
+    if body.key is not None and body.key != stream.key:
+        taken = (
+            await session.execute(
+                select(Stream).where(Stream.course_id == stream.course_id, Stream.key == body.key)
+            )
+        ).scalar_one_or_none()
+        if taken is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, detail=f"поток {body.key!r} у этого курса уже есть"
+            )
+        stream.key = body.key
+    if body.title is not None:
+        stream.title = body.title
+    await session.commit()
+    course = await session.get(Course, stream.course_id)
+    return StreamOut(
+        id=stream.id,
+        course_id=stream.course_id,
+        course_key=course.key if course else "",
+        key=stream.key,
+        title=stream.title,
+        assignments=await _count(session, Assignment, Assignment.stream_id, stream.id),
+        students=await _count(session, Enrollment, Enrollment.stream_id, stream.id),
+    )
+
+
+@router.delete("/streams/{stream_id}", summary="Убрать поток", status_code=204)
+async def delete_stream(stream_id: UUID, user: RequireAdmin, session: Session) -> None:
+    """``409`` — на потоке есть задания или студенты.
+
+    Назначения ревьюеров уходят вместе с потоком: это список «кому можно
+    давать работы этого потока», и без потока он не значит ничего.
+    """
+    stream = await _stream_or_404(session, stream_id)
+    assignments = await _count(session, Assignment, Assignment.stream_id, stream.id)
+    students = await _count(session, Enrollment, Enrollment.stream_id, stream.id)
+    if assignments or students:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail=f"на потоке задания ({assignments}) и студенты ({students}), удалить нельзя",
+        )
+    links = (
+        await session.execute(select(StreamReviewer).where(StreamReviewer.stream_id == stream.id))
+    ).scalars().all()
+    for link in links:
+        await session.delete(link)
+    await session.delete(stream)
+    await session.commit()
+
+
+@router.get("/streams/{stream_id}/students", summary="Состав потока")
+async def stream_students(
+    stream_id: UUID, user: RequireReviewer, session: Session
+) -> list[StreamStudentRow]:
+    await _stream_or_404(session, stream_id)
+    rows = (
+        await session.execute(
+            select(User)
+            .join(Enrollment, Enrollment.student_id == User.id)
+            .where(Enrollment.stream_id == stream_id)
+            .order_by(User.username)
+        )
+    ).scalars().all()
+    return [
+        StreamStudentRow(
+            id=row.id, username=row.username, display_name=row.display_name or row.username
+        )
+        for row in rows
+    ]
+
+
+@router.delete(
+    "/streams/{stream_id}/students/{username}", summary="Отчислить студента", status_code=204
+)
+async def unenroll(
+    stream_id: UUID, username: str, user: RequireMethodist, session: Session
+) -> None:
+    """Уже сданные работы остаются: отчисление закрывает доступ к заданиям
+    потока, а не стирает то, что человек сдал."""
+    await _stream_or_404(session, stream_id)
+    account = (
+        await session.execute(select(User).where(User.username == username))
+    ).scalar_one_or_none()
+    if account is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="аккаунт не найден")
+    link = (
+        await session.execute(
+            select(Enrollment).where(
+                Enrollment.stream_id == stream_id, Enrollment.student_id == account.id
+            )
+        )
+    ).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="студент не на этом потоке")
+    await session.delete(link)
+    await session.commit()
 
 
 @router.get("/assignments", summary="Задания")

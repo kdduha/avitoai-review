@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarClock, CircleAlert, Plus } from 'lucide-react'
 import { ApiError, backend, type AssignmentOut } from '@/lib/backend'
@@ -219,6 +220,8 @@ export function AssignmentsPage() {
   const [creating, setCreating] = useState(false)
   const assignments = useQuery({ queryKey: ['assignments'], queryFn: () => backend.assignments() })
   const canEdit = atLeast(role, 'methodist')
+
+  if (!atLeast(role, 'reviewer')) return <Navigate to="/" replace />
 
   return (
     <div className="mx-auto max-w-[860px] px-6 py-7">

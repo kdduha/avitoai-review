@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, FlaskConical } from 'lucide-react'
 import { ApiError, type DetectionSpan, type Evidence } from '@/lib/backend'
@@ -7,6 +7,8 @@ import { approveRun, demoThread, getRun, loadSubmission, setScore, setSpanVerdic
 import { formatDateTime, timeLeft } from '@/lib/format'
 import { withPatchedDraft } from '@/lib/workspace'
 import { cn } from '@/lib/cn'
+import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Tabs } from '@/components/ui/Tabs'
@@ -39,6 +41,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
 }
 
 export function ReviewPage() {
+  const { role } = useSession()
   const { runId = '' } = useParams()
 
   const [workspace, setWorkspace] = useState(() => getRun(runId))
@@ -87,6 +90,8 @@ export function ReviewPage() {
   function describeError(error: unknown, fallback: string): string {
     return error instanceof ApiError ? error.message : fallback
   }
+
+  if (!atLeast(role, 'reviewer')) return <Navigate to="/" replace />
 
   if (!workspace) {
     if (remote.isLoading) {

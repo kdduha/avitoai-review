@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
+import { AdminPage } from '@/features/admin/AdminPage'
 import { QueuePage } from '@/features/inbox/QueuePage'
 import { CheckPage } from '@/features/review/CheckPage'
 import { ReviewPage } from '@/features/review/ReviewPage'
@@ -48,6 +49,7 @@ export function App() {
         <Route path="/my-work" element={<StudentHomePage />} />
         <Route path="/assignments" element={<AssignmentsPage />} />
         <Route path="/streams" element={<StreamsPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/rubrics" element={<RubricsPage />} />
         <Route path="/rubrics/new" element={<RubricNewPage />} />
         <Route path="/rubrics/:assignmentId/edit" element={<RubricEditPage />} />

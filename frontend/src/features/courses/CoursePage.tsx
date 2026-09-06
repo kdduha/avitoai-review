@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 import { cn } from '@/lib/cn'
 import { Tabs } from '@/components/ui/Tabs'
 import { MockNotice } from '@/components/ui/MockNotice'
@@ -16,11 +18,12 @@ const TABS = [
 ]
 
 export function CoursePage() {
+  const { role } = useSession()
   const { courseId = '' } = useParams()
   const [params, setParams] = useSearchParams()
 
   const { data: course } = useQuery({ queryKey: ['course', courseId], queryFn: () => api.course(courseId) })
-  const { data: streams = [] } = useQuery({ queryKey: ['streams', courseId], queryFn: () => api.streams(courseId) })
+  const { data: streams = [] } = useQuery({ queryKey: ['mock-streams', courseId], queryFn: () => api.streams(courseId) })
 
   const streamId = params.get('stream') ?? streams[0]?.id ?? ''
   const tab = params.get('tab') ?? 'grades'
@@ -59,7 +62,10 @@ export function CoursePage() {
     enabled: Boolean(streamId),
   })
 
-  if (!course) return null
+  if (!atLeast(role, 'reviewer')) return <Navigate to="/" replace />
+  if (!course) {
+    return <div className="px-6 py-7 text-[13px] text-muted">Курс не найден.</div>
+  }
 
   /* Поток берётся из адресной строки: на неизвестный id нужен внятный экран,
      а не пустая вкладка. */

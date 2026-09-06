@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
+import { BarChart3, CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Settings, Users } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/app/session'
@@ -19,7 +19,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export function Sidebar() {
   const { role } = useSession()
   const location = useLocation()
-  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
+  const { data: courses = [] } = useQuery({ queryKey: ['mock-courses'], queryFn: api.courses })
   const { data: streams = [] } = useQuery({
     queryKey: ['all-streams'],
     queryFn: async () => (await Promise.all((await api.courses()).map((c) => api.streams(c.id)))).flat(),
@@ -99,6 +99,12 @@ export function Sidebar() {
           <Ruler size={15} strokeWidth={1.7} className="text-faint" />
           Рубрики
         </NavLink>
+        {role === 'admin' ? (
+          <NavLink to="/admin" className={linkClass}>
+            <Settings size={15} strokeWidth={1.7} className="text-faint" />
+            Управление
+          </NavLink>
+        ) : null}
         {role === 'admin' ? (
           <NavLink to="/curators" className={linkClass}>
             <Users size={15} strokeWidth={1.7} className="text-faint" />

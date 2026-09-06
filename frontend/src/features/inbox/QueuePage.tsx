@@ -1,10 +1,11 @@
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, CircleAlert, Play } from 'lucide-react'
 import { ApiError, backend, type SubmissionStatus } from '@/lib/backend'
 import { prLabel } from '@/lib/workspace'
 import { formatDateTime, plural } from '@/lib/format'
 import { useSession } from '@/app/session'
+import { atLeast } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 
@@ -27,6 +28,7 @@ const STATUS_TONE: Record<SubmissionStatus, 'neutral' | 'good' | 'warn' | 'criti
 export function QueuePage() {
   const { role } = useSession()
   const seeAll = role === 'admin'
+  const allowed = atLeast(role, 'reviewer')
 
   const queue = useQuery({
     queryKey: ['queue', seeAll],
@@ -36,6 +38,8 @@ export function QueuePage() {
   const rubrics = useQuery({ queryKey: ['rubrics'], queryFn: backend.rubrics, retry: false })
 
   const rubricById = new Map((rubrics.data ?? []).map((item) => [item.assignment_id, item]))
+
+  if (!allowed) return <Navigate to="/" replace />
 
   if (queue.isError) {
     return (

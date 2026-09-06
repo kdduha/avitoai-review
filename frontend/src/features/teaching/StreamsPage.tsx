@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, Shuffle, UserMinus, UserPlus } from 'lucide-react'
 import {
@@ -325,7 +326,7 @@ export function StreamsPage() {
   const { role } = useSession()
   const streams = useQuery({ queryKey: ['streams'], queryFn: () => backend.streams() })
 
-  if (!atLeast(role, 'reviewer')) return null
+  if (!atLeast(role, 'reviewer')) return <Navigate to="/" replace />
 
   return (
     <div className="mx-auto max-w-[900px] px-6 py-7">

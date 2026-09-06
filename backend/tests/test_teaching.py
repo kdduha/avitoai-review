@@ -247,3 +247,96 @@ def test_only_students_are_enrolled(app_client):
     assert ok.json() == {"enrolled": 1, "already": 0}
     repeat = client.post(f"/streams/{stream_id}/students", json={"usernames": ["student"]})
     assert repeat.json() == {"enrolled": 0, "already": 1}
+
+
+# --------------------------------------------------------------------------- #
+# правка и удаление каталога
+# --------------------------------------------------------------------------- #
+
+def test_a_course_is_renamed_but_its_key_stays(app_client):
+    """Ключ курса — то слово, которым его называют карточки ревьюеров."""
+    client = app_client(role="admin")
+    course = client.post("/courses", json={"key": "go", "title": "Go"}).json()
+    renamed = client.patch(f"/courses/{course['id']}", json={"title": "Разработка на Go"})
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json() == {**course, "title": "Разработка на Go"}
+
+
+def test_a_course_with_streams_is_not_deleted(app_client):
+    client = app_client(role="admin")
+    stream_id = _course_and_stream(client)
+    course_id = client.get("/courses").json()[0]["id"]
+    assert client.delete(f"/courses/{course_id}").status_code == 409
+
+    assert client.delete(f"/streams/{stream_id}").status_code == 204
+    assert client.delete(f"/courses/{course_id}").status_code == 204
+    assert client.get("/courses").json() == []
+
+
+def test_a_stream_with_assignments_or_students_is_not_deleted(app_client):
+    client = app_client(role="admin")
+    stream_id = _course_and_stream(client)
+    _assignment(client, stream_id)
+    assert client.delete(f"/streams/{stream_id}").status_code == 409
+
+    assignment_id = client.get("/assignments").json()[0]["id"]
+    assert client.delete(f"/assignments/{assignment_id}").status_code == 204
+    client.post(f"/streams/{stream_id}/students", json={"usernames": ["student"]})
+    assert client.delete(f"/streams/{stream_id}").status_code == 409
+
+    assert client.delete(f"/streams/{stream_id}/students/student").status_code == 204
+    assert client.delete(f"/streams/{stream_id}").status_code == 204
+
+
+def test_a_stream_key_stays_unique_inside_its_course(app_client):
+    client = app_client(role="admin")
+    first = _course_and_stream(client)
+    course_id = client.get("/courses").json()[0]["id"]
+    client.post("/streams", json={"course_id": course_id, "key": "b", "title": "Весна"})
+
+    clash = client.patch(f"/streams/{first}", json={"key": "b"})
+    assert clash.status_code == 409
+
+    renamed = client.patch(f"/streams/{first}", json={"key": "c", "title": "Осень 2027"})
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["key"] == "c"
+    assert renamed.json()["title"] == "Осень 2027"
+
+
+def test_the_roster_of_a_stream_is_readable_and_unenrolling_is_not_deleting(app_client):
+    client = app_client(role="admin")
+    stream_id = _course_and_stream(client)
+    client.post(f"/streams/{stream_id}/students", json={"usernames": ["student"]})
+
+    roster = client.get(f"/streams/{stream_id}/students").json()
+    assert [row["username"] for row in roster] == ["student"]
+
+    assert client.delete(f"/streams/{stream_id}/students/student").status_code == 204
+    assert client.get(f"/streams/{stream_id}/students").json() == []
+    # Аккаунт остался — отчисление снимает доступ к заданиям, а не удаляет человека.
+    assert any(u["username"] == "student" for u in client.get("/users").json())
+
+
+def test_unknown_course_stream_or_student_is_404(app_client):
+    client = app_client(role="admin")
+    missing = "00000000-0000-0000-0000-000000000000"
+    assert client.patch(f"/courses/{missing}", json={"title": "нет"}).status_code == 404
+    assert client.delete(f"/courses/{missing}").status_code == 404
+    assert client.patch(f"/streams/{missing}", json={"title": "нет"}).status_code == 404
+    assert client.delete(f"/streams/{missing}").status_code == 404
+    assert client.get(f"/streams/{missing}/students").status_code == 404
+
+    stream_id = _course_and_stream(client)
+    assert client.delete(f"/streams/{stream_id}/students/nobody").status_code == 404
+    assert client.delete(f"/streams/{stream_id}/students/student").status_code == 404
+
+
+def test_a_reviewer_cannot_delete_a_course_or_a_stream(app_client):
+    admin = app_client(role="admin")
+    stream_id = _course_and_stream(admin)
+    course_id = admin.get("/courses").json()[0]["id"]
+
+    reviewer = app_client(role="reviewer")
+    assert reviewer.delete(f"/courses/{course_id}").status_code == 403
+    assert reviewer.delete(f"/streams/{stream_id}").status_code == 403
+    assert reviewer.patch(f"/streams/{stream_id}", json={"title": "чужое"}).status_code == 403
