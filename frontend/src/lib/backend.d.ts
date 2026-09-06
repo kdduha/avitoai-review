@@ -129,6 +129,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/courses/{course_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Убрать курс
+         * @description ``409`` — у курса есть потоки: удалить их вместе с ним значило бы снести
+         *     задания и зачисления, о которых спрашивали не здесь.
+         */
+        delete: operations["delete_course_courses__course_id__delete"];
+        options?: never;
+        head?: never;
+        /** Переименовать курс */
+        patch: operations["patch_course_courses__course_id__patch"];
+        trace?: never;
+    };
     "/streams": {
         parameters: {
             query?: never;
@@ -154,7 +176,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Состав потока */
+        get: operations["stream_students_streams__stream_id__students_get"];
         put?: never;
         /**
          * Зачислить студентов на поток
@@ -166,6 +189,54 @@ export interface paths {
          */
         post: operations["enroll_streams__stream_id__students_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams/{stream_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Убрать поток
+         * @description ``409`` — на потоке есть задания или студенты.
+         *
+         *     Назначения ревьюеров уходят вместе с потоком: это список «кому можно
+         *     давать работы этого потока», и без потока он не значит ничего.
+         */
+        delete: operations["delete_stream_streams__stream_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Переименовать поток
+         * @description ``409`` — такой ключ у этого курса уже занят.
+         */
+        patch: operations["patch_stream_streams__stream_id__patch"];
+        trace?: never;
+    };
+    "/streams/{stream_id}/students/{username}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Отчислить студента
+         * @description Уже сданные работы остаются: отчисление закрывает доступ к заданиям
+         *     потока, а не стирает то, что человек сдал.
+         */
+        delete: operations["unenroll_streams__stream_id__students__username__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1452,6 +1523,15 @@ export interface components {
              */
             streams: number;
         };
+        /**
+         * CoursePatch
+         * @description Только название. `key` — то слово, которым курс назван в карточках
+         *     ревьюеров (`course_ids`), и переименование ключа молча отвязало бы их.
+         */
+        CoursePatch: {
+            /** Title */
+            title: string;
+        };
         /** CreateUserRequest */
         CreateUserRequest: {
             /** Username */
@@ -2687,6 +2767,16 @@ export interface components {
              */
             students: number;
         };
+        /**
+         * StreamPatch
+         * @description Не переданное поле не трогается.
+         */
+        StreamPatch: {
+            /** Key */
+            key?: string | null;
+            /** Title */
+            title?: string | null;
+        };
         /** StreamReviewerRow */
         StreamReviewerRow: {
             /** Username */
@@ -2766,6 +2856,18 @@ export interface components {
             by_assignment?: components["schemas"]["AssignmentStats"][];
             /** By Reviewer */
             by_reviewer?: components["schemas"]["ReviewerLoadRow"][];
+        };
+        /** StreamStudentRow */
+        StreamStudentRow: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Username */
+            username: string;
+            /** Display Name */
+            display_name: string;
         };
         /**
          * StudentAssignment
@@ -3488,6 +3590,70 @@ export interface operations {
             };
         };
     };
+    delete_course_courses__course_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_course_courses__course_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoursePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CourseOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_streams_streams_get: {
         parameters: {
             query?: {
@@ -3552,6 +3718,37 @@ export interface operations {
             };
         };
     };
+    stream_students_streams__stream_id__students_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamStudentRow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     enroll_streams__stream_id__students_post: {
         parameters: {
             query?: never;
@@ -3577,6 +3774,100 @@ export interface operations {
                         [key: string]: number;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_stream_streams__stream_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_stream_streams__stream_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StreamPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unenroll_streams__stream_id__students__username__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                stream_id: string;
+                username: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

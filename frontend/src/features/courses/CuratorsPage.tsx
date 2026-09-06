@@ -17,8 +17,8 @@ export function CuratorsPage() {
   const [selected, setSelected] = useState<string[]>([])
 
   const { data: curators = [] } = useQuery({ queryKey: ['curators'], queryFn: api.curators })
-  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
-  const { data: allStreams = [] } = useQuery({ queryKey: ['streams'], queryFn: () => api.streams() })
+  const { data: courses = [] } = useQuery({ queryKey: ['mock-courses'], queryFn: api.courses })
+  const { data: allStreams = [] } = useQuery({ queryKey: ['mock-streams'], queryFn: () => api.streams() })
 
   const save = useMutation({
     mutationFn: ({ id, streamIds }: { id: string; streamIds: string[] }) =>

@@ -47,6 +47,12 @@ export type AssignmentIn = S['AssignmentIn']
 export type AssignmentPatch = S['AssignmentPatch']
 export type CourseIn = S['CourseIn']
 export type StreamIn = S['StreamIn']
+export type CoursePatch = S['CoursePatch']
+export type StreamPatch = S['StreamPatch']
+export type StreamStudentRow = S['StreamStudentRow']
+export type UserOut = S['UserOut']
+export type CreateUserRequest = S['CreateUserRequest']
+export type UpdateUserRequest = S['UpdateUserRequest']
 export type DetectRequest = S['DetectRequest']
 export type CompileRubricResponse = S['CompileRubricResponse']
 export type CriterionSource = S['CriterionSource']
@@ -202,7 +208,7 @@ export const backend = {
     request<DistributeResult>(`/streams/${encodeURIComponent(streamId)}/distribute`, {
       method: 'POST',
     }),
-  users: () => request<{ username: string; role: string; display_name: string }[]>('/users'),
+  users: () => request<UserOut[]>('/users'),
 
   myAssignments: () => request<StudentAssignment[]>('/me/assignments'),
   mySubmissions: () => request<StudentSubmission[]>('/me/submissions'),
@@ -337,4 +343,43 @@ export const backend = {
       }
     }
   },
+
+  /* Админка: аккаунты и учебный каталог. */
+  createUser: (body: CreateUserRequest) =>
+    request<UserOut>('/users', { method: 'POST', body: JSON.stringify(body) }),
+  patchUser: (id: string, body: UpdateUserRequest) =>
+    request<UserOut>(`/users/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteUser: (id: string) => request<void>(`/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  patchCourse: (id: string, body: CoursePatch) =>
+    request<CourseOut>(`/courses/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteCourse: (id: string) =>
+    request<void>(`/courses/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  patchStream: (id: string, body: StreamPatch) =>
+    request<StreamOut>(`/streams/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  deleteStream: (id: string) =>
+    request<void>(`/streams/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  streamStudents: (streamId: string) =>
+    request<StreamStudentRow[]>(`/streams/${encodeURIComponent(streamId)}/students`),
+  enrollStudents: (streamId: string, usernames: string[]) =>
+    request<{ enrolled: number; already: number }>(
+      `/streams/${encodeURIComponent(streamId)}/students`,
+      { method: 'POST', body: JSON.stringify({ usernames }) },
+    ),
+  unenrollStudent: (streamId: string, username: string) =>
+    request<void>(
+      `/streams/${encodeURIComponent(streamId)}/students/${encodeURIComponent(username)}`,
+      { method: 'DELETE' },
+    ),
 }

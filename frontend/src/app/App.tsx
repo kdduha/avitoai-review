@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
+import { AdminPage } from '@/features/admin/AdminPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { QueuePage } from '@/features/inbox/QueuePage'
 import { CheckPage } from '@/features/review/CheckPage'
@@ -25,14 +26,30 @@ const HOME: Record<Role, string> = {
   admin: '/streams',
 }
 
-/** Не свой маршрут — не пустой экран и не 403 на первом запросе, а свой
- *  стартовый: адрес, набранный руками или оставшийся в закладке, ведёт туда,
- *  где человеку есть что делать. Что *разрешено*, решает сервер; здесь решается
- *  только, что показывать. */
-function Gate({ allow, children }: { allow: boolean; children: ReactElement }) {
-  const { role } = useSession()
-  return allow ? children : <Navigate to={HOME[role]} replace />
-}
+type Allow = (role: Role) => boolean
+
+const student: Allow = (role) => role === 'student'
+const reviewer: Allow = (role) => atLeast(role, 'reviewer')
+const methodist: Allow = (role) => atLeast(role, 'methodist')
+const admin: Allow = (role) => role === 'admin'
+
+/** Что *разрешено*, решает сервер; здесь решается только, что показывать.
+ *  Не свой маршрут ведёт на свой стартовый экран, а не на пустую страницу:
+ *  адрес из закладки должен приводить туда, где человеку есть что делать. */
+const SHELL: [path: string, element: ReactElement, allow: Allow][] = [
+  ['/my-work', <StudentHomePage />, student],
+  ['/queue', <QueuePage />, reviewer],
+  ['/check', <CheckPage />, reviewer],
+  ['/courses/:courseId', <CoursePage />, reviewer],
+  ['/students/:studentId', <StudentPage />, reviewer],
+  ['/assignments', <AssignmentsPage />, reviewer],
+  ['/streams', <StreamsPage />, reviewer],
+  ['/rubrics', <RubricsPage />, reviewer],
+  ['/rubrics/new', <RubricNewPage />, methodist],
+  ['/rubrics/:assignmentId/edit', <RubricEditPage />, methodist],
+  ['/admin', <AdminPage />, admin],
+  ['/curators', <CuratorsPage />, admin],
+]
 
 export function App() {
   const { status, role } = useSession()
@@ -55,111 +72,21 @@ export function App() {
   }
 
   const home = HOME[role]
+  const gate = (element: ReactElement, allow: Allow) =>
+    allow(role) ? element : <Navigate to={home} replace />
 
   return (
     <Routes>
       <Route path="/login" element={<Navigate to={home} replace />} />
 
       {/* Проверка работы — режим фокуса: без сайдбара, на всю ширину. */}
-      <Route
-        path="/review/:runId"
-        element={
-          <Gate allow={atLeast(role, 'reviewer')}>
-            <ReviewPage />
-          </Gate>
-        }
-      />
+      <Route path="/review/:runId" element={gate(<ReviewPage />, reviewer)} />
 
       <Route element={<AppShell />}>
         <Route index element={<Navigate to={home} replace />} />
-        <Route
-          path="/my-work"
-          element={
-            <Gate allow={role === 'student'}>
-              <StudentHomePage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/queue"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <QueuePage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/check"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <CheckPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/courses/:courseId"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <CoursePage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/students/:studentId"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <StudentPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/curators"
-          element={
-            <Gate allow={role === 'admin'}>
-              <CuratorsPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/assignments"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <AssignmentsPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/streams"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <StreamsPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/rubrics"
-          element={
-            <Gate allow={atLeast(role, 'reviewer')}>
-              <RubricsPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/rubrics/new"
-          element={
-            <Gate allow={atLeast(role, 'methodist')}>
-              <RubricNewPage />
-            </Gate>
-          }
-        />
-        <Route
-          path="/rubrics/:assignmentId/edit"
-          element={
-            <Gate allow={atLeast(role, 'methodist')}>
-              <RubricEditPage />
-            </Gate>
-          }
-        />
+        {SHELL.map(([path, element, allow]) => (
+          <Route key={path} path={path} element={gate(element, allow)} />
+        ))}
       </Route>
 
       <Route path="*" element={<Navigate to={home} replace />} />
