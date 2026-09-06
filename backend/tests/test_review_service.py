@@ -307,9 +307,8 @@ def test_overlapping_reviews_report_their_own_cost():
     with ThreadPoolExecutor(max_workers=2) as pool:
         drafts = [f.result() for f in [pool.submit(run, gateway) for _ in range(2)]]
 
-    # Без реального перекрытия тест ничего не доказывает. Отрезков теперь
-    # четыре — на прогон приходится два вызова, — поэтому ищем любую пару,
-    # которая перекрылась, а не распаковываем ровно два.
+    # Без реального перекрытия тест ничего не доказывает; отрезков четыре,
+    # поэтому ищем любую перекрывшуюся пару, а не распаковываем ровно два.
     from itertools import combinations
 
     assert any(

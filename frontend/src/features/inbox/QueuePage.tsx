@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ArrowRight, CircleAlert, Play } from 'lucide-react'
 import { ApiError, backend, type SubmissionStatus } from '@/lib/backend'
 import { prLabel } from '@/lib/workspace'
 import { formatDateTime, plural } from '@/lib/format'
+import { cn } from '@/lib/cn'
 import { useSession } from '@/app/session'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -26,7 +28,10 @@ const STATUS_TONE: Record<SubmissionStatus, 'neutral' | 'good' | 'warn' | 'criti
 
 export function QueuePage() {
   const { role } = useSession()
-  const seeAll = role === 'admin'
+  /* Руководителю очередь показывалась только целиком, и работу, которую он
+     запустил сам, было не найти среди чужих. Своя — по умолчанию, весь поток —
+     переключателем рядом. */
+  const [seeAll, setSeeAll] = useState(false)
 
   const queue = useQuery({
     queryKey: ['queue', seeAll],
@@ -68,11 +73,30 @@ export function QueuePage() {
               : `${rows.length} ${plural(rows.length, 'сдача', 'сдачи', 'сдач')}${seeAll ? ' по всему потоку' : ''}.`}
           </p>
         </div>
-        <Link to="/check">
-          <Button variant="primary" icon={<Play size={14} strokeWidth={1.9} />}>
-            Проверить работу
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {role === 'admin' ? (
+            <div className="flex items-center rounded-lg border border-line bg-surface p-0.5">
+              {([false, true] as const).map((value) => (
+                <button
+                  key={String(value)}
+                  onClick={() => setSeeAll(value)}
+                  aria-pressed={seeAll === value}
+                  className={cn(
+                    'rounded-[6px] px-2.5 py-1 text-[12.5px] font-medium transition-colors',
+                    seeAll === value ? 'bg-raised text-ink shadow-soft' : 'text-muted hover:text-ink',
+                  )}
+                >
+                  {value ? 'Весь поток' : 'Мои'}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <Link to="/check">
+            <Button variant="primary" icon={<Play size={14} strokeWidth={1.9} />}>
+              Проверить работу
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="mt-5 space-y-2">

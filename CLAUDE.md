@@ -38,7 +38,12 @@ INGEST_GITHUB__TOKEN="$(gh auth token)" docker compose up -d backend worker
 ```bash
 cd backend  && uv run ruff check src tests && uv run mypy src && uv run pytest
 cd frontend && npm run typecheck && npm test && npm run check:runs
+cd frontend && npx playwright test
 ```
+
+Playwright поднимает свой бэкенд на SQLite с провайдером `fake` и свой vite.
+Порты берутся из `VITE_UI_PORT`/`VITE_BACKEND_PORT` — задайте их, если гоняете
+два прогона сразу.
 
 ---
 
@@ -77,6 +82,12 @@ Postgres — осведомлённое. Сравнение падает `TypeEr
 
 **Ленивые связи в async-сессии не трогайте.** `assignment.stream` поднимает
 `MissingGreenlet`; берите `await session.get(...)`.
+
+**`fileConfig` в миграциях — только с `disable_existing_loggers=False`.**
+Миграции гоняются на старте приложения, когда логгеры всех модулей уже созданы
+импортом роутеров. С умолчанием `fileConfig` гасил их разом, и приложение
+поднималось молча: ни разбора, ни сдачи, ни ошибок провайдера в журнале. Есть
+тест (`tests/test_api.py::test_the_apps_own_loggers_survive_startup`).
 
 **Правьте зеркало серверной валидации рубрик.** `frontend/src/lib/rubric.ts`
 дословно повторяет `backend/.../ai/rubric.py::validate_rubric`, и есть тест,
@@ -130,12 +141,14 @@ Postgres — осведомлённое. Сравнение падает `TypeEr
 Полный список с адресами — [docs/todo.md](docs/todo.md). Коротко, по убыванию
 пользы:
 
-1. **Перплексия как сигнал.** `LogprobScorer` объявлен и нигде не
+1. **Дедупликация сдач.** `POST /review` создаёт новую строку на каждый вызов:
+   повторный разбор того же PR даёт дубль в очереди.
+2. **Перплексия как сигнал.** `LogprobScorer` объявлен и нигде не
    конструируется — `AI_LLM__PROVIDER=local` её не включит. Ансамбль сегодня
    три сигнала из четырёх.
-2. **Старый дашборд курса на реальные данные.** `/streams` уже считает по
-   `submissions`; `/courses/:id` всё ещё на `mocks/catalog.ts`.
-3. **Дедупликация сдач.** `POST /review` создаёт новую строку на каждый вызов.
+3. **Старый дашборд курса на реальные данные.** `/streams` уже считает по
+   `submissions`; `/courses/:id` и сайдбар курсов всё ещё на `mocks/catalog.ts`,
+   и список курсов там не тот же, что во вкладке «Курсы» на `/admin`.
 
 ---
 

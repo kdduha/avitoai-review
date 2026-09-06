@@ -20,21 +20,32 @@ const STATUS_LABEL: Record<string, string> = {
 export function StudentPage() {
   const { studentId = '' } = useParams()
 
-  const { data: student } = useQuery({ queryKey: ['student', studentId], queryFn: () => api.student(studentId) })
+  const { data: student } = useQuery({
+    queryKey: ['student', studentId],
+    // `undefined` из queryFn роняет запрос ошибкой, и экран остаётся пустым
+    // без объяснения: несуществующий студент — это `null`, а не сбой.
+    queryFn: async () => (await api.student(studentId)) ?? null,
+  })
   const { data: grades = [] } = useQuery({
     queryKey: ['student-grades', studentId],
     queryFn: () => api.gradesForStudent(studentId),
   })
-  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
-  const { data: streams = [] } = useQuery({ queryKey: ['streams'], queryFn: () => api.streams() })
+  const { data: courses = [] } = useQuery({ queryKey: ['mock-courses'], queryFn: api.courses })
+  const { data: streams = [] } = useQuery({ queryKey: ['mock-streams'], queryFn: () => api.streams() })
   const { data: curators = [] } = useQuery({ queryKey: ['curators'], queryFn: api.curators })
   const { data: assignments = [] } = useQuery({
-    queryKey: ['assignments', student?.courseId],
+    queryKey: ['mock-assignments', student?.courseId],
     queryFn: () => api.assignments(student?.courseId),
     enabled: Boolean(student),
   })
 
-  if (!student) return null
+  if (!student) {
+    return (
+      <div className="mx-auto max-w-[900px] px-6 py-7 text-[13px] text-muted">
+        Студент не найден.
+      </div>
+    )
+  }
 
   const course = courses.find((item) => item.id === student.courseId)
   const stream = streams.find((item) => item.id === student.streamId)

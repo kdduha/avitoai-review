@@ -1,15 +1,13 @@
 /** Прогоны проверки.
  *
- *  `/review` теперь сохраняет `Submission` на бэкенде, но локальный кэш
- *  прогонов здесь остаётся: `ReviewPage` держит рабочий вид (файлы, подсветку
- *  цитаты) вне зависимости от бэкенда, а демо-прогоны вообще без него. Живая
- *  правка балла и вердикта детектора уходит на сервер (`patchReview`,
- *  `setDetectionVerdict`) и уже оттуда обновляет то, что лежит здесь.
+ *  `/review` сохраняет `Submission` на бэкенде, но локальный кэш остаётся:
+ *  `ReviewPage` держит рабочий вид (файлы, подсветку цитаты) и без бэкенда, а
+ *  демо-прогоны живут только в нём. Живая правка балла и вердикта детектора
+ *  уходит на сервер и уже оттуда обновляет кэш.
  *
- *  Ревью и детектор — один вызов (`with_detection`), не два: раньше `/detect`
- *  тянул сдачу по ссылке заново, и если студент успевал пушнуть между двумя
- *  вызовами, спаны детектора описывали уже другую ревизию, чем цитаты
- *  черновика (см. `docs/handover-frontend.md`).
+ *  Ревью и детектор — один вызов (`with_detection`), не два: отдельный
+ *  `/detect` тянул сдачу заново, и спаны могли описывать другую ревизию, чем
+ *  цитаты черновика.
  */
 
 import { backend, type Rubric } from './backend'
@@ -39,10 +37,9 @@ import {
 
 const runs = new Map<string, Workspace>()
 
-// Демо-прогоны не персистентны: `submission_id` в записанных ответах — только
-// чтобы удовлетворить тип `ReviewResponse` (бэкенд его теперь всегда шлёт).
-// `submissionId: null` здесь обязателен — иначе правка балла на демо попробует
-// настоящий PATCH на несуществующую сдачу.
+// `submissionId: null` обязателен: `submission_id` в записанных ответах стоит
+// только ради типа, и без null правка балла ушла бы PATCH'ем на несуществующую
+// сдачу.
 function demo(): Workspace {
   return { ...buildWorkspace(DEMO_RUN_ID, DEMO_REVIEW, DEMO_DETECT.report, DEMO_RUBRIC), live: false, submissionId: null }
 }
@@ -158,10 +155,8 @@ const DEMO_BY_RUBRIC: Record<string, string> = {
 
 /** Записанный разбор именно этой рубрики — или `null`.
  *
- *  Раньше при промахе возвращался прогон по Go. Выбрали рубрику по системному
- *  дизайну, открыли «демо-прогон» — и получили разбор чужого сервиса: экран
- *  выглядел правдоподобно и был неверен. Записанный разбор есть у пяти рубрик
- *  из пятнадцати, так что промах — обычное дело, а не край. */
+ *  При промахе — `null`, а не разбор по Go: чужой разбор выглядит правдоподобно
+ *  и неверен. Записанный разбор есть у пяти рубрик из пятнадцати. */
 export function demoRunForRubric(rubricId: string | undefined): string | null {
   return (rubricId && DEMO_BY_RUBRIC[rubricId]) ?? null
 }
@@ -211,7 +206,11 @@ export async function startRun(params: StartRunParams): Promise<StartRunResult> 
       : { rubric_id: params.rubricId, deadline_at: params.deadlineAt || null }),
   })
 
-  const id = `run-${Date.now().toString(36)}`
+  /* Ключ прогона — id сдачи, а не локальный счётчик: `/review/{id}` тогда
+     совпадает с адресом из очереди, переживает перезагрузку и делится
+     ссылкой. Локальный ключ остаётся запасным на случай, когда сервер сдачу
+     не сохранил. */
+  const id = review.submission_id ?? `run-${Date.now().toString(36)}`
   const workspace: Workspace = {
     ...buildWorkspace(id, review, review.detection ?? null, rubric),
     detectionError:
@@ -285,13 +284,11 @@ export async function setSpanVerdict(
   return next
 }
 
-/** Утверждение черновика. На демо-прогоне утверждать нечего — экран уже не
- *  даёт зайти в этот путь без `submissionId` (см. `ReviewPage`).
+/** Утверждение черновика. На демо-прогоне утверждать нечего — без
+ *  `submissionId` экран в этот путь не пускает.
  *
- *  Новый статус берётся из ответа сервера и кладётся в кэш. Без этого сдача
- *  оставалась в кэше вкладки со старым `draft_ready`, и `ReviewPage`, который
- *  выводит «утверждено» из `workspace.status`, при повторном открытии из
- *  очереди снова предлагал утвердить уже утверждённое. */
+ *  Новый статус кладётся в кэш из ответа сервера: иначе `ReviewPage` при
+ *  повторном открытии из очереди предлагает утвердить уже утверждённое. */
 export async function approveRun(id: string): Promise<Workspace | undefined> {
   const workspace = runs.get(id)
   if (!workspace?.submissionId) return workspace

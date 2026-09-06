@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, datetime
 from functools import partial
 from typing import Annotated
@@ -248,10 +249,20 @@ async def review(
         )
     rubric = _rubric(request, body.rubric_id, body.rubric)
     reviewer = await _resolve_reviewer(session, user, body.reviewer_username)
+
+    started = time.perf_counter()
+    _log.info(
+        "разбор %s: запустил %s, рубрика %s — собираю работу",
+        body.link, user.username, rubric.assignment_id,
+    )
     bundle = await ingest_submission(request, body)
 
     ai: AIService = request.app.state.ai
     texts = await ai.prepare(bundle)
+    _log.info(
+        "разбор %s: собрано за %.1f с, %d файлов — отдаю модели",
+        bundle.submission_id, time.perf_counter() - started, len(texts),
+    )
     # Слой синхронный: считает, парсит и ходит к модели по HTTP блокирующе.
     # Держать на нём событийный цикл нельзя, переписывать ради этого на async
     # незачем — выигрыш нулевой, а поверхность для ошибок заметная.
@@ -289,6 +300,10 @@ async def review(
     )
     session.add(submission)
     await session.commit()
+    _log.info(
+        "разбор %s: готов за %.1f с, статус %s, ревьюер %s",
+        submission.id, time.perf_counter() - started, submission.status.value, reviewer.username,
+    )
 
     return ReviewResponse(
         bundle=bundle, files=files, draft=draft, detection=detection, submission_id=submission.id

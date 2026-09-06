@@ -46,3 +46,8 @@ dist-ssr/
 Thumbs.db
 *.pyc
 homework_examples/
+
+backend/e2e*.db
+
+backend/.venv
+frontend/node_modules

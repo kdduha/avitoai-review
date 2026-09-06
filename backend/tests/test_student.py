@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 from conftest import as_role, login
@@ -201,6 +202,48 @@ def test_before_approval_there_is_no_score_at_all(world):
     assert card["score"] is None, "балл поставила модель, а не человек — показывать нельзя"
     assert card["passed"] is None
     assert card["verdicts"] == [], "разбор до утверждения студенту не показывают"
+
+
+def test_the_submission_path_is_logged_stage_by_stage(world):
+    """«Что с моей работой» должно отвечаться журналом, а не догадками.
+
+    Свой обработчик, а не `caplog`: `logsetup.configure_logging` ставит
+    `propagate = False`, чтобы uvicorn не дублировал строки, и до корневого
+    обработчика записи не доходят.
+    """
+    logger = logging.getLogger("avito_reviewer.app.routers.student")
+    captured: list[logging.LogRecord] = []
+    handler = logging.Handler()
+    handler.emit = captured.append  # type: ignore[method-assign]
+    logger.addHandler(handler)
+    try:
+        _student(world).post(
+            "/me/submissions", json={"assignment_id": world["assignment"]["id"], "link": LINK}
+        )
+    finally:
+        logger.removeHandler(handler)
+
+    stages = [record.getMessage() for record in captured]
+    assert any("собираю работу" in line and "student" in line for line in stages)
+    assert any("разбираю по рубрике" in line for line in stages)
+    assert any("готова за" in line and "draft_ready" in line for line in stages)
+
+
+def test_the_card_says_which_step_the_work_is_on(world):
+    """`approved` не различал «ждёт ревьюера» и «разбор сломался»."""
+    student = _student(world)
+    card = student.post(
+        "/me/submissions", json={"assignment_id": world["assignment"]["id"], "link": LINK}
+    ).json()
+    assert card["status"] == "draft_ready"
+
+    submission_id = card["id"]
+    world["admin"].post(
+        f"/submissions/{submission_id}/reassign", json={"reviewer_username": "reviewer"}
+    )
+    reviewer = world["client_as"]("reviewer")
+    assert reviewer.post(f"/submissions/{submission_id}/review/approve").status_code == 200
+    assert student.get(f"/me/submissions/{submission_id}").json()["status"] == "approved"
 
 
 def test_after_approval_the_student_sees_the_score_and_the_feedback(world):

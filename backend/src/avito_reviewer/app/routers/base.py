@@ -6,6 +6,7 @@ from avito_reviewer import __version__
 from avito_reviewer.ai import AIService
 from avito_reviewer.ai.rubric import RubricStore
 from avito_reviewer.app.schemas.base import HealthResponse, InitResponse
+from avito_reviewer.config import AuthConfig
 from avito_reviewer.distribution import ReviewerStore
 from avito_reviewer.ingest import IngestService
 
@@ -25,6 +26,7 @@ async def init(request: Request) -> InitResponse:
     ai: AIService = request.app.state.ai
     rubrics: RubricStore = request.app.state.rubrics
     reviewers: ReviewerStore = request.app.state.reviewers
+    auth: AuthConfig = request.app.state.auth_config
     return InitResponse(
         service="avito-reviewer",
         version=__version__,
@@ -33,4 +35,5 @@ async def init(request: Request) -> InitResponse:
         llm_model=ai.config.llm.model,
         rubrics=rubrics.ids,
         reviewers=reviewers.ids,
+        demo_login=auth.demo_login,
     )

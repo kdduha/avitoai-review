@@ -1,53 +1,96 @@
 import { expect, test } from '@playwright/test'
+import { putToken, readToken, restoreSession, signInThroughForm, tokenFor } from './session'
 
-/** Бэкенд требует Bearer-токен на всём, кроме /health, /init и /auth/login —
- *  без входа `/rubrics` (реальный API, не мок) отвечает 401 и экран показывает
- *  офлайн-заглушку вместо каталога. Эти тесты проверяют, что вход происходит
- *  сам, до того как экран успевает отправить первый запрос.
+/** Авторизация целиком: аноним не видит ничего, вход — только через форму,
+ *  сессия переживает перезагрузку, 401 отовсюду возвращает на экран входа.
+ *  Фронт не знает ни одного пароля — раньше он логинился сам при монтировании.
  */
 
-test('logging in happens before any authenticated request, catalogue loads for real', async ({ page }) => {
-  const loginRequests: string[] = []
-  page.on('request', (request) => {
-    if (request.url().includes('/auth/login')) loginRequests.push(request.url())
-  })
-
-  await page.addInitScript(() => localStorage.setItem('avito-reviewer:role', 'curator'))
+test('an anonymous visitor is sent to the login screen from any route', async ({ page }) => {
   await page.goto('/rubrics')
 
-  await expect(page.getByText('Каталог рубрик не загрузился')).toHaveCount(0)
-  await expect(page.getByText('Создание boilerplate сервиса')).toBeVisible()
-  expect(loginRequests.length).toBeGreaterThanOrEqual(1)
+  await expect(page).toHaveURL(/\/login$/)
+  await expect(page.getByRole('button', { name: 'Войти' })).toBeVisible()
+  await expect(page.getByText('Каталог рубрик')).toHaveCount(0)
 })
 
-test('switching role re-authenticates as the matching backend account', async ({ page }) => {
-  const logins: { username: string }[] = []
-  page.on('request', (request) => {
-    if (!request.url().includes('/auth/login')) return
-    const body = request.postDataJSON() as { username: string } | null
-    if (body) logins.push(body)
-  })
+test('the login screen names no accounts, endpoints or docs', async ({ page }) => {
+  await page.goto('/login')
 
-  await page.addInitScript(() => localStorage.setItem('avito-reviewer:role', 'curator'))
-  await page.goto('/rubrics')
-  await expect(page.getByText('Создание boilerplate сервиса')).toBeVisible()
-  expect(logins.at(-1)?.username).toBe('reviewer')
-
-  await page.getByRole('button', { name: 'Руководитель' }).click()
-  await expect.poll(() => logins.at(-1)?.username).toBe('admin')
+  const text = (await page.locator('body').innerText()).toLowerCase()
+  for (const leak of ['/users', '/auth/login', 'post ', 'docs/', 'avito2026', 'student/', 'reviewer-2']) {
+    expect(text, `экран входа не должен показывать «${leak}»`).not.toContain(leak)
+  }
 })
 
-test('the compile-rubric screen is only offered to the admin-mapped role', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('avito-reviewer:role', 'curator'))
-  await page.goto('/rubrics')
-  await expect(page.getByRole('button', { name: 'Собрать из условия' })).toHaveCount(0)
+test('a wrong password is refused in plain words, without the backend detail', async ({ page }) => {
+  await page.goto('/login')
+  await signInThroughForm(page, 'reviewer', 'не-тот-пароль')
 
-  await page.getByRole('button', { name: 'Руководитель' }).click()
-  await expect(page.getByRole('button', { name: 'Собрать из условия' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveText('Неверный логин или пароль')
+  await expect(page).toHaveURL(/\/login$/)
 })
 
-test('compiling a rubric round-trips to the real backend', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('avito-reviewer:role', 'head'))
+test('signing in lands the reviewer on their own screen and survives a reload', async ({ page }) => {
+  await page.goto('/login')
+  await signInThroughForm(page, 'reviewer')
+
+  await expect(page).toHaveURL(/\/queue$/)
+  await expect(page.getByText('reviewer · ревьюер')).toBeVisible()
+
+  await page.reload()
+  await expect(page).toHaveURL(/\/queue$/)
+  await expect(page.getByText('reviewer · ревьюер')).toBeVisible()
+})
+
+test('signing out clears the token and returns to the login screen', async ({ page, request }) => {
+  await restoreSession(page, request, 'reviewer')
+  await page.goto('/queue')
+  await expect(page.getByText('reviewer · ревьюер')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Выйти' }).click()
+
+  await expect(page).toHaveURL(/\/login$/)
+  expect(await readToken(page)).toBeNull()
+})
+
+test('a stale token in storage does not open the app', async ({ page }) => {
+  await putToken(page, 'eyJhbGciOiJIUzI1NiJ9.протухший.подпись')
+  await page.goto('/queue')
+
+  await expect(page).toHaveURL(/\/login$/)
+  expect(await readToken(page)).toBeNull()
+})
+
+test('a 401 in the middle of a session drops it instead of blaming the backend', async ({ page, request }) => {
+  await restoreSession(page, request, 'reviewer')
+  await page.goto('/queue')
+  await expect(page.getByText('reviewer · ревьюер')).toBeVisible()
+
+  await page.route('**/api/streams', (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({ detail: 'токен недействителен' }),
+    }),
+  )
+  await page.getByRole('link', { name: 'Потоки' }).click()
+
+  await expect(page).toHaveURL(/\/login$/)
+  expect(await readToken(page)).toBeNull()
+})
+
+test('the token is the only thing the app needs to come back', async ({ page, request }) => {
+  const token = await tokenFor(request, 'methodist')
+  await putToken(page, token)
+  await page.goto('/')
+
+  await expect(page).toHaveURL(/\/assignments$/)
+  await expect(page.getByText('methodist · методист')).toBeVisible()
+})
+
+test('compiling a rubric round-trips to the real backend', async ({ page, request }) => {
+  await restoreSession(page, request, 'methodist')
   await page.goto('/rubrics')
   await page.getByRole('button', { name: 'Собрать из условия' }).click()
 
@@ -65,8 +108,36 @@ test('compiling a rubric round-trips to the real backend', async ({ page }) => {
   // открытые вопросы вместо придуманных цифр. Это ровно то же самое "честно
   // не смог", что видит методист с настоящим ключом на кривом условии:
   // компилятор не выдумывает, а поднимает вопрос наверх (§6.0 архитектуры).
-  // Черновик с реально подтверждёнными критериями проверен вручную на живом
-  // ключе — см. docs/handover-frontend.md.
   await expect(page.getByText(/открыт(ый|ых) вопрос/i)).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('цитатами подтверждено 0%')).toBeVisible()
+})
+
+test('the demo button signs in as a reviewer without touching the password field', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Демо-вход ревьюером' }).click()
+
+  await expect(page).toHaveURL(/\/queue$/)
+  await expect(page.getByText('reviewer · ревьюер')).toBeVisible()
+  // Пароля на экране не набирали и в сборке его нет.
+  await expect(page.locator('body')).not.toContainText('avito2026')
+})
+
+test('the admin reaches every screen the roles below them reach', async ({ page, request }) => {
+  await restoreSession(page, request, 'admin')
+  await page.goto('/')
+
+  // Ссылки младших ролей есть в сайдбаре, а не только по прямому адресу.
+  await expect(page.getByRole('link', { name: 'Мои проверки' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Мои работы' })).toBeVisible()
+
+  await page.getByRole('link', { name: 'Мои проверки' }).click()
+  await expect(page).toHaveURL(/\/queue$/)
+  await expect(page.getByRole('heading', { name: 'Мои проверки' })).toBeVisible()
+
+  // Своя очередь по умолчанию, весь поток — переключателем.
+  await page.getByRole('button', { name: 'Весь поток' }).click()
+  await expect(page.getByRole('heading', { name: 'Все проверки' })).toBeVisible()
+
+  await page.goto('/my-work')
+  await expect(page).toHaveURL(/\/my-work$/)
 })

@@ -20,7 +20,7 @@ export function CoursePage() {
   const [params, setParams] = useSearchParams()
 
   const { data: course } = useQuery({ queryKey: ['course', courseId], queryFn: () => api.course(courseId) })
-  const { data: streams = [] } = useQuery({ queryKey: ['streams', courseId], queryFn: () => api.streams(courseId) })
+  const { data: streams = [] } = useQuery({ queryKey: ['mock-streams', courseId], queryFn: () => api.streams(courseId) })
 
   const streamId = params.get('stream') ?? streams[0]?.id ?? ''
   const tab = params.get('tab') ?? 'grades'
@@ -59,7 +59,9 @@ export function CoursePage() {
     enabled: Boolean(streamId),
   })
 
-  if (!course) return null
+  if (!course) {
+    return <div className="px-6 py-7 text-[13px] text-muted">Курс не найден.</div>
+  }
 
   /* Поток берётся из адресной строки: на неизвестный id нужен внятный экран,
      а не пустая вкладка. */

@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Users } from 'lucide-react'
+import { BarChart3, CalendarClock, ClipboardCheck, GraduationCap, Play, Ruler, Settings, Users } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { useSession } from '@/app/session'
@@ -19,7 +19,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export function Sidebar() {
   const { role } = useSession()
   const location = useLocation()
-  const { data: courses = [] } = useQuery({ queryKey: ['courses'], queryFn: api.courses })
+  const { data: courses = [] } = useQuery({ queryKey: ['mock-courses'], queryFn: api.courses })
   const { data: streams = [] } = useQuery({
     queryKey: ['all-streams'],
     queryFn: async () => (await Promise.all((await api.courses()).map((c) => api.streams(c.id)))).flat(),
@@ -28,23 +28,24 @@ export function Sidebar() {
   return (
     <nav className="flex w-[228px] shrink-0 flex-col border-r border-line bg-surface px-2.5 pb-4">
       <Section>Работа</Section>
-      {role === 'student' ? (
-        <NavLink to="/my-work" className={linkClass}>
-          <GraduationCap size={15} strokeWidth={1.7} className="text-faint" />
-          Мои работы
-        </NavLink>
-      ) : null}
-      {role === 'student' ? null : (
-      <NavLink to="/check" className={linkClass}>
-        <Play size={15} strokeWidth={1.7} className="text-faint" />
-        Проверить работу
+      {/* Лестница ролей: старшая видит всё, что видит младшая. Руководитель
+          без ссылки на свою очередь не находил там работу, которую сам же
+          и запустил с «Проверить работу». */}
+      <NavLink to="/my-work" className={linkClass}>
+        <GraduationCap size={15} strokeWidth={1.7} className="text-faint" />
+        Мои работы
       </NavLink>
-      )}
-      {atLeast(role, 'reviewer') && role !== 'admin' ? (
-        <NavLink to="/queue" className={linkClass}>
-          <ClipboardCheck size={15} strokeWidth={1.7} className="text-faint" />
-          Мои проверки
-        </NavLink>
+      {atLeast(role, 'reviewer') ? (
+        <>
+          <NavLink to="/check" className={linkClass}>
+            <Play size={15} strokeWidth={1.7} className="text-faint" />
+            Проверить работу
+          </NavLink>
+          <NavLink to="/queue" className={linkClass}>
+            <ClipboardCheck size={15} strokeWidth={1.7} className="text-faint" />
+            Мои проверки
+          </NavLink>
+        </>
       ) : null}
 
       {/* Каталог курсов и рубрики — рабочие поверхности проверяющих.
@@ -99,6 +100,12 @@ export function Sidebar() {
           <Ruler size={15} strokeWidth={1.7} className="text-faint" />
           Рубрики
         </NavLink>
+        {role === 'admin' ? (
+          <NavLink to="/admin" className={linkClass}>
+            <Settings size={15} strokeWidth={1.7} className="text-faint" />
+            Управление
+          </NavLink>
+        ) : null}
         {role === 'admin' ? (
           <NavLink to="/curators" className={linkClass}>
             <Users size={15} strokeWidth={1.7} className="text-faint" />

@@ -1,4 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from 'react'
 import { cn } from '@/lib/cn'
 
 export const inputClass =
@@ -16,12 +25,21 @@ export function Field({
   children: ReactNode
   className?: string
 }) {
+  const id = useId()
+
+  /* Подпись связана с полем по `htmlFor`, а не тем, что оборачивает его: у
+     `<select>` внутри `<label>` доступным именем становится подпись, склеенная
+     с текстом всех опций. */
   return (
-    <label className={cn('block', className)}>
-      <span className="text-[12.5px] font-medium text-ink">{label}</span>
+    <div className={cn('block', className)}>
+      <label htmlFor={id} className="text-[12.5px] font-medium text-ink">
+        {label}
+      </label>
       {hint ? <span className="mt-0.5 block text-[12px] leading-[1.45] text-faint">{hint}</span> : null}
-      <span className="mt-1.5 block">{children}</span>
-    </label>
+      <span className="mt-1.5 block">
+        {isValidElement<{ id?: string }>(children) ? cloneElement(children, { id }) : children}
+      </span>
+    </div>
   )
 }
 
@@ -31,15 +49,18 @@ export function TextField({
   placeholder,
   mono,
   className,
+  id,
 }: {
   value: string
   onChange: (value: string) => void
   placeholder?: string
   mono?: boolean
   className?: string
+  id?: string
 }) {
   return (
     <input
+      id={id}
       value={value}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
@@ -50,11 +71,10 @@ export function TextField({
 
 /** Число, которое печатают руками.
  *
- *  Разобранное значение нельзя писать обратно в поле на каждое нажатие: «0.» и
- *  «-» — законные промежуточные состояния ввода, а `Number('0.')` даёт 0 и
- *  стирает точку из-под курсора. Поэтому пока поле в фокусе, текст принадлежит
- *  пользователю, наружу уходит только то, что разобралось, а на выходе из поля
- *  текст приводится к значению.
+ *  Пока поле в фокусе, текст принадлежит пользователю: «0.» и «-» — законные
+ *  промежуточные состояния, а `Number('0.')` даёт 0 и стирает точку из-под
+ *  курсора. Наружу уходит только разобранное, на выходе текст приводится к
+ *  значению.
  */
 export function NumberField({
   value,
@@ -62,12 +82,14 @@ export function NumberField({
   nullable = false,
   placeholder,
   className,
+  id,
 }: {
   value: number | null
   onChange: (value: number | null) => void
   nullable?: boolean
   placeholder?: string
   className?: string
+  id?: string
 }) {
   const show = (input: number | null) => (input === null ? '' : String(input))
   const [text, setText] = useState(() => show(value))
@@ -79,6 +101,7 @@ export function NumberField({
 
   return (
     <input
+      id={id}
       inputMode="decimal"
       value={text}
       placeholder={placeholder}
@@ -139,14 +162,17 @@ export function SelectField<T extends string>({
   onChange,
   options,
   className,
+  id,
 }: {
   value: T
   onChange: (value: T) => void
   options: { value: T; label: string }[]
   className?: string
+  id?: string
 }) {
   return (
     <select
+      id={id}
       value={value}
       onChange={(event) => onChange(event.target.value as T)}
       className={cn(inputClass, 'appearance-none', className)}

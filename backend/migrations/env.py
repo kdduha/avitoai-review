@@ -13,10 +13,12 @@ from avito_reviewer.db.models import Base
 # access to the values within the .ini file in use.
 config = context.config
 
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Логи alembic по `alembic.ini`. `disable_existing_loggers=False` обязателен:
+# миграции прогоняются на старте приложения (`app/main.py`), к этому моменту
+# логгеры всех модулей уже созданы импортом роутеров, и умолчание `fileConfig`
+# гасило их все разом — приложение после старта молчало в журнал целиком.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # `DB_DSN` (env or `.env`), same source the app itself reads at startup —
 # `alembic.ini`'s `sqlalchemy.url` is left as a placeholder on purpose so a

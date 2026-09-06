@@ -9,6 +9,7 @@ import { RubricEditor } from './RubricEditor'
  *  второй формы для того же здесь нет. Этот путь для случая, когда условия под
  *  рукой нет или методист собирает рубрику сам. */
 export function RubricNewPage() {
+
   return (
     <div>
       <div className="mx-auto max-w-[920px] px-6 pt-6">

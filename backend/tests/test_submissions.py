@@ -75,9 +75,8 @@ def make_client(tmp_path):
         app.state.ingest = StubIngest()
         app.state.ai = AIService(AIConfig(), gateway=gateway, resolver=app.state.ingest)
         as_role(client, role)
-        # Провайдер прицеплен к клиенту, а не возвращён вторым элементом:
-        # так у полусотни существующих вызовов не меняется форма, а тесты про
-        # то, что именно уехало в модель, до промпта всё-таки дотягиваются.
+        # Провайдер прицеплен к клиенту, а не возвращён вторым элементом: форма
+        # существующих вызовов не меняется, а до промпта дотянуться можно.
         client.provider = provider
         return client
 
@@ -190,9 +189,8 @@ def test_detection_verdict_can_be_confirmed(make_client):
     ).json()
     assert next(s for s in updated["spans"] if s["id"] == span_id)["reviewer_verdict"] == "confirmed"
 
-    # Не только ответ ручки — переживает ли вердикт перезагрузку из БД: PATCH,
-    # мутирующий JSON-колонку тем же объектом, что в неё уже загружен, однажды
-    # молча не сохранялся именно на этом пути (see submissions.py, flag_modified).
+    # Не ответ ручки, а переживает ли вердикт перезагрузку из БД: PATCH, мутирующий
+    # JSON-колонку по месту, молча не сохранялся (submissions.py, flag_modified).
     reloaded = client.get(f"/submissions/{submission_id}/ai-detection").json()
     assert next(s for s in reloaded["spans"] if s["id"] == span_id)["reviewer_verdict"] == "confirmed"
 

@@ -9,7 +9,6 @@ import {
   type StreamStats,
 } from '@/lib/backend'
 import { useSession } from '@/app/session'
-import { atLeast } from '@/lib/types'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 
@@ -322,10 +321,7 @@ function StreamCard({ stream }: { stream: StreamOut }) {
  *  Ревьюер это читает — прятать от человека результат его же работы незачем;
  *  назначает ревьюеров и раскладывает работы только руководитель. */
 export function StreamsPage() {
-  const { role } = useSession()
   const streams = useQuery({ queryKey: ['streams'], queryFn: () => backend.streams() })
-
-  if (!atLeast(role, 'reviewer')) return null
 
   return (
     <div className="mx-auto max-w-[900px] px-6 py-7">

@@ -21,9 +21,8 @@ from .schema import DetectionReport
 from .signals import forensics, judge, perplexity, stylometry
 from .signals.perplexity import LogprobScorer
 
-# Как студенты обычно оформляют декларацию об использовании ИИ. Условие
-# product_fraud требует её прямо: «Если вы использовали ИИ — укажите это в
-# работе и опишите, как именно».
+# Как студенты оформляют декларацию об использовании ИИ; условие product_fraud
+# требует её прямо.
 DECLARATION_PATTERNS = [
     re.compile(r"использов\w*\s+(ии|ai|нейросет\w*|gpt|chatgpt|claude|llm|яндекс gpt|gigachat)", re.I),
     re.compile(r"(ии|ai)[-\s]инструмент", re.I),
@@ -52,15 +51,15 @@ class DetectionService:
         texts: list[ArtifactText],
         identities: Sequence[Identity] = (),
     ) -> DetectionReport:
-        # `tooling` и `noise` исключены и отсюда тоже: сгенерированный
-        # Dockerfile ничего не говорит о самостоятельности студента.
+        # `tooling` и `noise` исключены: сгенерированный Dockerfile ничего не
+        # говорит о самостоятельности студента.
         studied = solution_texts(texts)
 
         if self.gateway is None:
             return self._run(bundle, studied, spend=None)
 
-        # Подписка открывается до первого сигнала: перплексия со своим scorer
-        # тоже ходит к модели, и её токены — часть стоимости этого прогона.
+        # До первого сигнала: перплексия тоже ходит к модели, и её токены —
+        # часть стоимости прогона.
         with self.gateway.audit.collect() as spend:
             return self._run(bundle, studied, spend=spend, identities=identities)
 

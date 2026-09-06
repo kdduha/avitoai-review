@@ -84,13 +84,11 @@ class PrivacyGateway:
         """`identities` — те, чья личность известна до разбора.
 
         Скрабер вычищает их точно, а не по совпадению шаблона: логин студента
-        стоит в каждой строке импорта, и угадывать его было бы странно, когда
-        он лежит в бандле.
+        лежит в бандле и стоит в каждой строке импорта.
 
-        `route` — требование вызывающего, а не пожелание: `LOCAL_ONLY` наружу
-        не уйдёт ни при каких настройках. Обратного действия у него нет —
-        задачу из `FORCED_LOCAL` наружу им не вытолкнуть, и понижение по
-        остаточному риску он не отменяет. Маршрут можно только ужесточить.
+        `route` только ужесточает маршрут: `LOCAL_ONLY` наружу не уйдёт ни при
+        каких настройках, но вытолкнуть наружу задачу из `FORCED_LOCAL` или
+        отменить понижение по остаточному риску им нельзя.
         """
         request_id = uuid.uuid4().hex[:12]
         resolved = resolve_policy(task, data_class)
@@ -110,8 +108,7 @@ class PrivacyGateway:
             mapping.update(result.mapping)
             scrubbed.append({**message, "content": result.text})
 
-        # Валидатор остаточного риска: если после скраба что-то осталось,
-        # маршрут понижается принудительно. Fail-safe, а не fail-open.
+        # Fail-safe: остаток ПДн после скраба понижает маршрут принудительно.
         if route is RoutePolicy.EXTERNAL_AFTER_SCRUB:
             leftovers = residual_risk("\n".join(m["content"] for m in scrubbed), identities)
             if leftovers:
@@ -121,10 +118,8 @@ class PrivacyGateway:
         if self.force_local:
             route = RoutePolicy.LOCAL_ONLY
 
-        # Внешнего провайдера нет, локальный есть: считаем локально и говорим об
-        # этом. Уронить задачу было бы строже, но не безопаснее — данные и так
-        # не покидают периметр, — а `AI_LLM__PROVIDER=local` иначе не работал бы
-        # вовсе: локальный контур целиком должен включаться одной переменной.
+        # Локальный контур включается одной переменной: без внешнего провайдера
+        # считаем локально, а не роняем задачу — данные и так внутри периметра.
         if route is RoutePolicy.EXTERNAL_AFTER_SCRUB and self.external is None and self.local:
             route = RoutePolicy.LOCAL_ONLY
             downgraded = True

@@ -1,15 +1,16 @@
 import { expect, test, type Page } from '@playwright/test'
+import { restoreSession } from './session'
 
 /** То, что раньше проверялось руками на каждом демо: обход маршрутов без
  *  ошибок в консоли и без горизонтального скролла (см. `docs/handover-frontend.md`).
- *  Роль переключается в шапке и живёт в `localStorage` — читаем/пишем его
- *  напрямую, не гоняя реальный клик по каждому маршруту дважды.
+ *  Сессия восстанавливается из токена в хранилище — форму входа гоняют
+ *  `auth.spec.ts` и `login.spec.ts`, здесь она была бы шумом на каждом маршруте.
  */
 
-const ROUTES = ['/queue', '/check', '/courses/go', '/curators', '/rubrics', '/review/demo']
-
-async function setRole(page: Page, role: 'curator' | 'head') {
-  await page.addInitScript((value) => localStorage.setItem('avito-reviewer:role', value), role)
+const ROUTES: Record<string, string[]> = {
+  student: ['/my-work'],
+  reviewer: ['/queue', '/check', '/courses/go', '/rubrics', '/streams', '/assignments', '/review/demo'],
+  admin: ['/queue', '/check', '/courses/go', '/curators', '/rubrics', '/streams', '/assignments', '/review/demo'],
 }
 
 async function collectConsoleErrors(page: Page): Promise<string[]> {
@@ -21,16 +22,17 @@ async function collectConsoleErrors(page: Page): Promise<string[]> {
   return errors
 }
 
-for (const role of ['curator', 'head'] as const) {
-  for (const route of ROUTES) {
-    test(`${route} loads without console errors as ${role}`, async ({ page }) => {
-      await setRole(page, role)
+for (const [username, routes] of Object.entries(ROUTES)) {
+  for (const route of routes) {
+    test(`${route} loads without console errors as ${username}`, async ({ page, request }) => {
+      await restoreSession(page, request, username)
       const errors = await collectConsoleErrors(page)
 
       await page.goto(route)
       await expect(page.locator('body')).toBeVisible()
-      // Вход в сеяный аккаунт — единственный запрос перед рендером экрана.
-      await expect(page.getByText('Выполняется вход…')).toHaveCount(0)
+      // Восстановление сессии — один запрос `/me` перед первым экраном.
+      await expect(page.getByText('Загрузка…')).toHaveCount(0)
+      await expect(page).not.toHaveURL(/\/login$/)
 
       const bodyErrors = errors.filter(
         (text) =>
@@ -40,8 +42,8 @@ for (const role of ['curator', 'head'] as const) {
       expect(bodyErrors, `console errors on ${route}: ${bodyErrors.join('; ')}`).toEqual([])
     })
 
-    test(`${route} has no horizontal scroll as ${role}`, async ({ page }) => {
-      await setRole(page, role)
+    test(`${route} has no horizontal scroll as ${username}`, async ({ page, request }) => {
+      await restoreSession(page, request, username)
       await page.goto(route)
       await page.waitForLoadState('networkidle')
 

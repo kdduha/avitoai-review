@@ -20,3 +20,7 @@ class InitResponse(BaseModel):
     читается как имя модели, хотя это способ подключения."""
     rubrics: list[str]
     reviewers: list[str]
+    demo_login: bool = False
+    """Доступен ли вход одной кнопкой (`POST /auth/demo`). Экран входа рисует
+    её по этому флагу: спрашивать сервер иначе неоткуда, `/init` открыт без
+    токена."""

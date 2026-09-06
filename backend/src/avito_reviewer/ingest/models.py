@@ -81,14 +81,9 @@ class Artifact(BaseModel):
     diff: str | None = None           # unified-diff hunks for THIS artifact only
     excerpt: str | None = None        # full head text, inlined only within the excerpt budget
 
-    # Opaque handle to the full head text of this artifact -- NOT a URL, not meant to
-    # be parsed by whoever reads the bundle. The review layer runs the LLM as an
-    # agent with tools (architecture s6.3); when the model asks for a body it does
-    # not hold, its `get_file(path)` tool passes this handle to a resolver that knows
-    # the provider scheme and returns the bytes. GitHub emits
-    # "github:<owner>/<repo>@<head_sha>:<path>". None when there is nothing to fetch
-    # (a removed file). The resolver / tool is not built yet -- this is the contract
-    # it will implement.
+    # Opaque handle, not a URL: only the provider's own resolver parses it. GitHub
+    # emits "github:<owner>/<repo>@<head_sha>:<path>"; None when there is nothing
+    # to fetch (a removed file).
     content_ref: str | None = None
 
 
