@@ -143,7 +143,7 @@ function SpanCard({
 
 export function DetectionPanel({ report, error, onSpan, onVerdict, activeSpanId }: Props) {
   return (
-    <section className="flex min-h-0 flex-col bg-surface">
+    <section className="flex min-h-0 w-full flex-1 flex-col bg-surface">
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-line px-5">
         <h2 className="text-[13px] font-semibold text-ink">Признаки ГенИИ</h2>
         <span className="text-[12px] text-faint">рекомендательно</span>
