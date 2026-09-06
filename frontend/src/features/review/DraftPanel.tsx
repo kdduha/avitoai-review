@@ -33,6 +33,41 @@ function outcomeIcon(outcome: CheckOutcome) {
 
 /** Format Gate — детерминированная часть проверки. Свёрнут, пока всё сошлось:
  *  ревьюеру важны не пройденные проверки, а те, что не прошли. */
+/** Список «требуют внимания» — свёрнутой строкой, как формальные проверки.
+
+ *  Развёрнутым он занимал по строке на критерий: шесть пунктов вида «модель не
+ *  привела ни одной проверяемой цитаты» закрывали разбор целиком. Само
+ *  предупреждение важно — важно и то, что оно не должно вытеснять работу. */
+function Attention({ reasons }: { reasons: string[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="border-b border-line bg-warn-wash px-5 py-2.5">
+      <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 text-left">
+        <ChevronDown
+          size={13}
+          strokeWidth={1.8}
+          className={cn('shrink-0 text-warn transition-transform', open && 'rotate-180')}
+        />
+        <TriangleAlert size={13} strokeWidth={1.8} className="shrink-0 text-warn" />
+        <span className="text-[12.5px] text-warn-ink">
+          Требуют внимания: {reasons.length}
+        </span>
+        <span className="ml-auto text-[12px] text-warn-ink/70">{open ? 'свернуть' : 'посмотреть'}</span>
+      </button>
+
+      {open ? (
+        <ul className="mt-2 space-y-0.5 pl-5 text-[12.5px] leading-snug text-warn-ink">
+          {reasons.map((reason) => (
+            <li key={reason}>{reason}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+
 function Gate({ workspace }: { workspace: Workspace }) {
   const [open, setOpen] = useState(false)
   const outcomes = workspace.gate?.outcomes ?? []
@@ -117,9 +152,12 @@ export function DraftPanel({
 
       <Gate workspace={workspace} />
 
-      {/* Отзыв словами — до разбора по критериям: ревьюер утверждает не только
-          баллы, но и текст, который прочитает студент. Прятать его под
-          критериями значило бы дать утвердить непрочитанным. */}
+      {/* Всё, что не критерии, живёт внутри прокрутки. Над списком остаётся
+          только заголовок и одна строка формальных проверок: три блока подряд
+          — отзыв, список «требуют внимания» и объяснение итога — вместе
+          съедали экран, и разбор, ради которого его открывают, оказывался
+          за краем. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {workspace.summary ? (
         <div className="border-b border-line px-5 py-4">
           <h3 className="text-[12.5px] font-semibold text-ink">Отзыв о работе</h3>
@@ -149,20 +187,8 @@ export function DraftPanel({
         </div>
       ) : null}
 
-      {attentionReasons.length ? (
-        <div className="border-b border-line bg-warn-wash px-5 py-2.5">
-          <div className="flex items-start gap-2">
-            <TriangleAlert size={13} strokeWidth={1.8} className="mt-0.5 shrink-0 text-warn" />
-            <ul className="space-y-0.5 text-[12.5px] leading-snug text-warn-ink">
-              {attentionReasons.map((reason) => (
-                <li key={reason}>{reason}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
+      {attentionReasons.length ? <Attention reasons={attentionReasons} /> : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
         {workspace.verdicts.map((verdict) => (
           <CriterionRow
             key={verdict.criterionId}
