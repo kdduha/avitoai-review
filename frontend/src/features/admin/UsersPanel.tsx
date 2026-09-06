@@ -179,8 +179,7 @@ export function UsersPanel() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[13px] text-muted">Логин, имя, роль и пароль.</p>
+      <div className="flex items-center justify-end gap-3">
         {!creating ? (
           <Button size="sm" variant="primary" icon={<Plus size={14} strokeWidth={2} />} onClick={() => setCreating(true)}>
             Новый аккаунт

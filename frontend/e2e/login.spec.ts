@@ -56,4 +56,11 @@ test('an account created through the API signs in like any other', async ({ page
   await expect(page).toHaveURL(/\/queue$/)
   await expect(page.getByText('Второй ревьюер')).toBeVisible()
   await expect(page.getByText(`${username} · ревьюер`)).toBeVisible()
+
+  // База стенда переживает прогон: аккаунт за собой убираем, иначе список
+  // аккаунтов в `/admin` обрастает мусором от каждого запуска.
+  const { id } = (await (await request.get('/api/users', {
+    headers: { authorization: `Bearer ${token}` },
+  })).json() as { id: string; username: string }[]).find((row) => row.username === username)!
+  await request.delete(`/api/users/${id}`, { headers: { authorization: `Bearer ${token}` } })
 })

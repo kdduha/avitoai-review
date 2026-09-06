@@ -6,6 +6,7 @@ import { cn } from '@/lib/cn'
 import { formatDuration, percent, plural } from '@/lib/format'
 import { useSession } from '@/app/session'
 import { Avatar } from '@/components/ui/Avatar'
+import { MockNotice } from '@/components/ui/MockNotice'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
@@ -34,12 +35,17 @@ export function CuratorsPage() {
   return (
     <div className="mx-auto max-w-[900px] px-6 py-6">
       <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-ink">Ревьюеры</h1>
-      <p className="mt-1 max-w-[68ch] text-[13.5px] text-muted">
-        Кто на каких потоках проверяет работы. Ёмкость считается в минутах разбора, а не в штуках:
-        работа на Go и ноутбук по ML — это не «две работы».
+      <p className="mt-1 text-[13.5px] text-muted">
+        Кто на каких потоках проверяет работы. Ёмкость — в минутах разбора, не в штуках.
       </p>
 
-      <div className="mt-5 space-y-2">
+      <div className="mt-5">
+        <MockNotice>
+          Состав и нагрузка нарисованы. Настоящее назначение ревьюеров на поток — на «Потоках».
+        </MockNotice>
+      </div>
+
+      <div className="mt-2 space-y-2">
         {curators.map((curator) => {
           const load = curator.committedMinutes / curator.capacityMinutes
           const streams = allStreams.filter((item) => curator.streamIds.includes(item.id))

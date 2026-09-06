@@ -154,8 +154,14 @@ AUTH_SEED_PASSWORD=avito2026
 | `DELETE /submissions/{id}` | admin | удалить сдачу (каскад — ревизии, чат) |
 | `GET /courses`, `GET /streams`, `GET /assignments` | reviewer | учебный каталог |
 | `POST /courses`, `POST /streams` | methodist | завести курс, поток |
+| `PATCH /courses/{id}` | methodist | переименовать; `key` неизменяем — им курс назван в карточках ревьюеров |
+| `DELETE /courses/{id}` | admin | убрать курс (`409` — есть потоки) |
+| `PATCH /streams/{id}` | methodist | ключ и название (`409` — ключ у курса занят) |
+| `DELETE /streams/{id}` | admin | убрать поток (`409` — есть задания или студенты; назначения ревьюеров уходят с ним) |
 | `POST /assignments`, `PATCH`, `DELETE` | methodist | выдать рубрику потоку со сроком; правка срока; снять (`409` — по заданию есть сдачи) |
 | `POST /streams/{id}/students` | methodist | зачислить студентов (только роль `student`) |
+| `GET /streams/{id}/students` | reviewer | состав потока |
+| `DELETE /streams/{id}/students/{username}` | methodist | отчислить; сданные работы остаются |
 | `GET /me/assignments` | любая | задания моих потоков |
 | `POST /me/submissions` | любая | сдать работу ссылкой; ревьюер не назначается |
 | `GET /me/submissions`, `GET /me/submissions/{id}` | любая | свои сдачи; балл и отзыв — только у утверждённых |
