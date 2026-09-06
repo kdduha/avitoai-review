@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres:15            # Официальный образ PostgreSQL
+    container_name: my-postgres   # Имя контейнера
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}          # Имя пользователя БД (берем из .env)
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}  # Пароль (берем из .env)
+      POSTGRES_DB: ${POSTGRES_DB}              # База данных, создаваемая при запуске (берем из .env)
+    volumes:
+      - pgdata:/var/lib/postgresql/data        # Хранилище данных
+    ports:
+      - "${POSTGRES_PORT}:5432"                # Проброс порта: хост:контейнер (хост берем из .env)
+
+volumes:
+  pgdata:                         # Объявление Named Volume
+
