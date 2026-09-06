@@ -79,7 +79,7 @@ export function WorkPanel({ files, activePath, onSelect, highlight, link, prLabe
   }
 
   return (
-    <section className="flex min-h-0 flex-col border-b border-line bg-surface lg:border-b-0 lg:border-r">
+    <section className="flex min-h-0 w-full flex-1 flex-col border-b border-line bg-surface lg:border-b-0">
       <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
         <h2 className="text-[13px] font-semibold text-ink">Работа</h2>
         <a

@@ -17,6 +17,12 @@ import { WorkPanel, type Highlight } from './WorkPanel'
 
 type Panel = 'work' | 'draft' | 'detection'
 
+/** Вкладки правого окна: черновик и детектор делят одно место. */
+const RIGHT_PANELS = [
+  { id: 'draft', label: 'Черновик оценки' },
+  { id: 'detection', label: 'Признаки ГенИИ' },
+]
+
 const PANELS = [
   { id: 'work', label: 'Работа' },
   { id: 'draft', label: 'Черновик' },
@@ -201,8 +207,12 @@ export function ReviewPage() {
         <Tabs items={PANELS} value={panel} onChange={(next) => setPanel(next as Panel)} />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)_minmax(0,0.8fr)]">
-        <div className={cn(panel === 'work' ? 'contents' : 'hidden', 'lg:contents')}>
+      {/* Две колонки, а не три. Панель детектора занимала треть ширины и почти
+          всегда была пуста — «детектор не запускался», — а разбор из-за неё
+          читался в две трети строки. Теперь справа одно окно, и ревьюер сам
+          выбирает, что в нём: черновик или признаки ГенИИ. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,2fr)]">
+        <div className={cn(panel === 'work' ? 'flex' : 'hidden', 'min-h-0 lg:flex')}>
         <WorkPanel
           files={workspace.files}
           activePath={activePath ?? workspace.files[0]?.path ?? ''}
@@ -212,7 +222,24 @@ export function ReviewPage() {
           prLabel={workspace.prLabel}
         />
         </div>
-        <div className={cn(panel === 'draft' ? 'contents' : 'hidden', 'lg:contents')}>
+
+        <div
+          className={cn(
+            panel === 'work' ? 'hidden' : 'flex',
+            'min-h-0 min-w-0 flex-col border-l border-line lg:flex',
+          )}
+        >
+          {/* Переключатель только на широком экране: на узком те же вкладки
+              уже стоят под шапкой и переключают все три панели сразу. */}
+          <div className="hidden shrink-0 border-b border-line bg-surface px-4 lg:block">
+            <Tabs
+              items={RIGHT_PANELS}
+              value={panel === 'work' ? 'draft' : panel}
+              onChange={(next) => setPanel(next as Panel)}
+            />
+          </div>
+
+        <div className={cn(panel === 'detection' ? 'hidden' : 'flex', 'min-h-0 flex-1 flex-col')}>
         <DraftPanel
           workspace={workspace}
           approved={approved}
@@ -240,7 +267,7 @@ export function ReviewPage() {
           }}
         />
         </div>
-        <div className={cn(panel === 'detection' ? 'contents' : 'hidden', 'lg:contents')}>
+        <div className={cn(panel === 'detection' ? 'flex' : 'hidden', 'min-h-0 flex-1 flex-col')}>
         <DetectionPanel
           report={workspace.detection}
           error={workspace.detectionError}
@@ -255,6 +282,7 @@ export function ReviewPage() {
             }
           }}
         />
+        </div>
         </div>
       </div>
 
