@@ -9,7 +9,7 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
   server: {
-    port: 5173,
+    port: Number(process.env.VITE_UI_PORT ?? 5173),
     proxy: {
       // Playwright (`playwright.config.ts`) поднимает свой изолированный бэкенд
       // на отдельном порту, чтобы не столкнуться с уже поднятым docker-compose
