@@ -38,7 +38,12 @@ INGEST_GITHUB__TOKEN="$(gh auth token)" docker compose up -d backend worker
 ```bash
 cd backend  && uv run ruff check src tests && uv run mypy src && uv run pytest
 cd frontend && npm run typecheck && npm test && npm run check:runs
+cd frontend && npx playwright test
 ```
+
+Playwright поднимает свой бэкенд на SQLite с провайдером `fake` и свой vite.
+Порты берутся из `VITE_UI_PORT`/`VITE_BACKEND_PORT` — задайте их, если гоняете
+два прогона сразу.
 
 ---
 

@@ -34,9 +34,9 @@ INGEST_GITHUB__TOKEN="$(gh auth token)" docker compose up -d backend worker
 
 `INGEST_GITHUB__TOKEN` нужен только для приватных репозиториев.
 
-Все ручки, кроме `/health`, `/init` и `/auth/login`, требуют вход. Фронтенд
-логинится сам; для ручных запросов — сеяные аккаунты `student`, `reviewer`,
-`methodist`, `admin` с паролем `avito2026`. Под каждую карточку из
+Все ручки, кроме `/health`, `/init` и `/auth/login`, требуют вход. UI
+открывается экраном входа; сеяные аккаунты — `student`, `reviewer`,
+`methodist`, `admin`, пароль `avito2026`. Под каждую карточку из
 `backend/reviewers/` заводится аккаунт с логином по имени файла.
 
 ```bash
@@ -90,7 +90,7 @@ backend/rubrics/    рубрики как данные: добавить кур�
 backend/reviewers/  карточки ревьюеров
 frontend/src/
   app/        оболочка, маршруты, сессия
-  features/   экраны: review, rubrics, teaching, student, courses
+  features/   экраны: auth, review, rubrics, teaching, student, courses, admin
   lib/        клиент бэкенда, адаптеры, типы
   mocks/      каталог программ и записанные прогоны
 ```
