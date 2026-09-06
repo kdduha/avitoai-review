@@ -215,12 +215,18 @@ function SubmissionCard({ submission }: { submission: StudentSubmission }) {
             <span className="text-[13px] text-muted">из {submission.max_score}</span>
             <span
               className={
-                submission.passed
-                  ? 'text-[13px] font-medium text-success-ink'
-                  : 'text-[13px] font-medium text-danger-ink'
+                submission.passed === null
+                  ? 'text-[13px] font-medium text-muted'
+                  : submission.passed
+                    ? 'text-[13px] font-medium text-success-ink'
+                    : 'text-[13px] font-medium text-danger-ink'
               }
             >
-              {submission.passed ? 'зачёт' : 'не зачтено'}
+              {submission.passed === null
+                ? 'оценено'
+                : submission.passed
+                  ? 'зачёт'
+                  : 'не зачтено'}
             </span>
           </div>
           {submission.pass_explanation ? (

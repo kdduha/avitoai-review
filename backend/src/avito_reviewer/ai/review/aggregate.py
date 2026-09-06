@@ -33,7 +33,12 @@ class ScoreBreakdown:
     rounded_score: float = 0.0
     final_score: float = 0.0
     max_score: float = 0.0
-    passed: bool = False
+    passed: bool | None = None
+    """`None` — рубрика не задаёт порога, и решает ревьюер.
+
+    Раньше здесь стояло `True`: работа с обнулённым за просрочку баллом
+    показывалась как «зачёт, 0 из 7». Порог, которого нет в условии, нельзя
+    ни пройти, ни не пройти."""
     pass_explanation: str = ""
     late_explanation: str = ""
     contributions: list[dict[str, Any]] = field(default_factory=list)
@@ -104,19 +109,22 @@ def aggregate(
     return breakdown
 
 
-def _decide(breakdown: ScoreBreakdown, rubric: Rubric) -> tuple[bool, str]:
+def _decide(breakdown: ScoreBreakdown, rubric: Rubric) -> tuple[bool | None, str]:
     """Зачёт — не только про сумму.
 
     В системном дизайне у части критериев есть колонка «мин. балл»: провал по
     обязательному критерию не компенсируется набранным на остальных. Свести
     зачёт к порогу по сумме значило бы потерять это правило.
+
+    Порога нет в условии — вердикта нет: `None`, а не «зачёт». Иначе работа,
+    обнулённая штрафом за просрочку, объявлялась зачтённой с нулём баллов.
     """
     if breakdown.failed_minimums:
         return False, "не набран обязательный минимум: " + "; ".join(breakdown.failed_minimums)
 
     threshold = rubric.scale.pass_threshold
     if threshold is None:
-        return True, "порог зачёта в рубрике не задан"
+        return None, "порога зачёта в рубрике нет — решение за ревьюером"
 
     if breakdown.final_score >= threshold:
         return True, f"{breakdown.final_score:g} из {breakdown.max_score:g} при пороге {threshold:g}"
@@ -140,5 +148,6 @@ def explain(breakdown: ScoreBreakdown) -> str:
         lines.append(f"округление по шагу шкалы: {breakdown.rounded_score:g}")
     if breakdown.final_score != breakdown.rounded_score:
         lines.append(f"после штрафа за срок: {breakdown.final_score:g} ({breakdown.late_explanation})")
-    lines.append(f"итог: {'зачёт' if breakdown.passed else 'незачёт'} — {breakdown.pass_explanation}")
+    outcome = {True: "зачёт", False: "незачёт", None: "решает ревьюер"}[breakdown.passed]
+    lines.append(f"итог: {outcome} — {breakdown.pass_explanation}")
     return "\n".join(lines)

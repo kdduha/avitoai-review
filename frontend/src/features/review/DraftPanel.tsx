@@ -228,6 +228,10 @@ export function DraftPanel({
               </span>
               {workspace.edited ? (
                 <span className="text-[12.5px] font-medium text-muted">пересчитает сервер</span>
+              ) : workspace.passed === null ? (
+                /* Порога нет в рубрике: ни «зачёт», ни «ниже порога» —
+                   объявлять то, чего условие не задаёт, нельзя. */
+                <span className="text-[12.5px] font-medium text-muted">решает ревьюер</span>
               ) : (
                 <span
                   className={cn(
@@ -245,6 +249,15 @@ export function DraftPanel({
               </span>
               <span className="num text-[16px] leading-none text-faint">/ {workspace.maxScore}</span>
             </div>
+            {/* Обнулённый за просрочку балл выглядел как разбор, который ничего
+                не нашёл. Набранное по критериям обязано стоять рядом с нулём:
+                иначе хорошая работа читается как проваленная. */}
+            {!workspace.edited && workspace.score !== workspace.rawScore ? (
+              <p className="mt-1 text-[12px] text-muted">
+                по критериям {workspace.rawScore} из {workspace.maxScore} ·{' '}
+                {workspace.lateExplanation}
+              </p>
+            ) : null}
           </div>
 
           <Button

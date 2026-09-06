@@ -127,7 +127,8 @@ class ReviewDraft(BaseModel):
     raw_score: float = 0.0
     score: float = 0.0
     max_score: float = 0.0
-    passed: bool = False
+    passed: bool | None = None
+    """`None` — порога зачёта в рубрике нет, решает ревьюер."""
     pass_explanation: str = ""
     late_explanation: str = ""
 

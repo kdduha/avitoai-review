@@ -95,7 +95,7 @@ async def _summary(session: AsyncSession, submission: Submission) -> SubmissionS
         reviewer_username=await _username(session, submission.reviewer_id),
         score=draft.get("score", 0.0),
         max_score=draft.get("max_score", 0.0),
-        passed=draft.get("passed", False),
+        passed=draft.get("passed"),
         needs_human_attention=draft.get("needs_human_attention", False),
         submitted_at=submission.submitted_at,
         deadline_at=submission.deadline_at,

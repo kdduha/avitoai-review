@@ -100,6 +100,10 @@ class ChatStep(BaseModel):
     proposed_patch: ProposedPatch | None = None
 
 
+def _outcome(passed: bool | None) -> str:
+    return {True: "зачёт", False: "ниже порога", None: "порога зачёта нет"}[passed]
+
+
 def _render_criterion(rubric: Rubric, criterion_id: str, draft: ReviewDraft) -> str:
     criterion = rubric.criterion(criterion_id)
     if criterion is None:
@@ -176,7 +180,7 @@ def _render_draft(draft: ReviewDraft) -> str:
     rows = [f"[{v.criterion_id}] балл {v.score:g}: {v.verdict}" for v in draft.verdicts]
     return (
         f"Текущий итог: {draft.score:g} из {draft.max_score:g} "
-        f"({'зачёт' if draft.passed else 'ниже порога'}).\n" + "\n".join(rows)
+        f"({_outcome(draft.passed)}).\n" + "\n".join(rows)
     )
 
 

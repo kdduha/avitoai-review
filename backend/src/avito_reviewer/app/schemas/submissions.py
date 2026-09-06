@@ -25,7 +25,8 @@ class SubmissionSummary(BaseModel):
     reviewer_username: str | None
     score: float
     max_score: float
-    passed: bool
+    passed: bool | None = None
+    """`None` — порога зачёта в рубрике нет."""
     needs_human_attention: bool
     submitted_at: datetime | None
     deadline_at: datetime | None

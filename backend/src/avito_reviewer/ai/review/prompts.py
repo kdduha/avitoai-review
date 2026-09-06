@@ -274,7 +274,7 @@ def summary_messages(draft, rubric) -> list[dict[str, str]]:
     body = [
         f"Задание: {rubric.title or rubric.assignment_id}.",
         f"Итог: {draft.score:g} из {draft.max_score:g}"
-        + (", зачёт." if draft.passed else ", ниже порога зачёта."),
+        + {True: ", зачёт.", False: ", ниже порога зачёта.", None: ", порога зачёта нет."}[draft.passed],
         "Вердикты по критериям:",
         "\n".join(rows) or "вердиктов нет",
     ]

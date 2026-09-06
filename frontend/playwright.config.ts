@@ -8,8 +8,13 @@ import { defineConfig, devices } from '@playwright/test'
  *  прогон (`/check`) не тестируется по-настоящему (ключей нет и не нужно),
  *  но авторизация, каталог рубрик и офлайн-обработка проверяются по-настоящему,
  *  не через мок.
+ *
+ *  Порты 5273 и 8010, а не 5173 и 8000: docker-compose держит на дефолтных оба
+ *  контейнера, и `reuseExistingServer` молча подключался к ним. Через
+ *  compose-фронт запросы уходят в бэкенд с настоящим ключом, и тесты,
+ *  завязанные на вырожденный ответ `fake`, падают без внятной причины.
  */
-const UI_PORT = process.env.VITE_UI_PORT ?? '5173'
+const UI_PORT = process.env.VITE_UI_PORT ?? '5273'
 const API_PORT = process.env.VITE_BACKEND_PORT ?? '8010'
 
 export default defineConfig({
