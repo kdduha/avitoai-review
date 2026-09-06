@@ -13,6 +13,10 @@
 критерию с цитатой из кода, формальные проверки условия и рекомендательный
 сигнал о следах ИИ. Ревьюер правит и утверждает; итоговое решение за ним.
 
+<p align="center">
+  <img src="docs/demo.gif" alt="Demo screencast">
+</p>
+
 ## Запуск
 
 ```bash
@@ -60,8 +64,7 @@ Redis нужен только для `POST /submissions/{id}/review/rerun`.
 
 ![Пайплайн Avito AI Reviewer](docs/pipeline.drawio.png)
 
-Исходник — [docs/pipeline.drawio](docs/pipeline.drawio), открывается в
-[app.diagrams.net](https://app.diagrams.net). Диаграмма отражает код как он
+Диаграмма отражает код как он
 есть; целевая форма — в `docs/architecture.md`.
 
 - **backend** и **worker** — один образ (`./backend`), разный entrypoint. Между
