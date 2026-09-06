@@ -17,7 +17,7 @@ from avito_reviewer.ai.content import ArtifactText
 from avito_reviewer.ai.detection import DetectionReport
 from avito_reviewer.ai.review import ReviewDraft
 from avito_reviewer.ai.rubric import RubricExists, RubricRejected, RubricStore
-from avito_reviewer.app.auth import RequireAdmin, RequireReviewer
+from avito_reviewer.app.auth import RequireAdmin, RequireMethodist, RequireReviewer
 from avito_reviewer.app.deps import ingest_submission
 from avito_reviewer.app.schemas.review import (
     ArtifactTextOut,
@@ -99,7 +99,7 @@ async def get_rubric(assignment_id: str, request: Request, user: RequireReviewer
 
 @router.post("/rubrics/compile", summary="Turn an assignment condition into a rubric draft")
 async def compile_rubric(
-    body: CompileRubricRequest, request: Request, user: RequireAdmin
+    body: CompileRubricRequest, request: Request, user: RequireMethodist
 ) -> CompileRubricResponse:
     """Разобрать условие задания и предложить рубрику.
 
@@ -136,7 +136,7 @@ async def compile_rubric(
 
 @router.post("/rubrics", summary="Confirm a rubric and put it into the catalogue")
 async def confirm_rubric(
-    body: ConfirmRubricRequest, request: Request, user: RequireAdmin
+    body: ConfirmRubricRequest, request: Request, user: RequireMethodist
 ) -> ConfirmRubricResponse:
     """Принять рубрику: с этого момента по ней проверяются работы потока.
 
@@ -172,7 +172,7 @@ async def confirm_rubric(
 
 
 @router.delete("/rubrics/{assignment_id}", summary="Remove a rubric from the catalogue", status_code=204)
-async def delete_rubric(assignment_id: str, request: Request, user: RequireAdmin) -> None:
+async def delete_rubric(assignment_id: str, request: Request, user: RequireMethodist) -> None:
     """Submissions already scored against this rubric keep meaning what they
     meant — `Submission.rubric_snapshot` froze it at scoring time — so this
     only takes it out of future `POST /review` calls.

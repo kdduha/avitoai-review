@@ -1,0 +1,159 @@
+{
+  "assignment_id": "go-task3",
+  "title": "Архитектура, зависимости и интерфейсы",
+  "course": "Разработка микросервисов на Go",
+  "stage": "ДЗ 3",
+  "source_note": "Скомпилирована из условия задания (GO/task3.md, репозиторий организаторов) и достроена методистом. Шкалы в условии нет: принят балл за каждое названное требование, сумма критериев и есть максимум. Порог зачёта в условии тоже не назван, поэтому не проставлен — выдумывать его за методиста нельзя. Подтверждено: methodist, 2026-09-05.",
+  "ai_policy": "declare_required",
+  "scale": {
+    "total_max": 6.0,
+    "pass_threshold": null,
+    "step": 1.0
+  },
+  "late_policy": {
+    "grace_days": 0,
+    "penalty_per_grace_day": 0.0,
+    "after_grace": "zero"
+  },
+  "format_gate": [
+    {
+      "check": "required_paths",
+      "level": "warning",
+      "params": {
+        "paths": [
+          "internal/handler",
+          "internal/repository"
+        ],
+        "label": "Слои handler и repository"
+      },
+      "note": ""
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "usecase|service",
+        "label": "Слой бизнес-логики"
+      },
+      "note": ""
+    },
+    {
+      "check": "code_contains",
+      "level": "blocking",
+      "params": {
+        "pattern": "interface \\{",
+        "label": "Интерфейсы на стыках слоёв"
+      },
+      "note": ""
+    },
+    {
+      "check": "code_contains",
+      "level": "warning",
+      "params": {
+        "pattern": "func New[A-Z]",
+        "label": "Внедрение зависимостей через конструкторы"
+      },
+      "note": ""
+    },
+    {
+      "check": "token_budget",
+      "level": "info",
+      "params": {
+        "max_tokens": 40000
+      },
+      "note": ""
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c1",
+      "title": "Разделение кода по архитектурным слоям",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "",
+      "checks": [
+        "Разделить текущий код по архитектурным слоям (в зависимости от архитектуры, в пример для ЧА):\n    - `internal/handler` — HTTP-слой\n    - `internal/usecase` — бизнес-логика\n    - `internal/repository` — работа с БД\n    - `internal/model` — основные сущности бизнес логики"
+      ],
+      "anchors": {},
+      "evidence_required": false,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c2",
+      "title": "Определение интерфейсов на стыках между слоями",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "",
+      "checks": [
+        "Определить интерфейсы на стыках между слоями:\n    - Сервис/Юзкейс вызывает методы репозитория через интерфейс\n    - Хендлер вызывает сервис/юзкейс через интерфейс"
+      ],
+      "anchors": {},
+      "evidence_required": false,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c3",
+      "title": "Внедрение зависимостей через конструкторы",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "",
+      "checks": [
+        "Внедрить зависимости через конструкторы (`NewRepository()`, `NewHandler()` и т.д.)"
+      ],
+      "anchors": {},
+      "evidence_required": false,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c4",
+      "title": "Настройка точки входа main.go",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "",
+      "checks": [
+        "Настроить точку входа `main.go`, где создаются зависимости и запускается сервер."
+      ],
+      "anchors": {},
+      "evidence_required": false,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c5",
+      "title": "Рефакторинг для соответствия принципам",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "",
+      "checks": [
+        "Минимально отрефакторить код для соответствия принципам:\n    - **Low Couplin/High Cohesion**\n    - **SOLID**\n    - **DRY**"
+      ],
+      "anchors": {},
+      "evidence_required": false,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    },
+    {
+      "id": "c6",
+      "title": "Проверка работоспособности",
+      "max_score": 1.0,
+      "min_score_for_pass": null,
+      "weight": 1.0,
+      "description": "",
+      "checks": [
+        "Убедиться, что всё продолжает работать корректно."
+      ],
+      "anchors": {},
+      "evidence_required": false,
+      "auto_verifiable": false,
+      "ai_sensitive": false
+    }
+  ]
+}
