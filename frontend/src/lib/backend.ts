@@ -237,6 +237,7 @@ export const backend = {
   deleteAssignment: (id: string) =>
     request<void>(`/assignments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  demoLogin: () => request<TokenResponse>('/auth/demo', { method: 'POST' }),
   login: (body: LoginRequest) =>
     request<TokenResponse>('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   me: () => request<MeResponse>('/me'),

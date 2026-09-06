@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CircleAlert, FlaskConical, Play } from 'lucide-react'
+import { CircleAlert, ClipboardCheck, FlaskConical, Play } from 'lucide-react'
 import { ApiError, backend } from '@/lib/backend'
 import { DEMO_RUN_ID, demoRunForRubric, startRun } from '@/lib/runs'
 import { cn } from '@/lib/cn'
@@ -63,9 +63,27 @@ export function CheckPage() {
     onSuccess: ({ workspace }) => {
       // Прогон только что потратил токены — карточка экономики обязана это увидеть.
       client.invalidateQueries({ queryKey: ['cost'] })
+      // Сдача записана и назначена на того, кто её запустил: очередь обязана
+      // показать её сразу, а не после ручного обновления страницы.
+      client.invalidateQueries({ queryKey: ['queue'] })
       navigate(`/review/${workspace.id}`)
     },
   })
+
+  /* Разбор идёт синхронно и молча: сборка из GitHub и вызовы модели занимают
+     десятки секунд. Какой шаг идёт прямо сейчас, сервер не сообщает — врать
+     про это нельзя, поэтому показываем честное: что именно происходит и
+     сколько уже длится. */
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!run.isPending) {
+      setElapsed(0)
+      return
+    }
+    const started = Date.now()
+    const timer = setInterval(() => setElapsed(Math.round((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [run.isPending])
 
   const offline = status.isError
   /* Задания — основной путь: методист выдал рубрику потоку и назвал срок.
@@ -261,8 +279,13 @@ export function CheckPage() {
               правдоподобное и неверное.
             </span>
           )}
+          <Link to="/queue" className="ml-auto">
+            <Button size="sm" variant="ghost" icon={<ClipboardCheck size={13} strokeWidth={1.8} />}>
+              Мои проверки
+            </Button>
+          </Link>
           {status.data ? (
-            <span className="ml-auto text-[11.5px] text-faint">
+            <span className="text-[11.5px] text-faint">
               {/* Показываем модель, а не провайдер. «модель: fake» читалось как
                   имя модели, хотя fake — это способ подключения: заглушка без
                   ключа. На заглушке имени модели нет, и врать его незачем. */}
@@ -274,9 +297,19 @@ export function CheckPage() {
         </div>
 
         {run.isPending ? (
-          <p className="text-[12px] text-faint">
-            Сборка сдачи из GitHub и вызов модели занимают десятки секунд — вкладку лучше не закрывать.
-          </p>
+          <div className="rounded-lg border border-line bg-sunken px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[13px] font-medium text-ink">Идёт разбор</span>
+              <span className="num text-[12px] text-faint">{elapsed} с</span>
+            </div>
+            <p className="mt-1.5 max-w-[58ch] text-[12px] leading-[1.55] text-muted">
+              Работа собирается из GitHub, проходит формальные проверки, затем модель отвечает
+              по каждому критерию отдельно. Десятки секунд — вкладку лучше не закрывать.
+            </p>
+            <p className="mt-1.5 text-[12px] text-muted">
+              Когда закончится, сдача откроется на разборе и появится в «Моих проверках».
+            </p>
+          </div>
         ) : null}
       </div>
 

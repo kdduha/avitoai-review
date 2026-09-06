@@ -28,7 +28,10 @@ const HOME: Record<Role, string> = {
 
 type Allow = (role: Role) => boolean
 
-const student: Allow = (role) => role === 'student'
+/** Лестница, а не набор корзин: старшая роль умеет всё, что умеет младшая.
+ *  Руководителю закрывать кабинет студента или чужую очередь незачем — он
+ *  отвечает за то, что там происходит, и должен уметь это увидеть. */
+const anyone: Allow = () => true
 const reviewer: Allow = (role) => atLeast(role, 'reviewer')
 const methodist: Allow = (role) => atLeast(role, 'methodist')
 const admin: Allow = (role) => role === 'admin'
@@ -37,7 +40,7 @@ const admin: Allow = (role) => role === 'admin'
  *  Не свой маршрут ведёт на свой стартовый экран, а не на пустую страницу:
  *  адрес из закладки должен приводить туда, где человеку есть что делать. */
 const SHELL: [path: string, element: ReactElement, allow: Allow][] = [
-  ['/my-work', <StudentHomePage />, student],
+  ['/my-work', <StudentHomePage />, anyone],
   ['/queue', <QueuePage />, reviewer],
   ['/check', <CheckPage />, reviewer],
   ['/courses/:courseId', <CoursePage />, reviewer],

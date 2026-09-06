@@ -132,6 +132,7 @@ AUTH_SEED_PASSWORD=avito2026
 |---|---|---|
 | `GET /health`, `GET /init` | — | живость и состав бутстрапа |
 | `POST /auth/login`, `GET /me` | — / любая | сеяный логин → JWT; кто владеет токеном |
+| `POST /auth/demo` | — | вход под сеяного ревьюера без пароля, для записи демо; `404` при `AUTH_DEMO_LOGIN=false` |
 | `GET /users`, `POST /users` | admin | список аккаунтов; завести новый |
 | `GET/PATCH/DELETE /users/{id}` | admin | карточка, правка роли/пароля, удаление (`409` — за пользователем числятся сдачи) |
 | `POST /ingest` | reviewer | ссылка → `SubmissionBundle` |

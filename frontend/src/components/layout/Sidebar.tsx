@@ -28,23 +28,24 @@ export function Sidebar() {
   return (
     <nav className="flex w-[228px] shrink-0 flex-col border-r border-line bg-surface px-2.5 pb-4">
       <Section>Работа</Section>
-      {role === 'student' ? (
-        <NavLink to="/my-work" className={linkClass}>
-          <GraduationCap size={15} strokeWidth={1.7} className="text-faint" />
-          Мои работы
-        </NavLink>
-      ) : null}
-      {role === 'student' ? null : (
-      <NavLink to="/check" className={linkClass}>
-        <Play size={15} strokeWidth={1.7} className="text-faint" />
-        Проверить работу
+      {/* Лестница ролей: старшая видит всё, что видит младшая. Руководитель
+          без ссылки на свою очередь не находил там работу, которую сам же
+          и запустил с «Проверить работу». */}
+      <NavLink to="/my-work" className={linkClass}>
+        <GraduationCap size={15} strokeWidth={1.7} className="text-faint" />
+        Мои работы
       </NavLink>
-      )}
-      {atLeast(role, 'reviewer') && role !== 'admin' ? (
-        <NavLink to="/queue" className={linkClass}>
-          <ClipboardCheck size={15} strokeWidth={1.7} className="text-faint" />
-          Мои проверки
-        </NavLink>
+      {atLeast(role, 'reviewer') ? (
+        <>
+          <NavLink to="/check" className={linkClass}>
+            <Play size={15} strokeWidth={1.7} className="text-faint" />
+            Проверить работу
+          </NavLink>
+          <NavLink to="/queue" className={linkClass}>
+            <ClipboardCheck size={15} strokeWidth={1.7} className="text-faint" />
+            Мои проверки
+          </NavLink>
+        </>
       ) : null}
 
       {/* Каталог курсов и рубрики — рабочие поверхности проверяющих.

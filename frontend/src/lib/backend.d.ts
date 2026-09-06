@@ -69,6 +69,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/demo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in as the seeded reviewer, no password
+         * @description Вход одной кнопкой для записи скринкаста: пароля не спрашиваем, чтобы
+         *     он не попал ни в кадр, ни в сборку фронта. Роль всегда `reviewer` — на
+         *     демо показывают работу проверяющего, а раздавать `admin` без пароля
+         *     незачем.
+         *
+         *     ``404`` — демо-вход выключен (`AUTH_DEMO_LOGIN=false`) или сеяного
+         *     ревьюера в базе нет: его могли переименовать или удалить через `/users`.
+         */
+        post: operations["demo_login_auth_demo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -2048,6 +2074,11 @@ export interface components {
             rubrics: string[];
             /** Reviewers */
             reviewers: string[];
+            /**
+             * Demo Login
+             * @default false
+             */
+            demo_login: boolean;
         };
         /**
          * LatePolicy
@@ -2497,19 +2528,15 @@ export interface components {
         };
         /**
          * Role
-         * @description RBAC roles: four, matching the words the organisers actually use.
+         * @description RBAC roles, named as the organisers name them.
          *
          *     `methodist` owns what a work is judged against — rubrics, assignment
-         *     descriptions, deadlines. `reviewer` judges works against it. Splitting
-         *     them is not bureaucracy: a deadline change silently rescores every late
-         *     submission on the stream, and that is not a call the person grading one
-         *     work should be able to make mid-review.
+         *     descriptions, deadlines; `reviewer` judges works against it. A deadline
+         *     change silently rescores every late submission on the stream, which is not
+         *     a call the person grading one work should make mid-review.
          *
          *     Rights are a ladder — student < reviewer < methodist < admin — so a
-         *     methodist can also grade. That is deliberate and matches the courses: the
-         *     person who wrote the rubric is the one who reviews the disputed work. The
-         *     ladder is not a claim that the roles are interchangeable, only that each
-         *     step keeps what the one below it could do.
+         *     methodist can also grade: the author of the rubric reviews the disputed work.
          * @enum {string}
          */
         Role: "student" | "reviewer" | "methodist" | "admin";
@@ -3480,6 +3507,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    demo_login_auth_demo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
                 };
             };
         };

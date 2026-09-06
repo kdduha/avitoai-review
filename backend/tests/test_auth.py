@@ -40,6 +40,34 @@ def test_unknown_username_is_401_not_500(client):
     assert response.status_code == 401
 
 
+def test_demo_login_hands_out_a_reviewer_token_without_a_password(client):
+    body = client.post("/auth/demo").json()
+    assert body["role"] == "reviewer"
+
+    client.headers["Authorization"] = f"Bearer {body['access_token']}"
+    assert client.get("/me").json()["username"] == "reviewer"
+
+
+def test_demo_login_is_advertised_in_init(client):
+    assert client.get("/init").json()["demo_login"] is True
+
+
+def test_demo_login_switched_off_is_404_and_not_advertised(client):
+    client.app.state.auth_config.demo_login = False
+    assert client.post("/auth/demo").status_code == 404
+    assert client.get("/init").json()["demo_login"] is False
+
+
+def test_demo_login_without_the_seeded_reviewer_is_404_not_500(client):
+    as_role(client, "admin")
+    users = client.get("/users").json()
+    reviewer = next(row for row in users if row["username"] == "reviewer")
+    assert client.delete(f"/users/{reviewer['id']}").status_code == 204
+
+    del client.headers["Authorization"]
+    assert client.post("/auth/demo").status_code == 404
+
+
 def test_me_reports_the_bearer_tokens_identity(client):
     as_role(client, "reviewer")
     body = client.get("/me").json()

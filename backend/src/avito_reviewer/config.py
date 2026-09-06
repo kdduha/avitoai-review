@@ -211,6 +211,11 @@ class AuthConfig(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 480
     seed_password: str = "avito2026"
+    demo_login: bool = True
+    """Кнопка «Демо» на экране входа: `POST /auth/demo` пускает под сеяного
+    ревьюера без пароля. Существует ради записи скринкаста — чтобы пароля не
+    было ни в кадре, ни в сборке фронта. `AUTH_DEMO_LOGIN=false` убирает и
+    ручку, и кнопку."""
 
 
 class AppConfig(BaseSettings):

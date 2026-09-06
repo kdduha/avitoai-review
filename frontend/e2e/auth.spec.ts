@@ -111,3 +111,33 @@ test('compiling a rubric round-trips to the real backend', async ({ page, reques
   await expect(page.getByText(/открыт(ый|ых) вопрос/i)).toBeVisible({ timeout: 10_000 })
   await expect(page.getByText('цитатами подтверждено 0%')).toBeVisible()
 })
+
+test('the demo button signs in as a reviewer without touching the password field', async ({ page }) => {
+  await page.goto('/login')
+  await page.getByRole('button', { name: 'Демо-вход ревьюером' }).click()
+
+  await expect(page).toHaveURL(/\/queue$/)
+  await expect(page.getByText('reviewer · ревьюер')).toBeVisible()
+  // Пароля на экране не набирали и в сборке его нет.
+  await expect(page.locator('body')).not.toContainText('avito2026')
+})
+
+test('the admin reaches every screen the roles below them reach', async ({ page, request }) => {
+  await restoreSession(page, request, 'admin')
+  await page.goto('/')
+
+  // Ссылки младших ролей есть в сайдбаре, а не только по прямому адресу.
+  await expect(page.getByRole('link', { name: 'Мои проверки' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Мои работы' })).toBeVisible()
+
+  await page.getByRole('link', { name: 'Мои проверки' }).click()
+  await expect(page).toHaveURL(/\/queue$/)
+  await expect(page.getByRole('heading', { name: 'Мои проверки' })).toBeVisible()
+
+  // Своя очередь по умолчанию, весь поток — переключателем.
+  await page.getByRole('button', { name: 'Весь поток' }).click()
+  await expect(page.getByRole('heading', { name: 'Все проверки' })).toBeVisible()
+
+  await page.goto('/my-work')
+  await expect(page).toHaveURL(/\/my-work$/)
+})

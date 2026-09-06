@@ -48,5 +48,5 @@ export async function signInThroughForm(
 ): Promise<void> {
   await page.getByLabel('Логин', { exact: true }).fill(username)
   await page.getByLabel('Пароль', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Войти' }).click()
+  await page.getByRole('button', { name: 'Войти', exact: true }).click()
 }

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Role } from '@/lib/types'
-import { backend, hasAuthToken, onUnauthorized, setAuthToken } from '@/lib/backend'
+import { backend, hasAuthToken, onUnauthorized, setAuthToken, type TokenResponse } from '@/lib/backend'
 
 /** `restoring` — в хранилище есть токен, и мы спрашиваем сервер, чей он.
  *  Экраны в это время не рендерятся: иначе первый же `useQuery` уйдёт раньше,
@@ -20,6 +20,9 @@ interface Session {
   name: string
   username: string
   signIn: (username: string, password: string) => Promise<void>
+  /** Вход одной кнопкой под сеяного ревьюера. Пароля здесь нет: его выдаёт
+   *  сервер по `POST /auth/demo`, и только пока включён `AUTH_DEMO_LOGIN`. */
+  signInDemo: () => Promise<void>
   signOut: () => void
 }
 
@@ -60,6 +63,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, [queryClient])
 
+  function enter(username: string, token: TokenResponse): void {
+    setAuthToken(token.access_token)
+    queryClient.clear()
+    setAccount({ username, name: token.display_name, role: token.role })
+    setStatus('signed-in')
+  }
+
   const value = useMemo<Session>(
     () => ({
       status,
@@ -69,11 +79,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       name: account?.name ?? '—',
       username: account?.username ?? '',
       signIn: async (username, password) => {
-        const token = await backend.login({ username, password })
-        setAuthToken(token.access_token)
-        queryClient.clear()
-        setAccount({ username, name: token.display_name, role: token.role })
-        setStatus('signed-in')
+        enter(username, await backend.login({ username, password }))
+      },
+      signInDemo: async () => {
+        const token = await backend.demoLogin()
+        enter('reviewer', token)
       },
       signOut: () => {
         setAuthToken(null)

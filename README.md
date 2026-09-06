@@ -36,7 +36,8 @@ INGEST_GITHUB__TOKEN="$(gh auth token)" docker compose up -d backend worker
 
 Все ручки, кроме `/health`, `/init` и `/auth/login`, требуют вход. UI
 открывается экраном входа; сеяные аккаунты — `student`, `reviewer`,
-`methodist`, `admin`, пароль `avito2026`. Под каждую карточку из
+`methodist`, `admin`, пароль `avito2026`. Кнопка «Демо-вход ревьюером» пускает
+без пароля — для записи демо; `AUTH_DEMO_LOGIN=false` её убирает. Под каждую карточку из
 `backend/reviewers/` заводится аккаунт с логином по имени файла.
 
 ```bash

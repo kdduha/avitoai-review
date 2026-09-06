@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { FlaskConical } from 'lucide-react'
 import { useSession } from '@/app/session'
-import { ApiError } from '@/lib/backend'
+import { ApiError, backend } from '@/lib/backend'
 import { Button } from '@/components/ui/Button'
 
 const inputClass =
@@ -17,23 +19,29 @@ function readable(error: unknown): string {
 }
 
 export function LoginPage() {
-  const { signIn } = useSession()
+  const { signIn, signInDemo } = useSession()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit() {
+  /* Кнопку демо рисует сервер, а не сборка: `/init` открыт без токена и уже
+     запрашивается на `/check`. Выключен `AUTH_DEMO_LOGIN` — кнопки нет. */
+  const init = useQuery({ queryKey: ['init'], queryFn: backend.init, retry: false })
+
+  async function enter(attempt: () => Promise<void>) {
     if (pending) return
     setPending(true)
     setError(null)
     try {
-      await signIn(username.trim(), password)
+      await attempt()
     } catch (err) {
       setError(readable(err))
       setPending(false)
     }
   }
+
+  const submit = () => enter(() => signIn(username.trim(), password))
 
   return (
     <div className="grid min-h-screen place-items-center px-6">
@@ -89,6 +97,20 @@ export function LoginPage() {
             {pending ? 'Вхожу' : 'Войти'}
           </Button>
         </form>
+
+        {init.data?.demo_login ? (
+          <div className="mt-3 text-center">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              icon={<FlaskConical size={13} strokeWidth={1.8} />}
+              onClick={() => void enter(signInDemo)}
+            >
+              Демо-вход ревьюером
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   )

@@ -206,7 +206,11 @@ export async function startRun(params: StartRunParams): Promise<StartRunResult> 
       : { rubric_id: params.rubricId, deadline_at: params.deadlineAt || null }),
   })
 
-  const id = `run-${Date.now().toString(36)}`
+  /* Ключ прогона — id сдачи, а не локальный счётчик: `/review/{id}` тогда
+     совпадает с адресом из очереди, переживает перезагрузку и делится
+     ссылкой. Локальный ключ остаётся запасным на случай, когда сервер сдачу
+     не сохранил. */
+  const id = review.submission_id ?? `run-${Date.now().toString(36)}`
   const workspace: Workspace = {
     ...buildWorkspace(id, review, review.detection ?? null, rubric),
     detectionError:
