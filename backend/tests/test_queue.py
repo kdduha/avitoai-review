@@ -122,9 +122,8 @@ def test_rerun_does_not_clobber_a_human_edit_made_while_it_ran(ctx):
     async def patch_mid_flight():
         async with context["sessionmaker"]() as session:
             submission = await session.get(Submission, submission_id)
-            # Reassign, don't mutate in place: a plain `submission.draft["score"]
-            # = ...` never marks the JSON column dirty, so SQLAlchemy would skip
-            # the UPDATE entirely and this test would pass for the wrong reason.
+            # Reassign, don't mutate in place: an in-place edit never marks the JSON
+            # column dirty, and SQLAlchemy would skip the UPDATE entirely.
             submission.draft = {**submission.draft, "score": 99.0}
             submission.status = SubmissionStatus.IN_REVIEW
             await session.commit()

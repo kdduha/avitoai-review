@@ -75,10 +75,8 @@ class StubIngest:
         self.calls += 1
         if self.error:
             raise self.error
-        # Настоящий провайдер выдаёт новый `submission_id` на каждый ingest —
-        # это не производное от содержимого PR, а метка одного прогона.
-        # Двойник обязан вести себя так же: иначе повторный /review на одном
-        # и том же стабе бьётся о уникальность первичного ключа `submissions`.
+        # Новый `submission_id` на каждый ingest — метка прогона, а не производное
+        # от PR. Двойник обязан так же, иначе повторный /review бьётся о PK.
         return self.bundle.model_copy(update={"submission_id": uuid4()})
 
     async def fetch_content(self, content_ref):
@@ -111,9 +109,8 @@ def make_client(tmp_path):
             # Каталог на запись: подтверждение рубрики не должно трогать рабочий.
             app.state.rubrics = RubricStore(tmp_path)
         if role is not None:
-            # `admin` по умолчанию: у него есть доступ и к тому, что видит
-            # ревьюер, и к тому, что видит только admin (рубрики, /cost) —
-            # большинству тестов ниже нужен не конкретный уровень, а «пропустят».
+            # `admin` по умолчанию: большинству тестов ниже нужен не конкретный
+            # уровень прав, а «пропустят».
             as_role(client, role)
         return client, provider
 
@@ -348,8 +345,7 @@ def test_init_reports_the_model_route_and_rubrics(make_client):
 def test_cost_accumulates_across_runs(make_client):
     """Журнал общий на приложение: счёт за поток работ складывается из прогонов."""
     # На прогон: два батча критериев и следом итоговый отзыв. Пустой JSON —
-    # валидное «резюме не собралось», лишь бы очередь ответов не кончилась
-    # раньше и не спровоцировала ремонтный запрос.
+    # валидное «резюме не собралось».
     client, _ = make_client(responses=[VERDICTS, VERDICTS, "{}"] * 2)
     client.post("/review", json={"link": LINK, "rubric_id": "go-task1"})
     after_first = client.get("/cost").json()

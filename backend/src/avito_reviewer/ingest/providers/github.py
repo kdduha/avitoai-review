@@ -144,10 +144,8 @@ class GitHubProvider(SubmissionProvider):
         self._config = config
         self._salt = author_salt
         token = config.token.get_secret_value() if config.token else None
-        # Повторяем только пятисотки. Штатная политика githubkit пережидает и
-        # лимит запросов, а «пережидает» — это sleep на `retry_after`, до часа
-        # на анонимном ключе: запрос ревьюера повис бы вместо внятной ошибки.
-        # Ждать лимит — дело вызывающего кода, а не блокирующего HTTP-вызова.
+        # Только пятисотки. Штатная политика githubkit пережидает и лимит запросов
+        # sleep-ом до часа: запрос ревьюера повис бы вместо внятной ошибки.
         self._gh = GitHub(token, base_url=config.base_url, auto_retry=RETRY_SERVER_ERROR)
 
     async def aclose(self) -> None:

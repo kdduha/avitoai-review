@@ -199,14 +199,10 @@ class QueueConfig(BaseSettings):
 class AuthConfig(BaseSettings):
     """JWT auth for the hackathon-variant RBAC: one hardcoded login per role.
 
-    Three accounts are seeded at startup — `student`, `reviewer`, `admin` —
-    all sharing `seed_password`. This is exactly the reduction the
-    architecture doc calls out for the hackathon timeline (§15,
-    "аутентификация — один хардкод-логин на роль"); a real deployment
-    replaces the seed with actual user records and overrides `jwt_secret`.
-    The doc's `coordinator` role (runs the stream day-to-day: reassign,
-    rubrics, cost) is folded into `admin` here — one project, one methodist,
-    no separate coordinator headcount to give its own account to yet.
+    One account per role is seeded at startup, all sharing `seed_password` — the
+    reduction the architecture doc calls out for the hackathon timeline (§15).
+    A real deployment replaces the seed with actual user records and overrides
+    `jwt_secret`. The doc's `coordinator` role is folded into `admin` here.
     """
 
     model_config = SettingsConfigDict(env_prefix="AUTH_", env_file=".env", extra="ignore")
@@ -220,13 +216,9 @@ class AuthConfig(BaseSettings):
 class AppConfig(BaseSettings):
     """Single construction point for every settings object the app needs.
 
-    Each field is still its own `BaseSettings` with its own env prefix
-    (`INGEST_`, `AI_`, `DB_`, `AUTH_`, `QUEUE_`) — nesting them here does not
-    change how they read the environment, it just gives `main.py`, `queue.py`
-    and tests one object to build instead of five. Splitting them was never
-    about isolation (they all read the same process environment); it is
-    about naming — `config.ai.llm.provider` reads better than a flat config
-    with `ai_llm_provider` fighting `db_dsn` for the same namespace.
+    Each field keeps its own `BaseSettings` and env prefix (`INGEST_`, `AI_`,
+    `DB_`, `AUTH_`, `QUEUE_`); nesting them here only gives `main.py`,
+    `queue.py` and tests one object to build instead of five.
     """
 
     model_config = SettingsConfigDict(extra="ignore")

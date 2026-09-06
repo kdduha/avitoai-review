@@ -106,9 +106,8 @@ class ReviewService:
                 bool(draft.attention_reasons) or bool(draft.failed_criteria)
             )
 
-            # Резюме — последним: оно пересказывает готовые вердикты и знает
-            # итог. Внутри того же блока учёта, иначе его токены не попали бы
-            # в стоимость прогона и разбор выглядел бы дешевле, чем обошёлся.
+            # Резюме — последним: оно пересказывает готовые вердикты. Внутри того
+            # же блока учёта, иначе его токены не попали бы в стоимость прогона.
             draft.summary = self._summarise(draft, rubric, identities)
 
         summary = self.gateway.audit.summary(spend)

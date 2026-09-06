@@ -1,15 +1,11 @@
 """Persisted state: users, submissions, review revisions, chat messages.
 
-Four tables, not the whole schema in `docs/architecture.md` §10 — that
-diagram is the target shape for a system with an Assignment Engine, courses
-and a rubric editor. What backs today's endpoints is smaller: a submission
+Smaller than the target schema in `docs/architecture.md` §10. A submission
 *is* a `SubmissionBundle` + `ReviewDraft` + `DetectionReport` the pipeline
-already produces, stored as JSON next to who owns it and what happened to it.
-Splitting artifacts, revisions or spans into their own tables would just be
-ORM ceremony around data these Pydantic models already shape correctly.
-`ChatMessage` is the one thing that genuinely needs its own rows: a
-conversation is a sequence, and reviewers reopening a submission expect their
-chat history still there — an in-memory-only chat is a stub with a UI on it.
+already produces, stored as JSON next to who owns it — splitting artifacts,
+revisions or spans into their own tables would be ORM ceremony around data
+these Pydantic models already shape correctly. `ChatMessage` does need its own
+rows: a conversation is a sequence, and it must survive reopening.
 """
 
 from __future__ import annotations
@@ -36,19 +32,15 @@ class Base(DeclarativeBase):
 
 
 class Role(StrEnum):
-    """RBAC roles: four, matching the words the organisers actually use.
+    """RBAC roles, named as the organisers name them.
 
     `methodist` owns what a work is judged against — rubrics, assignment
-    descriptions, deadlines. `reviewer` judges works against it. Splitting
-    them is not bureaucracy: a deadline change silently rescores every late
-    submission on the stream, and that is not a call the person grading one
-    work should be able to make mid-review.
+    descriptions, deadlines; `reviewer` judges works against it. A deadline
+    change silently rescores every late submission on the stream, which is not
+    a call the person grading one work should make mid-review.
 
     Rights are a ladder — student < reviewer < methodist < admin — so a
-    methodist can also grade. That is deliberate and matches the courses: the
-    person who wrote the rubric is the one who reviews the disputed work. The
-    ladder is not a claim that the roles are interchangeable, only that each
-    step keeps what the one below it could do.
+    methodist can also grade: the author of the rubric reviews the disputed work.
     """
 
     STUDENT = "student"
@@ -155,15 +147,12 @@ class Stream(Base):
 class Assignment(Base):
     """Рубрика, выданная потоку в срок. Именно её сдаёт студент.
 
-    Здесь проходит шов, ради которого сущность и заведена: **рубрика — это
-    требования, задание — это расписание**. Одна рубрика обслуживает
-    несколько потоков, а сроки у них разные, и класть дату в рубрику значило
-    бы либо копировать её на каждый поток, либо переписывать файл, по
-    которому уже проверены работы.
+    Шов, ради которого сущность заведена: **рубрика — это требования, задание —
+    это расписание**. Одна рубрика обслуживает несколько потоков с разными
+    сроками, и дата в рубрике означала бы копию файла на каждый поток.
 
-    До этого дедлайн вбивал ревьюер руками в форме проверки — на каждой
-    работе заново. Одна опечатка в дате давала штраф за просрочку там, где
-    просрочки не было, и объяснить такой балл студенту было нечем.
+    Раньше дедлайн вбивал ревьюер руками на каждой работе, и одна опечатка
+    давала необъяснимый штраф за просрочку.
     """
 
     __tablename__ = "assignments"
@@ -215,13 +204,9 @@ class Enrollment(Base):
 class StreamReviewer(Base):
     """Кто проверяет работы этого потока.
 
-    Пара, а не поле у пользователя: один ревьюер ведёт несколько потоков, и
-    один поток держат несколько ревьюеров. Назначает руководитель.
-
-    Связь не дублирует `Submission.reviewer_id`: там — кому досталась
-    конкретная работа, здесь — кто вообще имеет право её получить. Без этого
-    списка распределять было не из кого: `POST /distribute` считал план по
-    пулу, который присылал клиент, и план никуда не сохранялся.
+    Пара, а не поле у пользователя: один ревьюер ведёт несколько потоков и
+    наоборот. Не дублирует `Submission.reviewer_id`: там — кому досталась
+    конкретная работа, здесь — кто вообще имеет право её получить.
     """
 
     __tablename__ = "stream_reviewers"
