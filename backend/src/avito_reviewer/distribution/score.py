@@ -94,10 +94,6 @@ class ScoreContext:
         return total or 1.0
 
 
-# --------------------------------------------------------------------------- #
-# жёсткие ограничения
-# --------------------------------------------------------------------------- #
-
 def blocked(
     reviewer: Reviewer, item: DistributionItem, ledger: Ledger, ctx: ScoreContext
 ) -> Blocked | None:
@@ -162,10 +158,6 @@ def _out_of_scope(reviewer: Reviewer, item: DistributionItem) -> str:
         return f"не проверяет задание {item.assignment_id}"
     return ""
 
-
-# --------------------------------------------------------------------------- #
-# доступность термов
-# --------------------------------------------------------------------------- #
 
 def enabled_terms(
     items: Sequence[DistributionItem], *, now: datetime | None
@@ -240,10 +232,6 @@ def enabled_terms(
 
     return enabled, disabled, limitations
 
-
-# --------------------------------------------------------------------------- #
-# слагаемые
-# --------------------------------------------------------------------------- #
 
 def score_terms(
     reviewer: Reviewer, item: DistributionItem, ledger: Ledger, ctx: ScoreContext

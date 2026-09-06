@@ -28,7 +28,7 @@ function toolLabel(tool: string | null): string {
     case 'get_file':
       return 'читает файл'
     case 'get_diff':
-      return 'смотрит дифф'
+      return 'смотрит изменения'
     case 'get_criterion':
       return 'смотрит критерий'
     case 'search_submission':

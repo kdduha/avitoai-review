@@ -164,8 +164,6 @@ def analyse(
     return result
 
 
-# --------------------------------------------------------------------------- #
-
 def _messages(artifacts: list[ArtifactText]) -> list[dict[str, str]]:
     blocks = []
     for artifact in artifacts:

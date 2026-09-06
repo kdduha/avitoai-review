@@ -46,10 +46,6 @@ router = APIRouter(tags=["student"])
 Session = Annotated[AsyncSession, Depends(session_dependency)]
 
 
-# --------------------------------------------------------------------------- #
-# вспомогательное
-# --------------------------------------------------------------------------- #
-
 async def _my_streams(session: AsyncSession, student_id: UUID) -> list[UUID]:
     return list(
         (
@@ -143,10 +139,6 @@ async def _as_student_submission(
     return card
 
 
-# --------------------------------------------------------------------------- #
-# что сдавать
-# --------------------------------------------------------------------------- #
-
 @router.get("/me/assignments", summary="Задания моих потоков")
 async def my_assignments(
     user: CurrentUser, request: Request, session: Session
@@ -201,10 +193,6 @@ async def my_assignments(
         )
     return out
 
-
-# --------------------------------------------------------------------------- #
-# сдача
-# --------------------------------------------------------------------------- #
 
 @router.post("/me/submissions", summary="Сдать работу по ссылке", status_code=201)
 async def submit(
@@ -275,10 +263,6 @@ async def submit(
     await session.commit()
     return await _as_student_submission(session, request, submission)
 
-
-# --------------------------------------------------------------------------- #
-# свои оценки
-# --------------------------------------------------------------------------- #
 
 @router.get("/me/submissions", summary="Мои сданные работы и оценки")
 async def my_submissions(

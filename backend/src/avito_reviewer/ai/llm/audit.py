@@ -89,7 +89,6 @@ class AuditLog:
             if owner == id(self):
                 sink.append(record)
 
-    # ------------------------------------------------------------------ #
 
     @contextmanager
     def collect(self) -> Iterator[list[AuditRecord]]:
