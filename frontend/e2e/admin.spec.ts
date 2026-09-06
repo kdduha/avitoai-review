@@ -1,29 +1,21 @@
 import { expect, test, type Page } from '@playwright/test'
+import { SEED_PASSWORD as PASSWORD, signInThroughForm, tokenFor } from './session'
 
 /** Админка руководителя: аккаунты и учебный каталог против настоящего бэкенда.
- *
- *  Вход делается явно формой, а не автологином по сохранённой роли: экран
- *  входа переезжает, и тест, завязанный на автологин, сломается вместе с ним.
- */
-
-const PASSWORD = 'avito2026'
+ *  Вход — формой, как его проходит человек: тесты про права должны ломаться
+ *  вместе с правами, а не обходить экран входа. */
 
 async function login(page: Page, username: string, password = PASSWORD) {
+  const signOut = page.getByRole('button', { name: 'Выйти' })
+  if (await signOut.isVisible().catch(() => false)) await signOut.click()
   await page.goto('/login')
-  const onLoginScreen = await page
-    .getByLabel('Логин')
-    .first()
-    .isVisible()
-    .catch(() => false)
-  if (!onLoginScreen) {
-    await page.goto('/')
-    await page.getByRole('button', { name: 'Войти' }).first().click()
-  }
-  await page.getByLabel('Логин').first().fill(username)
-  await page.getByLabel('Пароль').first().fill(password)
-  await page.getByRole('button', { name: /^(Войти|Вхожу)$/ }).last().click()
-  await expect(page.getByText(username, { exact: true }).first()).toBeVisible()
+  await signInThroughForm(page, username, password)
+  await expect(page.getByText(new RegExp(`^${username} · `))).toBeVisible()
 }
+
+/** Что этот воркер завёл в общей базе стенда. Убирать «всё, что похоже на
+ *  тестовое» нельзя: воркеры идут параллельно и снесли бы данные друг друга. */
+const litter = { courses: new Set<string>(), users: new Set<string>() }
 
 async function openAdmin(page: Page, tab: 'Аккаунты' | 'Курсы') {
   await page.goto('/admin')
@@ -33,15 +25,17 @@ async function openAdmin(page: Page, tab: 'Аккаунты' | 'Курсы') {
 
 test('аккаунт заводится, меняет роль, входит и удаляется', async ({ page }) => {
   const username = `e2e-user-${Date.now()}`
+  litter.users.add(username)
   await login(page, 'admin')
   await openAdmin(page, 'Аккаунты')
 
   await page.getByRole('button', { name: 'Новый аккаунт' }).click()
-  await page.getByLabel('Логин', { exact: true }).fill(username)
-  await page.getByLabel('Имя').fill('Пробный ревьюер')
-  await page.getByLabel('Роль').selectOption('reviewer')
-  await page.getByLabel('Пароль', { exact: true }).fill(PASSWORD)
-  await page.getByRole('button', { name: 'Создать' }).click()
+  const form = page.getByRole('region', { name: 'Новый аккаунт' })
+  await form.getByLabel('Логин', { exact: true }).fill(username)
+  await form.getByLabel('Имя', { exact: true }).fill('Пробный ревьюер')
+  await form.getByLabel('Роль', { exact: true }).selectOption('reviewer')
+  await form.getByLabel('Пароль', { exact: true }).fill(PASSWORD)
+  await form.getByRole('button', { name: 'Создать' }).click()
 
   const role = page.getByLabel(`Роль ${username}`)
   await expect(role).toHaveValue('reviewer')
@@ -71,6 +65,7 @@ test('аккаунт заводится, меняет роль, входит и 
 
 test('курс, поток, задание и состав заводятся и убираются', async ({ page }) => {
   const key = `e2e${Date.now()}`
+  litter.courses.add(key)
   await login(page, 'admin')
   await openAdmin(page, 'Курсы')
 
@@ -86,14 +81,14 @@ test('курс, поток, задание и состав заводятся и
   await page.getByLabel('Ключ потока').fill('a')
   await page.getByLabel('Название потока').fill('Поток из теста')
   await page.getByRole('button', { name: 'Создать' }).click()
-  await expect(page.getByLabel('Поток a')).toBeVisible()
+  await expect(course.getByLabel('Поток a')).toBeVisible()
 
   // Курс с потоком не удаляется — сервер объясняет, почему.
   await course.getByRole('button', { name: 'Удалить' }).first().click()
   await course.getByRole('button', { name: 'Удалить', exact: true }).last().click()
   await expect(course.getByText(/у курса есть потоки/)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Состав' }).click()
+  await course.getByRole('button', { name: 'Состав' }).click()
 
   await page.getByRole('button', { name: 'Выдать рубрику' }).click()
   await page.getByRole('button', { name: 'Выдать', exact: true }).click()
@@ -115,4 +110,32 @@ test('не руководителю админка не открывается',
   await page.goto('/admin')
   await expect(page.getByRole('heading', { name: 'Управление' })).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Мои проверки' })).toBeVisible()
+})
+
+/** Прогон оставляет за собой курсы, потоки и аккаунты в общей базе стенда:
+ *  без уборки второй запуск видит два «Потока a» и падает на неоднозначности. */
+test.afterAll(async ({ request }) => {
+  const token = await tokenFor(request, 'admin')
+  const auth = { Authorization: `Bearer ${token}` }
+  const get = async <T,>(path: string): Promise<T> =>
+    (await (await request.get(`/api${path}`, { headers: auth })).json()) as T
+  const drop = (path: string) => request.delete(`/api${path}`, { headers: auth })
+
+  for (const course of await get<{ id: string; key: string }[]>('/courses')) {
+    if (!litter.courses.has(course.key)) continue
+    for (const stream of await get<{ id: string }[]>(`/streams?course_id=${course.id}`)) {
+      for (const item of await get<{ id: string }[]>(`/assignments?stream_id=${stream.id}`)) {
+        await drop(`/assignments/${item.id}`)
+      }
+      for (const student of await get<{ username: string }[]>(`/streams/${stream.id}/students`)) {
+        await drop(`/streams/${stream.id}/students/${student.username}`)
+      }
+      await drop(`/streams/${stream.id}`)
+    }
+    await drop(`/courses/${course.id}`)
+  }
+
+  for (const account of await get<{ id: string; username: string }[]>('/users')) {
+    if (litter.users.has(account.username)) await drop(`/users/${account.id}`)
+  }
 })

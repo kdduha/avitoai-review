@@ -306,13 +306,9 @@ function StreamRow({ stream }: { stream: StreamOut }) {
   return (
     <li className="rounded-card border border-line bg-raised px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <button
-          onClick={() => setOpen(!open)}
-          className="rounded-md bg-sunken px-1.5 py-0.5 font-mono text-[11.5px] font-medium text-muted"
-          aria-label={`Поток ${stream.key}`}
-        >
+        <span className="rounded-md bg-sunken px-1.5 py-0.5 font-mono text-[11.5px] font-medium text-muted">
           {stream.key}
-        </button>
+        </span>
         <input
           value={title}
           placeholder="без названия"

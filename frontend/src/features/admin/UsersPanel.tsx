@@ -37,7 +37,7 @@ function NewAccount({ onDone }: { onDone: () => void }) {
   })
 
   return (
-    <div className="mt-4 rounded-card border border-line bg-surface px-5 py-4">
+    <section aria-label="Новый аккаунт" className="mt-4 rounded-card border border-line bg-surface px-5 py-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Логин">
           <TextField value={username} onChange={setUsername} placeholder="ivanov" />
@@ -71,7 +71,7 @@ function NewAccount({ onDone }: { onDone: () => void }) {
           Отмена
         </Button>
       </div>
-    </div>
+    </section>
   )
 }
 
