@@ -173,6 +173,22 @@ export function DraftPanel({
             onEvidence={onEvidence}
           />
         ))}
+
+        {/* Объяснение итога — в конце разбора, а не в футере. В футере оно
+            росло вместе с числом обязательных минимумов и закрывало собой
+            последние критерии: закреплённая полоса отъедала высоту у того
+            самого списка, ради которого экран и открывают. Здесь оно читается
+            последним — после того, как ревьюер прошёл критерии. */}
+        {!workspace.edited && (workspace.passExplanation || workspace.lateExplanation) ? (
+          <div className="border-t border-line px-5 py-3.5">
+            <h3 className="text-[12.5px] font-semibold text-ink">Как сложился итог</h3>
+            <p className="mt-1 max-w-[70ch] text-[12.5px] leading-[1.55] text-muted">
+              {[workspace.passExplanation, workspace.lateExplanation]
+                .filter(Boolean)
+                .join(' ')}
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {/* Одно громкое место — итог; действие стоит рядом с числом, которое утверждает. */}
@@ -223,7 +239,7 @@ export function DraftPanel({
           <p className="max-w-[46ch] text-[12px] leading-snug text-faint">
             {workspace.edited
               ? 'Штраф за просрочку и обязательные минимумы считает агрегатор — итог станет точным после сохранения правок.'
-              : `${workspace.passExplanation} ${workspace.lateExplanation}`}
+              : 'Как сложился итог — в конце разбора.'}
           </p>
           <span className="num shrink-0 text-[11.5px] text-faint" title="стоимость прогона модели">
             {workspace.costRub.toFixed(2)} ₽
