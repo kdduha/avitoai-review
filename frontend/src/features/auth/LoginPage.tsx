@@ -99,12 +99,17 @@ export function LoginPage() {
         </form>
 
         {init.data?.demo_login ? (
-          <div className="mt-3 text-center">
+          <div className="mt-4">
+            <div className="flex items-center gap-3 text-[11px] uppercase tracking-[0.08em] text-faint">
+              <span className="h-px flex-1 bg-line" />
+              или
+              <span className="h-px flex-1 bg-line" />
+            </div>
             <Button
-              variant="ghost"
-              size="sm"
+              variant="secondary"
+              className="mt-4 w-full"
               disabled={pending}
-              icon={<FlaskConical size={13} strokeWidth={1.8} />}
+              icon={<FlaskConical size={14} strokeWidth={1.8} />}
               onClick={() => void enter(signInDemo)}
             >
               Демо-вход ревьюером
